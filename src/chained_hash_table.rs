@@ -24,7 +24,7 @@ impl ChainedHashTable {
             current_hash: 0,
             head: vec!(0; WINDOW_SIZE * 2),
             prev: vec!(0; WINDOW_SIZE),
-            data: vec!(),
+            data: vec![],
         }
     }
 
@@ -65,11 +65,11 @@ impl ChainedHashTable {
     }
 
     pub fn slide(&mut self, bytes: usize) {
-        for b in self.head.iter_mut() {
+        for b in &mut self.head {
             *b = ChainedHashTable::slide_value(*b as usize, bytes);
         }
 
-        for b in self.prev.iter_mut() {
+        for b in &mut self.prev {
             *b = ChainedHashTable::slide_value(*b as usize, bytes);
         }
     }

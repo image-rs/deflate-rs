@@ -2,7 +2,7 @@ use std::cmp;
 
 use huffman_table::MAX_MATCH;
 use huffman_table::MIN_MATCH;
-use chained_hash_table::WINDOW_MASK;
+// use chained_hash_table::WINDOW_MASK;
 use chained_hash_table::WINDOW_SIZE;
 use chained_hash_table::ChainedHashTable;
 
@@ -38,7 +38,7 @@ fn distance_from_chain(head: u16, prev: u16) -> u16 {
     if prev < head {
         head - prev
     } else {
-        //(WINDOW_SIZE as u16).wrapping_sub(prev).wrapping_add(head)
+        // (WINDOW_SIZE as u16).wrapping_sub(prev).wrapping_add(head)
         (WINDOW_SIZE as u16 - prev) + head
     }
 }
@@ -65,12 +65,12 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
     let mut distance = distance_from_chain(current_head, current_prev);
     while distance < WINDOW_SIZE as u16 {
         if distance > 0 {
-/*            println!("Found match for: {} {} {} at distance: {}",
-                     data[position],
-                     data[position + 1],
-                     data[position + 2],
-                     distance
-            );*/
+            //            println!("Found match for: {} {} {} at distance: {}",
+            // data[position],
+            // data[position + 1],
+            // data[position + 2],
+            // distance
+            // );
             let length = get_match_length(data, position, position - (distance as usize));
             if length > best_length {
                 best_length = length;
@@ -84,24 +84,31 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
             break;
         }
     }
-//    println!("-");
+    // println!("-");
     (best_length, best_distance)
 }
 
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
-fn process_chunk(data: &[u8], start: usize, end: usize, hash_table: &mut ChainedHashTable, output: &mut Vec<LDPair>) {
+fn process_chunk(data: &[u8],
+                 start: usize,
+                 end: usize,
+                 hash_table: &mut ChainedHashTable,
+                 output: &mut Vec<LDPair>) {
     let mut data_iterator = data[start..end].iter().enumerate();
 
     while let Some((n, b)) = (&mut data_iterator).next() {
         let position = n + 2;
         hash_table.add_hash_value(position, *b);
-        let (match_len, match_dist) = longest_match(data, &hash_table, position);
+        let (match_len, match_dist) = longest_match(data, hash_table, position);
         if match_len >= MIN_MATCH && match_dist >= MIN_MATCH {
-            output.push(LDPair::LengthDistance{length: match_len, distance: match_dist});
-            let mut taker = (&mut data_iterator).take(match_len as usize - 1);
-            while let Some((ipos, ibyte)) = taker.next() {
-//                println!("ipos: {}", ipos + 2);
+            output.push(LDPair::LengthDistance {
+                length: match_len,
+                distance: match_dist,
+            });
+            let taker = (&mut data_iterator).take(match_len as usize - 1);
+            for (ipos, ibyte) in taker {
+                // println!("ipos: {}", ipos + 2);
                 hash_table.add_hash_value(ipos + 2, *ibyte);
             }
         } else {
@@ -121,38 +128,37 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
     output.push(LDPair::Literal(data[0]));
     output.push(LDPair::Literal(data[1]));
 
-/*    let buffer_len = if data.len() < window_size {
-        data.len
-    } else {
-        window_size
-    };
+    //    let buffer_len = if data.len() < window_size {
+    // data.len
+    // } else {
+    // window_size
+    // };
+    //
+    // let mut buffer = Vec::from(&data[0..(buffer_len * 2) - 1]);
 
-    let mut buffer = Vec::from(&data[0..(buffer_len * 2) - 1]);*/
-
-//    let mut first = true;
+    // let mut first = true;
 
     let first_chunk_end = cmp::min(window_size, data.len());// - 1;
 
-//    let mut data_iterator = data[2..first_chunk_end].iter().enumerate();
+    // let mut data_iterator = data[2..first_chunk_end].iter().enumerate();
     process_chunk(data, 2, first_chunk_end, &mut hash_table, &mut output);
-/*
-    while let Some((n, b)) = (&mut data_iterator).next() {
-        let position = n + 2;
-        hash_table.add_hash_value(position, *b);
-        let (match_len, match_dist) = longest_match(data, &hash_table, position);
-        if match_len >= MIN_MATCH && match_dist >= MIN_MATCH {
-            output.push(LDPair::LengthDistance{length: match_len, distance: match_dist});
-            let mut taker = (&mut data_iterator).take(match_len as usize - 1);
-            while let Some((ipos, ibyte)) = taker.next() {
-//                println!("ipos: {}", ipos + 2);
-                hash_table.add_hash_value(ipos + 2, *ibyte);
-            }
-        } else {
-            output.push(LDPair::Literal(*b));
-        }
-    }
-
-    */
+    // while let Some((n, b)) = (&mut data_iterator).next() {
+    // let position = n + 2;
+    // hash_table.add_hash_value(position, *b);
+    // let (match_len, match_dist) = longest_match(data, &hash_table, position);
+    // if match_len >= MIN_MATCH && match_dist >= MIN_MATCH {
+    // output.push(LDPair::LengthDistance{length: match_len, distance: match_dist});
+    // let mut taker = (&mut data_iterator).take(match_len as usize - 1);
+    // while let Some((ipos, ibyte)) = taker.next() {
+    //                println!("ipos: {}", ipos + 2);
+    // hash_table.add_hash_value(ipos + 2, *ibyte);
+    // }
+    // } else {
+    // output.push(LDPair::Literal(*b));
+    // }
+    // }
+    //
+    //
     if data.len() > window_size {
 
 
@@ -187,7 +193,7 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
 
     }
 
-//    println!("{}", String::from_utf8(hash_table.data).unwrap());
+    // println!("{}", String::from_utf8(hash_table.data).unwrap());
 
     Some(output)
 }
@@ -236,12 +242,13 @@ mod test {
     }
 
     fn print_output(input: &[super::LDPair]) {
-        let mut output = vec!();
+        let mut output = vec![];
         for l in input {
             match *l {
                 super::LDPair::Literal(l) => output.push(l),
-                super::LDPair::LengthDistance{distance: d, length: l} =>
-                    output.extend(format!("<Distance: {}, Length: {}>", d, l).into_bytes()),
+                super::LDPair::LengthDistance { distance: d, length: l } => {
+                    output.extend(format!("<Distance: {}, Length: {}>", d, l).into_bytes())
+                }
             }
         }
 
@@ -251,9 +258,10 @@ mod test {
     #[test]
     fn test_lz77_short() {
         use chained_hash_table::WINDOW_SIZE;
-        let test_bytes = String::from("Test data, test data, test dota, data test, test data.").into_bytes();
+        let test_bytes = String::from("Test data, test data, test dota, data test, test data.")
+            .into_bytes();
         let res = super::lz77_compress(&test_bytes, WINDOW_SIZE).unwrap();
-//        println!("{:?}", res);
+        // println!("{:?}", res);
         print_output(&res);
         panic!();
     }

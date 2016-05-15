@@ -5,5 +5,4 @@ license = "MIT"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
 
 [dev-dependencies]
-inflate = "0.1.0"
 flate2 = "0.2.13"

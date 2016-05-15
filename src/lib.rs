@@ -81,7 +81,7 @@ impl EncoderState {
             huffman_table:
                 huffman_table::HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS,
                                                                 &FIXED_CODE_LENGTHS_DISTANCE)
-                    .unwrap(),
+                .unwrap(),
             writer: BitWriter::new(),
         }
     }
@@ -95,12 +95,16 @@ impl EncoderState {
     fn write_ldpair(&mut self, value: LDPair) {
         match value {
             LDPair::Literal(l) => self.write_literal(l),
-            LDPair::LengthDistance{length, distance} => {
-                let ldencoded = self.huffman_table.get_length_distance_code(length, distance).unwrap();
+            LDPair::LengthDistance { length, distance } => {
+                let ldencoded =
+                    self.huffman_table.get_length_distance_code(length, distance).unwrap();
                 self.writer.write_bits(ldencoded.length_code.code, ldencoded.length_code.length);
-                self.writer.write_bits(ldencoded.length_extra_bits.code, ldencoded.length_extra_bits.length);
-                self.writer.write_bits(ldencoded.distance_code.code, ldencoded.distance_code.length);
-                self.writer.write_bits(ldencoded.distance_extra_bits.code, ldencoded.distance_extra_bits.length);
+                self.writer.write_bits(ldencoded.length_extra_bits.code,
+                                       ldencoded.length_extra_bits.length);
+                self.writer
+                    .write_bits(ldencoded.distance_code.code, ldencoded.distance_code.length);
+                self.writer.write_bits(ldencoded.distance_extra_bits.code,
+                                       ldencoded.distance_extra_bits.length);
             }
         };
     }
@@ -157,7 +161,7 @@ pub fn compress_block_uncompressed(input: &[u8], final_block: bool) -> Vec<u8> {
     // the next two after the length is the ones complement of the length
     let (not_len_0, not_len_1) = put16(!input.len() as u16);
     let mut output = vec![first_byte, len_0, len_1, not_len_0, not_len_1];
-    output.extend_from_slice(&input);
+    output.extend_from_slice(input);
     output
 }
 
@@ -176,7 +180,7 @@ pub fn compress_data_uncompressed(input: &[u8]) -> Vec<u8> {
 
 
 pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
-    //let block_length = 7;//BLOCK_SIZE as usize;
+    // let block_length = 7;//BLOCK_SIZE as usize;
 
     let mut output = Vec::new();
     let mut state = EncoderState::new();
@@ -188,17 +192,16 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     }
     state.write_end_of_block();
 
-    /*
-    let mut i = input.chunks(block_length).peekable();
-    while let Some(chunk) = i.next() {
-        let last_chunk = i.peek().is_none();
-
-        state.write_start_of_block(last_chunk);
-        for byte in chunk {
-            state.write_literal(*byte);
-        }
-        state.write_end_of_block();
-    }*/
+    // let mut i = input.chunks(block_length).peekable();
+    // while let Some(chunk) = i.next() {
+    // let last_chunk = i.peek().is_none();
+    //
+    // state.write_start_of_block(last_chunk);
+    // for byte in chunk {
+    // state.write_literal(*byte);
+    // }
+    // state.write_end_of_block();
+    // }
 
     state.flush();
 
@@ -277,7 +280,7 @@ mod test {
     fn test_no_compression_string() {
         let test_data = String::from("This is some text, this is some more text, this is even \
                                       more text, lots of text here.")
-                            .into_bytes();
+            .into_bytes();
         let compressed = compress_data(&test_data, BType::NoCompression);
         let result = decompress_to_end(&compressed);
         assert_eq!(test_data, result);
