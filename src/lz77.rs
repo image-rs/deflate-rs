@@ -2,7 +2,7 @@ use std::cmp;
 
 use huffman_table::MAX_MATCH;
 use huffman_table::MIN_MATCH;
-// use chained_hash_table::WINDOW_MASK;
+use chained_hash_table::WINDOW_MASK;
 use chained_hash_table::WINDOW_SIZE;
 use chained_hash_table::ChainedHashTable;
 
@@ -43,8 +43,8 @@ fn distance_from_chain(head: u16, prev: u16) -> u16 {
     }
 }
 
-fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) -> (u16, u16) {
-    //    let test_position = position & WINDOW_MASK;
+fn longest_match(data: &[u8], hash_table: &ChainedHashTable, full_position: usize) -> (u16, u16) {
+    let position = full_position & WINDOW_MASK;
     //    let window_size = WINDOW_SIZE as u16;
     let limit = if data.len() - position < MIN_MATCH as usize {
         return (0, 0);
@@ -54,7 +54,7 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
         MAX_MATCH as usize
     };
 
-    let mut current_head = hash_table.get_head(hash_table.current_hash() as usize);
+    let mut current_head = hash_table.current_head();//hash_table.get_head(hash_table.current_hash() as usize);
     let mut current_prev = hash_table.get_prev(current_head as usize);
 
     // assert!(current_head as usize == test_position);
@@ -71,6 +71,7 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
             // data[position + 2],
             // distance
             // );
+            // FIXME: this might be getting the distance wrong on everything but the first match
             let length = get_match_length(data, position, position - (distance as usize));
             if length > best_length {
                 best_length = length;
@@ -160,8 +161,6 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
     //
     //
     if data.len() > window_size {
-
-
         for chunk in data.chunks(window_size * 2) {
 
             let loop_start = window_size - 1;
@@ -169,7 +168,7 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
 
             println!("Loop length: {}", loop_end - loop_start);
 
-            hash_table.slide(window_size);
+//            hash_table.slide(window_size);
 
             /* let loop_end = if chunk.len() < window_size {
             chunk.len()
@@ -189,6 +188,7 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
             }
              */
             process_chunk(chunk, loop_start, loop_end, &mut hash_table, &mut output);
+            panic!("Not properly implemented yet!");
         }
 
     }
