@@ -1,11 +1,10 @@
 use std::cmp;
 
-use huffman_table::MAX_MATCH;
-use huffman_table::MIN_MATCH;
-use chained_hash_table::WINDOW_MASK;
-use chained_hash_table::WINDOW_SIZE;
-use chained_hash_table::ChainedHashTable;
+use huffman_table::{MAX_MATCH, MIN_MATCH};
+use chained_hash_table::{WINDOW_SIZE, ChainedHashTable};
 
+///A structure representing values in a compressed stream of data before being huffman coded
+///We might want to represent this differently eventually to save on memory usage
 #[derive(Debug)]
 pub enum LDPair {
     Literal(u8),
@@ -14,13 +13,6 @@ pub enum LDPair {
         distance: u16,
     },
 }
-
-// impl LDPair {
-// fn get_integer_value(&self) -> usize {
-//
-// }
-// }
-//
 
 /// Get the length of the checked match
 fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> u16 {
@@ -43,16 +35,12 @@ fn distance_from_chain(head: u16, prev: u16) -> u16 {
     }
 }
 
-fn longest_match(data: &[u8], hash_table: &ChainedHashTable, full_position: usize) -> (u16, u16) {
-    let position = full_position & WINDOW_MASK;
-    //    let window_size = WINDOW_SIZE as u16;
-    let limit = if data.len() - position < MIN_MATCH as usize {
+fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) -> (u16, u16) {
+    if data.len() - position < MIN_MATCH as usize {
         return (0, 0);
-    } else if position + MAX_MATCH as usize > data.len() {
-        data.len() - position
-    } else {
-        MAX_MATCH as usize
-    };
+    }
+
+    let limit = cmp::min(position, MAX_MATCH as usize);
 
     let mut current_head = hash_table.current_head();//hash_table.get_head(hash_table.current_hash() as usize);
     let mut current_prev = hash_table.get_prev(current_head as usize);
@@ -65,13 +53,6 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, full_position: usiz
     let mut distance = distance_from_chain(current_head, current_prev);
     while distance < WINDOW_SIZE as u16 {
         if distance > 0 {
-            //            println!("Found match for: {} {} {} at distance: {}",
-            // data[position],
-            // data[position + 1],
-            // data[position + 2],
-            // distance
-            // );
-            // FIXME: this might be getting the distance wrong on everything but the first match
             let length = get_match_length(data, position, position - (distance as usize));
             if length > best_length {
                 best_length = length;
@@ -80,14 +61,20 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, full_position: usiz
         }
         current_head = current_prev;
         current_prev = hash_table.get_prev(current_head as usize);
-        distance = distance_from_chain(current_head, current_prev);
-        if current_head as usize > limit || current_head == 0 {
+        distance += distance_from_chain(current_head, current_prev);
+        println!("Distance: {}, Limit: {}", distance, limit);
+        if distance as usize > limit || current_head == 0 {
             break;
         }
     }
     // println!("-");
     (best_length, best_distance)
 }
+
+fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (u16, u16) {
+    longest_match(data, hash_table, hash_table.current_position())
+}
+
 
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
@@ -101,7 +88,7 @@ fn process_chunk(data: &[u8],
     while let Some((n, b)) = (&mut data_iterator).next() {
         let position = n + 2;
         hash_table.add_hash_value(position, *b);
-        let (match_len, match_dist) = longest_match(data, hash_table, position);
+        let (match_len, match_dist) = longest_match_current(data, hash_table);
         if match_len >= MIN_MATCH && match_dist >= MIN_MATCH {
             output.push(LDPair::LengthDistance {
                 length: match_len,
@@ -118,11 +105,17 @@ fn process_chunk(data: &[u8],
     }
 }
 
-//
+/// Compress a slice
+/// Returns a vector of `LDPair` values on success
 pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
     if window_size > DEFAULT_WINDOW_SIZE {
         return None;
     }
+
+    if data.len() > DEFAULT_WINDOW_SIZE {
+        panic!("Compressing data longer than {} bytes not properly implemented yet!", DEFAULT_WINDOW_SIZE);
+    }
+
     let mut output = Vec::new();
 
     let mut hash_table = ChainedHashTable::from_starting_values(data[0], data[1]);
@@ -188,7 +181,6 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
             }
              */
             process_chunk(chunk, loop_start, loop_end, &mut hash_table, &mut output);
-            panic!("Not properly implemented yet!");
         }
 
     }
@@ -198,8 +190,11 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
     Some(output)
 }
 
+
+
 #[cfg(test)]
 mod test {
+    /// Test that match lengths are calculated correctly
     #[test]
     fn test_match_length() {
         let test_arr = [5u8, 5, 5, 5, 5, 9, 9, 2, 3, 5, 5, 5, 5, 5];
@@ -213,32 +208,16 @@ mod test {
 
     #[test]
     fn test_longest_match() {
-        use std::fs::File;
-        use std::io::Read;
-        use chained_hash_table::ChainedHashTable;
-        let mut input = Vec::new();
+        use chained_hash_table::{filled_hash_table, HASH_BYTES};
+        use std::str::from_utf8;
 
-        let mut f = File::open("src/gpl-3.0.txt").unwrap();
-        f.read_to_end(&mut input).unwrap();
+        let test_data = b"Test data, Test_data, Test data";
+        let hash_table = filled_hash_table(&test_data[..22 - 1 - 1 + HASH_BYTES]);
 
-        let end_pos = input.len();
-        let end_bytes = String::from("General").into_bytes();
-
-        input.extend(&end_bytes);
-
-        let mut hash_table = ChainedHashTable::from_starting_values(input[0], input[1]);
-
-        for (n, b) in input[2..].iter().enumerate() {
-            hash_table.add_hash_value(n, *b);
-        }
-
-        let (len, dist) = super::longest_match(&input, &hash_table, end_pos);
-        println!("len: {}, dist: {}", len, dist);
-        assert!(dist > 5);
-        assert_eq!(len as usize, end_bytes.len());
-        assert_eq!(input[end_pos], end_bytes[0]);
-        assert_eq!(end_bytes.as_slice(),
-                   &input[(end_pos - dist as usize)..(end_pos - dist as usize + len as usize)]);
+        println!("Bytes: {}", from_utf8(&test_data[..22 - 1 - 1 + HASH_BYTES]).unwrap());
+        let (length, distance) = super::longest_match_current(test_data, &hash_table);
+        assert!(distance > 11);
+        assert_eq!(length, 9);
     }
 
     fn print_output(input: &[super::LDPair]) {
@@ -263,6 +242,5 @@ mod test {
         let res = super::lz77_compress(&test_bytes, WINDOW_SIZE).unwrap();
         // println!("{:?}", res);
         print_output(&res);
-        panic!();
     }
 }

@@ -1,5 +1,7 @@
 pub const WINDOW_SIZE: usize = 32768;
 pub const WINDOW_MASK: usize = WINDOW_SIZE - 1;
+#[allow(dead_code)]
+pub const HASH_BYTES: usize = 3;
 const HASH_SHIFT: u32 = 5;
 const HASH_MASK: u32 = WINDOW_MASK as u32;
 
@@ -9,8 +11,10 @@ fn update_hash(current_hash: u32, to_insert: u8, shift: u32, mask: u32) -> u32 {
 }
 
 pub struct ChainedHashTable {
-    // TODO: Explain properly what these are
+    // Current running hash value of the last 3 bytes
     current_hash: u32,
+    // The current position
+    current_pos: usize,
     // Starts of hash chains (in prev?)
     head: Vec<u16>,
     // link to previous occurence of this hash value
@@ -21,6 +25,7 @@ impl ChainedHashTable {
     fn new() -> ChainedHashTable {
         ChainedHashTable {
             current_hash: 0,
+            current_pos: 0,
             head: vec!(0; WINDOW_SIZE * 2),
             prev: vec!(0; WINDOW_SIZE),
         }
@@ -40,11 +45,16 @@ impl ChainedHashTable {
         let position = position & WINDOW_MASK;
         self.prev[position] = self.head[self.current_hash as usize];
         self.head[self.current_hash as usize] = position as u16;
+        self.current_pos = position;
     }
 
     // Get the head of the hash chain of the current hash value
     pub fn current_head(&self) -> u16 {
         self.head[self.current_hash as usize]
+    }
+
+    pub fn current_position(&self) -> usize {
+        self.current_pos
     }
 
     pub fn get_prev(&self, bytes: usize) -> u16 {
@@ -55,6 +65,7 @@ impl ChainedHashTable {
         self.current_hash
     }
 
+    #[allow(dead_code)]
     fn slide_value(b: u16, bytes: u16) -> u16 {
         if b >= bytes {
             b - bytes
@@ -75,15 +86,16 @@ impl ChainedHashTable {
 }
 
 #[cfg(test)]
-mod test {
-    fn filled_hash_table(data: &[u8]) -> super::ChainedHashTable {
-        let mut hash_table = super::ChainedHashTable::from_starting_values(data[0], data[1]);
-        for (n, b) in data[2..].iter().enumerate() {
-            hash_table.add_hash_value(n + 2, *b);
-        }
-        hash_table
+pub fn filled_hash_table(data: &[u8]) -> ChainedHashTable {
+    let mut hash_table = ChainedHashTable::from_starting_values(data[0], data[1]);
+    for (n, b) in data[2..].iter().enumerate() {
+        hash_table.add_hash_value(n + 2, *b);
     }
+    hash_table
+}
 
+#[cfg(test)]
+mod test {
     #[test]
     fn test_chained_hash() {
         use std::str;
@@ -98,12 +110,12 @@ mod test {
 
         let test_data = test_string.as_bytes();
 
-        let current_bytes = &test_data[test_data.len() - 3..test_data.len()];
+        let current_bytes = &test_data[test_data.len() - super::HASH_BYTES..test_data.len()];
 
         let num_iters = test_string.matches(str::from_utf8(current_bytes).unwrap())
             .count();
 
-        let hash_table = filled_hash_table(test_data);
+        let hash_table = super::filled_hash_table(test_data);
 
         // Test that the positions in the chain are valid
         let mut prev_value = hash_table.current_head() as usize;
@@ -121,7 +133,7 @@ mod test {
         let mut test_data = Vec::new();
         test_data.extend((0u8..255));
         test_data.extend((255u8..0));
-        let hash_table = filled_hash_table(&test_data);
+        let hash_table = super::filled_hash_table(&test_data);
         let prev_pos = hash_table.get_prev(hash_table.current_head() as usize);
         // Since all sequences in the input are unique, there shouldn't be any previous values
         assert_eq!(prev_pos, 0);
