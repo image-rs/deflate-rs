@@ -241,7 +241,7 @@ pub struct HuffmanTable {
 /// Returns a tuple containing the longest length value in the table and a vector of lengths
 /// Returns an error if `table` is empty, or if any of the lenghts exceed 15
 fn build_length_count_table(table: &[u8]) -> Result<(usize, Vec<u8>), HuffmanError> {
-    // TODO: Validate that there are enough code lengths
+    // TODO: Validate the length table properly
     const MAX_CODE_LENGTH: usize = 15;
 
     let max_length = match table.iter().max() {

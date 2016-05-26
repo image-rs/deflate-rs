@@ -15,7 +15,7 @@ pub struct ChainedHashTable {
     current_hash: u32,
     // The current position
     current_pos: usize,
-    // Starts of hash chains (in prev?)
+    // Starts of hash chains (in prev)
     head: Vec<u16>,
     // link to previous occurence of this hash value
     prev: Vec<u16>,
@@ -26,7 +26,7 @@ impl ChainedHashTable {
         ChainedHashTable {
             current_hash: 0,
             current_pos: 0,
-            head: vec!(0; WINDOW_SIZE * 2),
+            head: vec!(0; WINDOW_SIZE),
             prev: vec!(0; WINDOW_SIZE),
         }
     }
@@ -42,8 +42,8 @@ impl ChainedHashTable {
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
         // TODO: Do we need to allow different shifts/masks?
         self.current_hash = update_hash(self.current_hash, value, HASH_SHIFT, HASH_MASK);
-        let position = position & WINDOW_MASK;
-        self.prev[position] = self.head[self.current_hash as usize];
+        //        let position = position & WINDOW_MASK;
+        self.prev[position & WINDOW_MASK] = self.head[self.current_hash as usize];
         self.head[self.current_hash as usize] = position as u16;
         self.current_pos = position;
     }
@@ -58,7 +58,7 @@ impl ChainedHashTable {
     }
 
     pub fn get_prev(&self, bytes: usize) -> u16 {
-        self.prev[bytes]
+        self.prev[bytes & WINDOW_MASK]
     }
 
     pub fn _current_hash(&self) -> u32 {
@@ -74,7 +74,7 @@ impl ChainedHashTable {
         }
     }
 
-    pub fn _slide(&mut self, bytes: usize) {
+    pub fn slide(&mut self, bytes: usize) {
         for b in &mut self.head {
             *b = ChainedHashTable::slide_value(*b, bytes as u16);
         }
@@ -141,6 +141,71 @@ mod test {
 
     #[test]
     fn test_table_slide() {
-        panic!("Not implemented yet!");
+        use std::fs::File;
+        use std::io::Read;
+
+        let window_size = super::WINDOW_SIZE;
+        let window_size16 = super::WINDOW_SIZE as u16;
+
+        let mut input = Vec::new();
+
+        let mut f = File::open("src/gpl-3.0.txt").unwrap();
+
+        f.read_to_end(&mut input).unwrap();
+
+        let mut hash_table = super::filled_hash_table(&input[..window_size]);
+        for (n, b) in input[..window_size].iter().enumerate() {
+            hash_table.add_hash_value(n + window_size, *b);
+        }
+        hash_table.slide(window_size);
+
+
+
+        {
+            let max_head = hash_table.head.iter().max().unwrap();
+            assert!(*max_head < window_size16);
+            assert!(*max_head > 0);
+            let mut pos = hash_table.current_head();
+            // There should be a previous occurence since we inserted the data 3 times
+            assert!(pos < window_size16);
+            assert!(pos > 0);
+            let end_byte = input[window_size - 1];
+            while pos > 0 {
+                // we
+                assert_eq!(input[pos as usize & window_size - 1], end_byte);
+                println!("pos: {}", pos);
+                pos = hash_table.get_prev(pos as usize);
+            }
+
+        }
+
+        // {
+        // for (n, b) in hash_table.prev.iter().enumerate() {
+        // println!("Prev of n: {} is {}", n, b);
+        // }
+        // }
+
+        for (n, b) in input[..window_size].iter().enumerate() {
+            hash_table.add_hash_value(n + window_size, *b);
+        }
+
+        let max_head = hash_table.head.iter().max().unwrap();
+        assert!(*max_head > window_size16);
+        let max_prev = hash_table.head.iter().max().unwrap();
+        assert!(*max_prev > window_size16);
+
+        let mut pos = hash_table.current_head();
+        // There should be a previous occurence since we inserted the data 3 times
+        assert!(pos > window_size16);
+        let end_byte = input[window_size - 1];
+        let mut iterations = 0;
+        while pos > window_size16 && iterations < 5000 {
+            // we
+            assert_eq!(input[pos as usize & window_size - 1], end_byte);
+            println!("pos: {}", pos);
+            pos = hash_table.get_prev(pos as usize);
+            iterations += 1;
+        }
+        panic!();
     }
 }

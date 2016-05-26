@@ -288,23 +288,12 @@ mod test {
 
     #[test]
     fn test_fixed_string_mem() {
-        use std::str;
-        use std::io::Read;
-        use flate2::read::DeflateDecoder;
         let test_data = String::from(".......................BB").into_bytes();
         let compressed = compress_data(&test_data, BType::FixedHuffman);
         // [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0]
 
-        // ==Flate2==
-        {
-            let mut e = DeflateDecoder::new(&compressed[..]);
-            let mut result = Vec::new();
-            e.read_to_end(&mut result).unwrap();
-            let out_string = str::from_utf8(&result).unwrap();
-            println!("Output: {}", out_string);
-            assert_eq!(test_data, result);
-        }
-
+        let result = decompress_to_end(&compressed);
+        assert_eq!(test_data, result);
     }
 
     #[test]
