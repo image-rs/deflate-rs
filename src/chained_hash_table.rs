@@ -43,7 +43,7 @@ impl ChainedHashTable {
         // TODO: Do we need to allow different shifts/masks?
         self.current_hash = update_hash(self.current_hash, value, HASH_SHIFT, HASH_MASK);
         //        let position = position & WINDOW_MASK;
-        self.prev[position & WINDOW_MASK] = self.head[self.current_hash as usize];
+        self.prev[position & WINDOW_MASK] = self.current_head() & WINDOW_MASK as u16;
         self.head[self.current_hash as usize] = position as u16;
         self.current_pos = position;
     }

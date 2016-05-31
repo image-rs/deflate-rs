@@ -160,8 +160,11 @@ fn get_distance_code(distance: u16) -> Option<u8> {
     let distance = distance as usize;
     match distance {
         // Since the array starts at 0, we need to subtract 1 to get the correct code number.
-        1...255 => Some(DISTANCE_CODES[distance - 1]),
-        256...32768 => Some(DISTANCE_CODES[256 + ((distance - 1) >> 7)]),
+        1...256 => Some(DISTANCE_CODES[distance - 1]),
+        // Due to the distrubution of the distance codes above 256, we can get away with only
+        // using the top bits to determine the code, rather than having a 32k long table of
+        // distance codes.
+        257...32768 => Some(DISTANCE_CODES[256 + ((distance - 1) >> 7)]),
         _ => None,
     }
 }
@@ -379,7 +382,6 @@ impl HuffmanTable {
 
         let distance_huffman_code = self.distance_codes[distance_data.code_number as usize];
 
-        // FIXME: Why do we need - 1 here? It will also produce wrong code for l = 3
         Some(LengthAndDistanceBits {
             length_code: length_huffman_code,
             length_extra_bits: HuffmanCode {
@@ -411,6 +413,10 @@ fn test_get_length_code() {
     assert_eq!(extra_bits.code_number, 284);
     assert_eq!(extra_bits.num_bits, 5);
     assert_eq!(extra_bits.value, 30);
+
+    let extra_bits = get_length_code_and_extra_bits(258).unwrap();
+    assert_eq!(extra_bits.code_number, 285);
+    assert_eq!(extra_bits.num_bits, 0);
 }
 
 #[test]
@@ -419,6 +425,7 @@ fn test_distance_code() {
     assert_eq!(get_distance_code(0), None);
     assert_eq!(get_distance_code(50000), None);
     assert_eq!(get_distance_code(6146).unwrap(), 25);
+    assert_eq!(get_distance_code(256).unwrap(), 15);
 }
 
 #[test]
@@ -427,6 +434,9 @@ fn test_distance_extra_bits() {
     assert_eq!(extra.value, 0b1110);
     assert_eq!(extra.code_number, 18);
     assert_eq!(extra.num_bits, 8);
+    let extra = get_distance_code_and_extra_bits(256).unwrap();
+    assert_eq!(extra.code_number, 15);
+    assert_eq!(extra.num_bits, 6);
 }
 
 #[test]

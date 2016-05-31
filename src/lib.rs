@@ -4,7 +4,6 @@ extern crate flate2;
 mod huffman_table;
 mod lz77;
 mod chained_hash_table;
-
 use huffman_table::*;
 use lz77::{LDPair, lz77_compress};
 
@@ -96,8 +95,11 @@ impl EncoderState {
         match value {
             LDPair::Literal(l) => self.write_literal(l),
             LDPair::LengthDistance { length, distance } => {
-                let ldencoded =
-                    self.huffman_table.get_length_distance_code(length, distance).unwrap();
+                let ldencoded = self.huffman_table
+                    .get_length_distance_code(length, distance)
+                    .expect(&format!("Failed to get code for length: {}, distance: {}",
+                                     length,
+                                     distance));
                 self.writer.write_bits(ldencoded.length_code.code, ldencoded.length_code.length);
                 self.writer.write_bits(ldencoded.length_extra_bits.code,
                                        ldencoded.length_extra_bits.length);
@@ -185,6 +187,7 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
     let mut state = EncoderState::new();
     let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
+    let clen = compressed.len();
 
     state.write_start_of_block(true);
     for ld in compressed {
@@ -206,6 +209,10 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     state.flush();
 
     output.extend(state.take_buffer());
+    println!("Input length: {}, Compressed len: {}, Output length: {}",
+             input.len(),
+             clen,
+             output.len());
     output
 }
 
@@ -288,11 +295,14 @@ mod test {
 
     #[test]
     fn test_fixed_string_mem() {
-        let test_data = String::from(".......................BB").into_bytes();
+        use std::str;
+        // let test_data = b".......................BB";
+        let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
         let compressed = compress_data(&test_data, BType::FixedHuffman);
         // [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0]
 
         let result = decompress_to_end(&compressed);
+        println!("Output: `{}`", str::from_utf8(&result).unwrap());
         assert_eq!(test_data, result);
     }
 
@@ -311,14 +321,22 @@ mod test {
     fn test_fixed_string_file() {
         use std::fs::File;
         use std::io::Read;
+        use std::str;
         let mut input = Vec::new();
 
         let mut f = File::open("src/gpl-3.0.txt").unwrap();
 
         f.read_to_end(&mut input).unwrap();
-        let compressed = compress_data(&input, BType::FixedHuffman);
+        let compressed = compress_data(&input[..32768], BType::FixedHuffman);
+        println!("Compressed len: {}", compressed.len());
         let result = decompress_to_end(&compressed);
-        assert_eq!(input, result);
+        let out1 = str::from_utf8(&input).unwrap();
+        let out2 = str::from_utf8(&result).unwrap();
+        // println!("Orig:\n{}", out1);
+        println!("Compr:\n{}", out2);
+        println!("Orig len: {}, out len: {}", out1.len(), out2.len());
+        // Not using assert_eq here deliberately to avoid massive amounts of output spam
+        assert!(input[..32768] == result[..]);
     }
 
     #[test]
