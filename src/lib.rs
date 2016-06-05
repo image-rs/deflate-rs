@@ -299,7 +299,6 @@ mod test {
         // let test_data = b".......................BB";
         let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
         let compressed = compress_data(&test_data, BType::FixedHuffman);
-        // [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0]
 
         let result = decompress_to_end(&compressed);
         println!("Output: `{}`", str::from_utf8(&result).unwrap());
@@ -317,7 +316,23 @@ mod test {
         assert_eq!(data, result);
     }
 
+    /// Test deflate example.
+    ///
+    /// Check if the encoder produces the same code as the example given by Mark Adler here:
+    /// https://stackoverflow.com/questions/17398931/deflate-encoding-with-static-huffman-codes/17415203
     #[test]
+    fn test_fixed_example() {
+        let test_data = b"Deflate late";
+        //let check = [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0];
+        let check = [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0x00, 0x11, 0x00];
+        let compressed = compress_data(test_data, BType::FixedHuffman);
+        assert_eq!(&compressed, &check);
+        let decompressed = decompress_to_end(&compressed);
+        assert_eq!(&decompressed, test_data)
+    }
+
+    #[test]
+    #[ignore]
     fn test_fixed_string_file() {
         use std::fs::File;
         use std::io::Read;

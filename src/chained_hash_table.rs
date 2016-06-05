@@ -33,30 +33,34 @@ impl ChainedHashTable {
 
     pub fn from_starting_values(v1: u8, v2: u8) -> ChainedHashTable {
         let mut t = ChainedHashTable::new();
-        t.add_hash_value(0, v1);
-        t.add_hash_value(1, v2);
+                t.add_hash_value(0, v1);
+                t.add_hash_value(1, v2);
         t
     }
 
     // Insert a byte into the hash table
-    pub fn add_hash_value(&mut self, position: usize, value: u8) {
-        // TODO: Do we need to allow different shifts/masks?
+    pub fn add_hash_value(&mut self,
+                          position: usize,
+                          value: u8) {
+        // TODO: Do we need to allow different shifts/masks?        self.current_pos += 1;//= position;
         self.current_hash = update_hash(self.current_hash, value, HASH_SHIFT, HASH_MASK);
-        //        let position = position & WINDOW_MASK;
-        self.prev[position & WINDOW_MASK] = self.current_head() & WINDOW_MASK as u16;
+        self.prev[position & WINDOW_MASK] = self.current_head();
         self.head[self.current_hash as usize] = position as u16;
         self.current_pos = position;
     }
 
     // Get the head of the hash chain of the current hash value
+    #[inline]
     pub fn current_head(&self) -> u16 {
         self.head[self.current_hash as usize]
     }
 
+    #[inline]
     pub fn current_position(&self) -> usize {
         self.current_pos
     }
 
+    #[inline]
     pub fn get_prev(&self, bytes: usize) -> u16 {
         self.prev[bytes & WINDOW_MASK]
     }
@@ -89,7 +93,7 @@ impl ChainedHashTable {
 pub fn filled_hash_table(data: &[u8]) -> ChainedHashTable {
     let mut hash_table = ChainedHashTable::from_starting_values(data[0], data[1]);
     for (n, b) in data[2..].iter().enumerate() {
-        hash_table.add_hash_value(n + 2, *b);
+        hash_table.add_hash_value(n, *b);
     }
     hash_table
 }
@@ -121,7 +125,8 @@ mod test {
         let mut prev_value = hash_table.current_head() as usize;
         let mut count = 0;
         while prev_value > 1 {
-            assert_eq!(current_bytes, &test_data[prev_value - 2..prev_value + 1]);
+            assert_eq!(current_bytes,
+                       &test_data[prev_value..prev_value + super::HASH_BYTES]);
             count += 1;
             prev_value = hash_table.get_prev(prev_value) as usize;
         }
@@ -155,11 +160,10 @@ mod test {
 
         let mut hash_table = super::filled_hash_table(&input[..window_size]);
         for (n, b) in input[..window_size].iter().enumerate() {
-            hash_table.add_hash_value(n + window_size, *b);
+            hash_table.add_hash_value(n, *b);
         }
+
         hash_table.slide(window_size);
-
-
 
         {
             let max_head = hash_table.head.iter().max().unwrap();
@@ -185,8 +189,8 @@ mod test {
         // }
         // }
 
-        for (n, b) in input[..window_size].iter().enumerate() {
-            hash_table.add_hash_value(n + window_size, *b);
+        for (n, b) in input[..(window_size / 2)].iter().enumerate() {
+            hash_table.add_hash_value(n, *b);
         }
 
         let max_head = hash_table.head.iter().max().unwrap();
