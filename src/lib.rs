@@ -332,7 +332,6 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn test_fixed_string_file() {
         use std::fs::File;
         use std::io::Read;
@@ -342,7 +341,7 @@ mod test {
         let mut f = File::open("src/gpl-3.0.txt").unwrap();
 
         f.read_to_end(&mut input).unwrap();
-        let compressed = compress_data(&input[..32768], BType::FixedHuffman);
+        let compressed = compress_data(&input, BType::FixedHuffman);
         println!("Compressed len: {}", compressed.len());
         let result = decompress_to_end(&compressed);
         let out1 = str::from_utf8(&input).unwrap();
@@ -351,7 +350,7 @@ mod test {
         println!("Compr:\n{}", out2);
         println!("Orig len: {}, out len: {}", out1.len(), out2.len());
         // Not using assert_eq here deliberately to avoid massive amounts of output spam
-        assert!(input[..32768] == result[..]);
+        assert!(input == result);
     }
 
     #[test]

@@ -33,16 +33,14 @@ impl ChainedHashTable {
 
     pub fn from_starting_values(v1: u8, v2: u8) -> ChainedHashTable {
         let mut t = ChainedHashTable::new();
-                t.add_hash_value(0, v1);
-                t.add_hash_value(1, v2);
+        t.add_hash_value(0, v1);
+        t.add_hash_value(1, v2);
         t
     }
 
     // Insert a byte into the hash table
-    pub fn add_hash_value(&mut self,
-                          position: usize,
-                          value: u8) {
-        // TODO: Do we need to allow different shifts/masks?        self.current_pos += 1;//= position;
+    pub fn add_hash_value(&mut self, position: usize, value: u8) {
+        // TODO: Do we need to allow different shifts/masks?
         self.current_hash = update_hash(self.current_hash, value, HASH_SHIFT, HASH_MASK);
         self.prev[position & WINDOW_MASK] = self.current_head();
         self.head[self.current_hash as usize] = position as u16;
@@ -148,6 +146,7 @@ mod test {
     fn test_table_slide() {
         use std::fs::File;
         use std::io::Read;
+        use std::str;
 
         let window_size = super::WINDOW_SIZE;
         let window_size16 = super::WINDOW_SIZE as u16;
@@ -160,13 +159,15 @@ mod test {
 
         let mut hash_table = super::filled_hash_table(&input[..window_size]);
         for (n, b) in input[..window_size].iter().enumerate() {
-            hash_table.add_hash_value(n, *b);
+            hash_table.add_hash_value(n + window_size, *b);
         }
 
         hash_table.slide(window_size);
 
         {
             let max_head = hash_table.head.iter().max().unwrap();
+            // After sliding there should be no hashes referring to values
+            // higher than the window size
             assert!(*max_head < window_size16);
             assert!(*max_head > 0);
             let mut pos = hash_table.current_head();
@@ -175,7 +176,6 @@ mod test {
             assert!(pos > 0);
             let end_byte = input[window_size - 1];
             while pos > 0 {
-                // we
                 assert_eq!(input[pos as usize & window_size - 1], end_byte);
                 println!("pos: {}", pos);
                 pos = hash_table.get_prev(pos as usize);
@@ -183,33 +183,27 @@ mod test {
 
         }
 
-        // {
-        // for (n, b) in hash_table.prev.iter().enumerate() {
-        // println!("Prev of n: {} is {}", n, b);
-        // }
-        // }
-
         for (n, b) in input[..(window_size / 2)].iter().enumerate() {
-            hash_table.add_hash_value(n, *b);
+            hash_table.add_hash_value(n + window_size, *b);
         }
 
-        let max_head = hash_table.head.iter().max().unwrap();
-        assert!(*max_head > window_size16);
-        let max_prev = hash_table.head.iter().max().unwrap();
+        // There should hashes referring to values in the upper part of the input window
+        // at this point
+        let max_prev = hash_table.prev.iter().max().unwrap();
         assert!(*max_prev > window_size16);
 
         let mut pos = hash_table.current_head();
         // There should be a previous occurence since we inserted the data 3 times
         assert!(pos > window_size16);
-        let end_byte = input[window_size - 1];
+        let end_byte = input[(window_size / 2) - 1];
         let mut iterations = 0;
         while pos > window_size16 && iterations < 5000 {
-            // we
+            //            println!("`{}`",
+            // str::from_utf8(&[input[pos as usize & window_size - 1]]).unwrap());
             assert_eq!(input[pos as usize & window_size - 1], end_byte);
-            println!("pos: {}", pos);
+
             pos = hash_table.get_prev(pos as usize);
             iterations += 1;
         }
-        panic!();
     }
 }
