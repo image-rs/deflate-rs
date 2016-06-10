@@ -338,7 +338,7 @@ mod test {
         use std::str;
         let mut input = Vec::new();
 
-        let mut f = File::open("src/gpl-3.0.txt").unwrap();
+        let mut f = File::open("src/pg11.txt").unwrap();
 
         f.read_to_end(&mut input).unwrap();
         let compressed = compress_data(&input, BType::FixedHuffman);
@@ -347,7 +347,7 @@ mod test {
         let out1 = str::from_utf8(&input).unwrap();
         let out2 = str::from_utf8(&result).unwrap();
         // println!("Orig:\n{}", out1);
-        println!("Compr:\n{}", out2);
+        // println!("Compr:\n{}", out2);
         println!("Orig len: {}, out len: {}", out1.len(), out2.len());
         // Not using assert_eq here deliberately to avoid massive amounts of output spam
         assert!(input == result);

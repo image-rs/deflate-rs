@@ -6,3 +6,4 @@ authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
 
 [dev-dependencies]
 flate2 = "0.2.13"
+

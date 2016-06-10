@@ -39,9 +39,10 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
         0
     };
 
-    let mut current_head = hash_table.get_prev(hash_table.current_head() as usize);
+    let max_length = cmp::min((data.len() - position) as u16, MAX_MATCH);
 
-    //    let mut current_prev = hash_table.get_prev(current_head as usize);
+    let mut current_head = hash_table.get_prev(hash_table.current_head() as usize);
+    let starting_head = current_head;
 
     let mut best_length = MIN_MATCH - 1;
     let mut best_distance = 0;
@@ -69,13 +70,14 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
                 // will currently generate an infinate loop, and adding a loop limit makes
                 // things very slow, so we break for now (which in the worst case would mean
                 // less efficient compression).
+                // TODO: This may not be needed anymore
                 break;
             }
 
             if length > best_length {
                 best_length = length;
                 best_distance = distance;
-                if length == MAX_MATCH {
+                if length == max_length {
                     // We are at the max length, so there is no point
                     // searching any longer
                     break;
@@ -83,6 +85,10 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
             }
         }
         current_head = hash_table.get_prev(current_head as usize);
+        if current_head == starting_head {
+            // We've gone through one cycle.
+            break;
+        }
     }
     (best_length, best_distance as u16)
 }
@@ -98,7 +104,8 @@ fn process_chunk(data: &[u8],
                  start: usize,
                  end: usize,
                  hash_table: &mut ChainedHashTable,
-                 output: &mut Vec<LDPair>) {
+    output: &mut Vec<LDPair>) {
+let end = cmp::min(data.len(), end);
     let current_chunk = &data[start..end];
     let mut insert_it = current_chunk.iter().enumerate();
     let mut hash_it = current_chunk[2..].iter();
@@ -108,8 +115,12 @@ fn process_chunk(data: &[u8],
         if let Some(hash_byte) = hash_it.next() {
             let position = n + start;
             hash_table.add_hash_value(position, *hash_byte);
+            // TODO: Currently, we only check for matches up to the end of the chunk, but ideally
+            // we should be checking max_match bytes further to achieve the best possible compression.
             let (match_len, match_dist) = longest_match_current(&data[..end], hash_table);
             if match_len >= MIN_MATCH {
+                // TODO: Add heuristic checking if outputting a length/distance pair will actually be shorter than adding the literal bytes
+
                 output.push(LDPair::LengthDistance {
                     length: match_len,
                     distance: match_dist,
@@ -130,6 +141,7 @@ fn process_chunk(data: &[u8],
             output.push(LDPair::Literal(*b));
         }
     }
+
 }
 
 /// Compress a slice
@@ -141,7 +153,7 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
     }
 
     let mut output = Vec::new();
-    // Reserve some extra space in the output vector to preved excessive allocation
+    // Reserve some extra space in the output vector to prevent excessive allocation
     output.reserve(data.len() / 2);
 
     let mut hash_table = ChainedHashTable::from_starting_values(data[0], data[1]);
@@ -154,13 +166,14 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
     if data.len() > window_size {
         loop {
             let start = current_start;
-            let end = cmp::min(current_start + window_size, data.len());
-            process_chunk(&data[start - window_size..],
-                          start,
+            let slice = &data[start - window_size..];
+            let end = cmp::min(window_size * 2, slice.len());
+            process_chunk(slice,
+                          window_size,
                           end,
                           &mut hash_table,
                           &mut output);
-            if end >= data.len() {
+            if end >= slice.len() {
                 break;
             }
             current_start += window_size;
@@ -207,6 +220,7 @@ mod test {
         assert_eq!(l3, 4);
     }
 
+    /// Test that we get the longest of the matches
     #[test]
     fn test_longest_match() {
         use chained_hash_table::{filled_hash_table, HASH_BYTES};
@@ -246,6 +260,7 @@ mod test {
         println!("{}", String::from_utf8(output).unwrap());
     }
 
+    /// Test that a short string from an example on SO compresses correctly
     #[test]
     fn test_lz77_short() {
         use std::str;
@@ -267,6 +282,7 @@ mod test {
                    });
     }
 
+    /// Test that compression is working for a longer file
     #[test]
     fn test_lz77_long() {
         use std::fs::File;
@@ -275,10 +291,24 @@ mod test {
         use chained_hash_table::WINDOW_SIZE;
         let mut input = Vec::new();
 
-        let mut f = File::open("src/gpl-3.0.txt").unwrap();
+        let mut f = File::open("src/pg11.txt").unwrap();
         f.read_to_end(&mut input).unwrap();
         let compressed = super::lz77_compress(&input, WINDOW_SIZE).unwrap();
+        assert!(compressed.len() < input.len());
         let decompressed = decompress_lz77(&compressed);
+        //println!("{}", str::from_utf8(&decompressed).unwrap());
+        assert_eq!(input.len(), decompressed.len());
         assert!(decompressed == input);
+    }
+
+    /// Test that matches at the window border are working correctly
+    #[test]
+    fn test_lz77_border() {
+        use chained_hash_table::WINDOW_SIZE;
+        let data = vec![0; 34000];
+        let compressed = super::lz77_compress(&data, WINDOW_SIZE).unwrap();
+        assert!(compressed.len() < data.len());
+        let decompressed = decompress_lz77(&compressed);
+        assert!(decompressed == data);
     }
 }
