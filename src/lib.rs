@@ -4,6 +4,7 @@ extern crate flate2;
 mod huffman_table;
 mod lz77;
 mod chained_hash_table;
+mod length_encode;
 use huffman_table::*;
 use lz77::{LDPair, lz77_compress};
 
