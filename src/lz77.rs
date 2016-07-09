@@ -104,8 +104,8 @@ fn process_chunk(data: &[u8],
                  start: usize,
                  end: usize,
                  hash_table: &mut ChainedHashTable,
-    output: &mut Vec<LDPair>) {
-let end = cmp::min(data.len(), end);
+                 output: &mut Vec<LDPair>) {
+    let end = cmp::min(data.len(), end);
     let current_chunk = &data[start..end];
     let mut insert_it = current_chunk.iter().enumerate();
     let mut hash_it = current_chunk[2..].iter();
@@ -116,10 +116,12 @@ let end = cmp::min(data.len(), end);
             let position = n + start;
             hash_table.add_hash_value(position, *hash_byte);
             // TODO: Currently, we only check for matches up to the end of the chunk, but ideally
-            // we should be checking max_match bytes further to achieve the best possible compression.
+            // we should be checking max_match bytes further to achieve the best possible
+            // compression.
             let (match_len, match_dist) = longest_match_current(&data[..end], hash_table);
             if match_len >= MIN_MATCH {
-                // TODO: Add heuristic checking if outputting a length/distance pair will actually be shorter than adding the literal bytes
+                // TODO: Add heuristic checking if outputting a length/distance pair will actually
+                // be shorter than adding the literal bytes
 
                 output.push(LDPair::LengthDistance {
                     length: match_len,
@@ -168,11 +170,7 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
             let start = current_start;
             let slice = &data[start - window_size..];
             let end = cmp::min(window_size * 2, slice.len());
-            process_chunk(slice,
-                          window_size,
-                          end,
-                          &mut hash_table,
-                          &mut output);
+            process_chunk(slice, window_size, end, &mut hash_table, &mut output);
             if end >= slice.len() {
                 break;
             }
@@ -296,7 +294,7 @@ mod test {
         let compressed = super::lz77_compress(&input, WINDOW_SIZE).unwrap();
         assert!(compressed.len() < input.len());
         let decompressed = decompress_lz77(&compressed);
-        //println!("{}", str::from_utf8(&decompressed).unwrap());
+        // println!("{}", str::from_utf8(&decompressed).unwrap());
         assert_eq!(input.len(), decompressed.len());
         assert!(decompressed == input);
     }
