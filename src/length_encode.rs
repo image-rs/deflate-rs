@@ -25,42 +25,41 @@ pub fn encode_lengths(lengths: &[u8]) -> Option<Vec<EncodedLength>> {
     while let Some((n, l)) = iter.next() {
         if *l == prev && repeat < 6 && iter.peek().is_some() {
             repeat += 1;
-        } else {
-            if repeat >= MIN_REPEAT {
+        } else if repeat >= MIN_REPEAT {
 
-                println!("Writing repeat? n: {}, repeat: {}, l: {}, prev: {}",
-                         n,
-                         repeat,
-                         *l,
-                         prev);
-                let ret = match *l {
-                    0 => {
-                        if repeat <= 10 {
-                            EncodedLength::RepeatZero3Bits(repeat)
-                        } else {
-                            EncodedLength::RepeatZero7Bits(repeat)
-                        }
+            println!("Writing repeat? n: {}, repeat: {}, l: {}, prev: {}",
+                     n,
+                     repeat,
+                     *l,
+                     prev);
+            let ret = match *l {
+                0 => {
+                    if repeat <= 10 {
+                        EncodedLength::RepeatZero3Bits(repeat)
+                    } else {
+                        EncodedLength::RepeatZero7Bits(repeat)
                     }
-                    1...15 => EncodedLength::CopyPrevious(repeat),
-                    _ => return None,
-                };
-                println!("Repeat: {:?}", ret);
-                out.push(ret);
-                repeat = 1;
-                if *l != prev || iter.peek().is_none() {
-                    println!("Length: {}", l);
-                    out.push(EncodedLength::Length(*l));
-                    repeat = 0;
                 }
-            } else {
-                println!("n: {}, repeat: {}, l: {}", n, repeat, *l);
-                let mut i = repeat as i32;
-                while i >= 0 {
-                    out.push(EncodedLength::Length(lengths[n as usize - i as usize]));
-                    i -= 1;
-                }
+                1...15 => EncodedLength::CopyPrevious(repeat),
+                _ => return None,
+            };
+            println!("Repeat: {:?}", ret);
+            out.push(ret);
+            repeat = 1;
+            if *l != prev || iter.peek().is_none() {
+                println!("Length: {}", l);
+                out.push(EncodedLength::Length(*l));
                 repeat = 0;
             }
+        } else {
+            println!("n: {}, repeat: {}, l: {}", n, repeat, *l);
+            let mut i = repeat as i32;
+            while i >= 0 {
+                out.push(EncodedLength::Length(lengths[n as usize - i as usize]));
+                i -= 1;
+            }
+            repeat = 0;
+
         }
         prev = *l;
     }
@@ -94,23 +93,31 @@ fn advance_lookahead(indexes: &mut [(usize, usize)], index: usize, next: usize) 
 /// "A Fast and Space-Economical Algorithm for Length-Limited Coding"
 pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
                               nodes: &mut Vec<ChainNode>,
+                              leaves: &mut Vec<ChainNode>,
                               index: usize,
                               num_leaves: u16,
                               last: bool) {
 
     let count = nodes[lookahead_indexes[index].1].count;
     let next_count = count + 1;
-    println!("Count: {}, index: {}", count, index);
+    // println!("Count: {}, index: {}", count, index);
     //    println!("First list: {:?}", lists[0]);
-    if index == 0 && next_count >= num_leaves {
+    if index == 0 && count >= num_leaves {
         return;
     };
 
     if index == 0 {
         // If we are at index 0, we need to move the lookahead to the next leaf node
+        advance_lookahead(lookahead_indexes, index, nodes.len());
 
-        lookahead_indexes[index].0 += 1;
-        lookahead_indexes[index].1 += 1;
+        let new_weight = leaves[count as usize].weight;
+
+        nodes.push(ChainNode {
+            weight: new_weight,
+            count: next_count,
+            tail: None,
+        });
+
         return;
     }
 
@@ -121,14 +128,13 @@ pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
 
     // If the sum of the two lookahead nodes in the previous list is greater than the next leaf
     // node, we add a new package, otherwise, we add another lookahead node
-    if next_count < num_leaves && sum > nodes[next_count as usize].weight {
-        // TODO: Check if we actually need to create a new node here
+    if count < num_leaves && sum > leaves[count as usize].weight {
 
         let y = nodes[lookahead_indexes[index].1].tail;
 
-        advance_lookahead(lookahead_indexes, index, nodes.len());
+        let next_weight = leaves[count as usize].weight;
 
-        let next_weight = nodes[next_count as usize].weight;
+        advance_lookahead(lookahead_indexes, index, nodes.len());
 
         nodes.push(ChainNode {
             weight: next_weight,
@@ -150,8 +156,18 @@ pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
             // more leaf nodes
             // We might want to avoid using recursion here, though we won't ever go more than 15
             // levels in as that is the maximum code length allowed by the deflate spec.
-            boundary_package_merge(lookahead_indexes, nodes, index - 1, num_leaves, false);
-            boundary_package_merge(lookahead_indexes, nodes, index - 1, num_leaves, false);
+            boundary_package_merge(lookahead_indexes,
+                                   nodes,
+                                   leaves,
+                                   index - 1,
+                                   num_leaves,
+                                   false);
+            boundary_package_merge(lookahead_indexes,
+                                   nodes,
+                                   leaves,
+                                   index - 1,
+                                   num_leaves,
+                                   false);
         }
     }
 }
@@ -168,7 +184,7 @@ pub fn huffman_lengths_from_frequency(frequencies: &[usize], max_len: usize) -> 
 
     // Create a vector of nodes used by the package merge algorithm
     // We start by adding a leaf node for each frequency, and subsequently sorting them by weight.
-    let mut nodes: Vec<_> = frequencies.iter()
+    let mut leaves: Vec<_> = frequencies.iter()
         .enumerate()
         .map(|(n, f)| {
             ChainNode {
@@ -179,7 +195,19 @@ pub fn huffman_lengths_from_frequency(frequencies: &[usize], max_len: usize) -> 
         })
         .collect();
 
-    nodes.sort_by(|a, b| a.weight.cmp(&b.weight));
+    leaves.sort_by(|a, b| a.weight.cmp(&b.weight));
+
+    let mut nodes: Vec<_> = frequencies.iter()
+        .take(2)
+        .enumerate()
+        .map(|(n, f)| {
+            ChainNode {
+                weight: *f,
+                count: (n as u16) + 1,
+                tail: None,
+            }
+        })
+        .collect();
 
     // Indexes to the current lookahead nodes in each list
     // The lookahead indexes in each list start out pointing to the first two leaves.
@@ -192,21 +220,23 @@ pub fn huffman_lengths_from_frequency(frequencies: &[usize], max_len: usize) -> 
         let last = i == num_runs - 1;
         boundary_package_merge(&mut lookahead_ptrs,
                                &mut nodes,
+                               &mut leaves,
                                max_len - 1,
                                num_leaves,
                                last);
     }
 
     let mut lengths = vec![0; frequencies.len()];
-    let head = nodes.len() - 1;
+    let head = lookahead_ptrs[lookahead_ptrs.len() - 1].1;
 
     let mut next_node = head;
     loop {
         let node = nodes[next_node];
 
-        for item in lengths.iter_mut().take(node.count as usize + 1) {
-            *item += 1;
+        for item in leaves.iter().take(node.count as usize) {
+            lengths[item.count as usize] += 1;
         }
+
         if let Some(n) = node.tail {
             next_node = n;
         } else {
@@ -236,6 +266,13 @@ mod test {
         let frequencies = [1, 1, 5, 7, 10, 14];
 
         let expected = vec![4, 4, 3, 2, 2, 2];
+        let res = huffman_lengths_from_frequency(&frequencies, 4);
+
+        assert_eq!(&expected, &res);
+
+        let frequencies = [1, 5, 1, 7, 10, 14];
+        let expected = vec![4, 3, 4, 2, 2, 2];
+
         let res = huffman_lengths_from_frequency(&frequencies, 4);
 
         assert_eq!(&expected, &res);

@@ -14,8 +14,8 @@ pub enum LDPair {
     },
 }
 
-/// Get the length of the checked match (assuming the two bytes preceeding current_pos match)
-/// The function returns how many bytes after and including current_pos match + 2
+/// Get the length of the checked match (assuming the two bytes preceeding `current_pos` match)
+/// The function returns how many bytes after and including `current_pos` match + 2
 fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> u16 {
     // TODO: This can be optimised by checking multiple bytes at once and not checking the
     // first 3 bytes since we already know they match
