@@ -2,6 +2,7 @@ use std::cmp;
 
 use huffman_table::{MAX_MATCH, MIN_MATCH};
 use chained_hash_table::{WINDOW_SIZE, ChainedHashTable};
+use output_writer::{OutputWriter, FixedWriter};
 
 /// A structure representing values in a compressed stream of data before being huffman coded
 /// We might want to represent this differently eventually to save on memory usage
@@ -100,11 +101,12 @@ fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (u16, u1
 
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
-fn process_chunk(data: &[u8],
-                 start: usize,
-                 end: usize,
-                 hash_table: &mut ChainedHashTable,
-                 output: &mut Vec<LDPair>) {
+fn process_chunk<W: OutputWriter>(data: &[u8],
+                                  start: usize,
+                                  end: usize,
+                                  hash_table: &mut ChainedHashTable,
+                                  writer: &mut W /* ,
+                                                  * output: &mut Vec<LDPair> */) {
     let end = cmp::min(data.len(), end);
     let current_chunk = &data[start..end];
     let mut insert_it = current_chunk.iter().enumerate();
@@ -122,11 +124,13 @@ fn process_chunk(data: &[u8],
             if match_len >= MIN_MATCH {
                 // TODO: Add heuristic checking if outputting a length/distance pair will actually
                 // be shorter than adding the literal bytes
+                //
+                // output.push(LDPair::LengthDistance {
+                // length: match_len,
+                // distance: match_dist,
+                // });
 
-                output.push(LDPair::LengthDistance {
-                    length: match_len,
-                    distance: match_dist,
-                });
+                writer.write_length_distance(match_len, match_dist);
                 let taker = insert_it.by_ref().take(match_len as usize - 1);
                 let mut hash_taker = hash_it.by_ref().take(match_len as usize - 1);
 
@@ -137,10 +141,12 @@ fn process_chunk(data: &[u8],
                     }
                 }
             } else {
-                output.push(LDPair::Literal(*b));
+                // output.push(LDPair::Literal(*b));
+                writer.write_literal(*b);
             }
         } else {
-            output.push(LDPair::Literal(*b));
+            // output.push(LDPair::Literal(*b));
+            writer.write_literal(*b);
         }
     }
 
@@ -148,21 +154,21 @@ fn process_chunk(data: &[u8],
 
 /// Compress a slice
 /// Returns a vector of `LDPair` values on success
-pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
+pub fn lz77_compress_w<W: OutputWriter>(data: &[u8], window_size: usize, mut writer: &mut W) {
     if window_size != DEFAULT_WINDOW_SIZE {
-        // This different window sizes are not supported for now.
-        return None;
+        // Different window sizes are not supported for now.
+        panic!("Only the standard window size is supported!");
     }
 
-    let mut output = Vec::new();
+    //    let mut output = Vec::new();
     // Reserve some extra space in the output vector to prevent excessive allocation
-    output.reserve(data.len() / 2);
+    // output.reserve(data.len() / 2);
 
     let mut hash_table = ChainedHashTable::from_starting_values(data[0], data[1]);
 
     let first_chunk_end = cmp::min(window_size, data.len());
 
-    process_chunk(data, 0, first_chunk_end, &mut hash_table, &mut output);
+    process_chunk::<W>(data, 0, first_chunk_end, &mut hash_table, &mut writer);
 
     let mut current_start = window_size;
     if data.len() > window_size {
@@ -170,7 +176,7 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
             let start = current_start;
             let slice = &data[start - window_size..];
             let end = cmp::min(window_size * 2, slice.len());
-            process_chunk(slice, window_size, end, &mut hash_table, &mut output);
+            process_chunk::<W>(slice, window_size, end, &mut hash_table, &mut writer);
             if end >= slice.len() {
                 break;
             }
@@ -179,19 +185,27 @@ pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
         }
     }
 
-    output.shrink_to_fit();
+    // output.shrink_to_fit();
 
-    Some(output)
+    //    Some(output)
+}
+
+pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
+    let mut w = FixedWriter::new();
+    lz77_compress_w(data, window_size, &mut w);
+    Some(w.buffer)
 }
 
 #[cfg(test)]
 mod test {
-    fn decompress_lz77(input: &[super::LDPair]) -> Vec<u8> {
+    use super::*;
+
+    fn decompress_lz77(input: &[LDPair]) -> Vec<u8> {
         let mut output = Vec::new();
         for p in input {
             match *p {
-                super::LDPair::Literal(l) => output.push(l),
-                super::LDPair::LengthDistance { distance: d, length: l } => {
+                LDPair::Literal(l) => output.push(l),
+                LDPair::LengthDistance { distance: d, length: l } => {
                     let start = output.len() - d as usize;
                     //                    let it = output[start..].iter().enumerate().by_ref();
                     let mut n = 0;
@@ -244,12 +258,12 @@ mod test {
     }
 
     /// Helper function to print the output from the lz77 compression function
-    fn print_output(input: &[super::LDPair]) {
+    fn print_output(input: &[LDPair]) {
         let mut output = vec![];
         for l in input {
             match *l {
-                super::LDPair::Literal(l) => output.push(l),
-                super::LDPair::LengthDistance { distance: d, length: l } => {
+                LDPair::Literal(l) => output.push(l),
+                LDPair::LengthDistance { distance: d, length: l } => {
                     output.extend(format!("<Distance: {}, Length: {}>", d, l).into_bytes())
                 }
             }
@@ -274,7 +288,7 @@ mod test {
         println!("{}", d_str);
         assert_eq!(test_bytes, decompressed);
         assert_eq!(res[8],
-                   super::LDPair::LengthDistance {
+                   LDPair::LengthDistance {
                        distance: 5,
                        length: 4,
                    });

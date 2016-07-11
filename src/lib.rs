@@ -5,6 +5,7 @@ mod huffman_table;
 mod lz77;
 mod chained_hash_table;
 mod length_encode;
+mod output_writer;
 use huffman_table::*;
 use lz77::{LDPair, lz77_compress};
 
