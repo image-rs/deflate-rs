@@ -6,12 +6,10 @@ mod lz77;
 mod chained_hash_table;
 mod length_encode;
 mod output_writer;
+mod stored_block;
 use huffman_table::*;
 use lz77::{LDPair, lz77_compress};
 
-const BLOCK_SIZE: u16 = 32000;
-const UNCOMPRESSED_FIRST_BYTE: u8 = 0b0000_0000;
-const UNCOMPRESSED_FIRST_BYTE_FINAL: u8 = 0b0000_0001;
 // TODO: Adding something in the unused bits here causes some issues
 // Find out why
 const FIXED_FIRST_BYTE: u16 = 0b0000_0010;
@@ -141,48 +139,6 @@ impl EncoderState {
     }
 }
 
-/// Split an u16 value into two bytes taking into account endianess
-pub fn put16(value: u16) -> (u8, u8) {
-    let value = u16::from_le(value);
-    let low = value as u8;
-    let high = (value >> 8) as u8;
-    (low, high)
-}
-
-// Compress one block
-pub fn compress_block_uncompressed(input: &[u8], final_block: bool) -> Vec<u8> {
-    // First bit tells us if this is the final chunk
-    let first_byte = if final_block {
-        UNCOMPRESSED_FIRST_BYTE_FINAL
-    } else {
-        UNCOMPRESSED_FIRST_BYTE
-    };
-
-    println!("Chunk length: {}", input.len());
-
-    // the next two details compression type (none in this case)
-    let (len_0, len_1) = put16(input.len() as u16);
-    // the next two after the length is the ones complement of the length
-    let (not_len_0, not_len_1) = put16(!input.len() as u16);
-    let mut output = vec![first_byte, len_0, len_1, not_len_0, not_len_1];
-    output.extend_from_slice(input);
-    output
-}
-
-pub fn compress_data_uncompressed(input: &[u8]) -> Vec<u8> {
-    // TODO: Validate that block size is not too large
-    let block_length = BLOCK_SIZE as usize;
-
-    let mut output = Vec::new();
-    let mut i = input.chunks(block_length).peekable();
-    while let Some(chunk) = i.next() {
-        let last_chunk = i.peek().is_none();
-        output.extend(compress_block_uncompressed(chunk, last_chunk));
-    }
-    output
-}
-
-
 pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     // let block_length = 7;//BLOCK_SIZE as usize;
 
@@ -220,7 +176,7 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
 
 pub fn compress_data(input: &[u8], btype: BType) -> Vec<u8> {
     match btype {
-        BType::NoCompression => compress_data_uncompressed(input),
+        BType::NoCompression => stored_block::compress_data_stored(input),
         BType::FixedHuffman => compress_data_fixed(input),
         BType::DynamicHuffman => panic!("ERROR: Dynamic huffman encoding not implemented yet!"),
     }
@@ -228,9 +184,6 @@ pub fn compress_data(input: &[u8], btype: BType) -> Vec<u8> {
 
 #[cfg(test)]
 mod test {
-    fn from_bytes(low: u8, high: u8) -> u16 {
-        (low as u16) | ((high as u16) << 8)
-    }
 
     /// Helper function to decompress into a `Vec<u8>`
     fn decompress_to_end(input: &[u8]) -> Vec<u8> {
@@ -258,16 +211,7 @@ mod test {
     }
 
     use super::*;
-    #[test]
-    fn test_bits() {
-        let len = 520u16;
-        let (low, high) = put16(len);
-        assert_eq!(low, 8);
-        assert_eq!(high, 2);
 
-        let test2 = from_bytes(low, high);
-        assert_eq!(len, test2);
-    }
 
     #[test]
     fn test_no_compression_one_chunk() {
@@ -325,7 +269,8 @@ mod test {
     #[test]
     fn test_fixed_example() {
         let test_data = b"Deflate late";
-        // let check = [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0];
+        // let check =
+        // [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0];
         let check = [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0x00, 0x11, 0x00];
         let compressed = compress_data(test_data, BType::FixedHuffman);
         assert_eq!(&compressed, &check);
