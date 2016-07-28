@@ -93,16 +93,16 @@ fn advance_lookahead(indexes: &mut [(usize, usize)], index: usize, next: usize) 
 /// "A Fast and Space-Economical Algorithm for Length-Limited Coding"
 pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
                               nodes: &mut Vec<ChainNode>,
-                              leaves: &mut Vec<ChainNode>,
+                              leaves: &[ChainNode],
                               index: usize,
-                              num_leaves: u16,
                               last: bool) {
 
     let count = nodes[lookahead_indexes[index].1].count;
     let next_count = count + 1;
     // println!("Count: {}, index: {}", count, index);
     //    println!("First list: {:?}", lists[0]);
-    if index == 0 && count >= num_leaves {
+    if index == 0 && count >= leaves.len() as u16 {
+        // num_leaves {
         return;
     };
 
@@ -128,7 +128,7 @@ pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
 
     // If the sum of the two lookahead nodes in the previous list is greater than the next leaf
     // node, we add a new package, otherwise, we add another lookahead node
-    if count < num_leaves && sum > leaves[count as usize].weight {
+    if count < leaves.len() as u16 && sum > leaves[count as usize].weight {
 
         let y = nodes[lookahead_indexes[index].1].tail;
 
@@ -156,18 +156,8 @@ pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
             // more leaf nodes
             // We might want to avoid using recursion here, though we won't ever go more than 15
             // levels in as that is the maximum code length allowed by the deflate spec.
-            boundary_package_merge(lookahead_indexes,
-                                   nodes,
-                                   leaves,
-                                   index - 1,
-                                   num_leaves,
-                                   false);
-            boundary_package_merge(lookahead_indexes,
-                                   nodes,
-                                   leaves,
-                                   index - 1,
-                                   num_leaves,
-                                   false);
+            boundary_package_merge(lookahead_indexes, nodes, leaves, index - 1, false);
+            boundary_package_merge(lookahead_indexes, nodes, leaves, index - 1, false);
         }
     }
 }
@@ -180,30 +170,45 @@ pub struct CodeLength {
 pub fn huffman_lengths_from_frequency(frequencies: &[usize], max_len: usize) -> Vec<usize> {
     // Make sure the number of frequencies is sensible since we use u16 to index.
     assert!(frequencies.len() < u16::max_value() as usize);
-    let num_leaves = frequencies.len() as u16;
+    assert!(max_len > 1 && max_len < 16);
+
+    let mut lengths = vec![0; frequencies.len()];
 
     // Create a vector of nodes used by the package merge algorithm
-    // We start by adding a leaf node for each frequency, and subsequently sorting them by weight.
+    // We start by adding a leaf node for each nonzero frequency, and subsequently sorting them by weight.
     let mut leaves: Vec<_> = frequencies.iter()
         .enumerate()
-        .map(|(n, f)| {
-            ChainNode {
-                weight: *f,
-                count: n as u16,
-                tail: None,
+        .filter_map(|(n, f)| {
+            if *f > 0 {
+                Some(ChainNode {
+                    weight: *f,
+                    count: n as u16,
+                    tail: None,
+                })
+            } else {
+                None
             }
         })
         .collect();
 
+    // Special case with zero or 1 value having a non-zero frequency (this will break the package merge otherwise)
+    if leaves.len() == 1 {
+        lengths[leaves[0].count as usize] += 1;
+        return lengths;
+    } else if leaves.is_empty() {
+        return lengths;
+    }
+
     leaves.sort_by(|a, b| a.weight.cmp(&b.weight));
 
-    let mut nodes: Vec<_> = frequencies.iter()
+    // We create the two first lookahead nodes from the two first leaves, with counts 1 and 2
+    let mut nodes: Vec<_> = leaves.iter()
         .take(2)
         .enumerate()
         .map(|(n, f)| {
             ChainNode {
-                weight: *f,
-                count: (n as u16) + 1,
+                weight: f.weight,
+                count: n as u16 + 1,
                 tail: None,
             }
         })
@@ -215,15 +220,10 @@ pub fn huffman_lengths_from_frequency(frequencies: &[usize], max_len: usize) -> 
 
     // The boundary package-merge algorhithm is run repeatedly until we have 2n - 2 nodes in the
     // last list, which tells us how many active nodes there are in each list.
-    let num_runs = (2 * frequencies.len()) - 2 - 2;
+    let num_runs = (2 * leaves.len()) - 2 - 2;
     for i in 0..num_runs {
         let last = i == num_runs - 1;
-        boundary_package_merge(&mut lookahead_ptrs,
-                               &mut nodes,
-                               &mut leaves,
-                               max_len - 1,
-                               num_leaves,
-                               last);
+        boundary_package_merge(&mut lookahead_ptrs, &mut nodes, &leaves, max_len - 1, last);
     }
 
     let mut lengths = vec![0; frequencies.len()];
@@ -258,23 +258,41 @@ mod test {
         println!("{:?}", enc);
         println!("Number of 7s: {}",
                  FIXED_CODE_LENGTHS.iter().filter(|x| **x == 9).count());
-        panic!();
+        // panic!();
     }
 
     #[test]
     fn test_lengths_from_frequencies() {
         let frequencies = [1, 1, 5, 7, 10, 14];
 
-        let expected = vec![4, 4, 3, 2, 2, 2];
+        let expected = [4, 4, 3, 2, 2, 2];
         let res = huffman_lengths_from_frequency(&frequencies, 4);
 
-        assert_eq!(&expected, &res);
+        assert_eq!(expected, res.as_slice());
 
         let frequencies = [1, 5, 1, 7, 10, 14];
-        let expected = vec![4, 3, 4, 2, 2, 2];
+        let expected = [4, 3, 4, 2, 2, 2];
 
         let res = huffman_lengths_from_frequency(&frequencies, 4);
 
-        assert_eq!(&expected, &res);
+        assert_eq!(expected, res.as_slice());
+
+        let frequencies = [0, 25, 0, 10, 2, 4];
+
+        let res = huffman_lengths_from_frequency(&frequencies, 4);
+        assert_eq!(res[0], 0);
+        assert_eq!(res[2], 0);
+        assert!(res[1] < 4);
+
+        // Only one value
+        let frequencies = [0, 0, 0, 0, 0, 0, 0, 0, 55, 0, 0, 0];
+        let res = huffman_lengths_from_frequency(&frequencies, 5);
+        let expected = [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0];
+        assert_eq!(expected, res.as_slice());
+
+        // No values
+        let frequencies = [0; 30];
+        let res = huffman_lengths_from_frequency(&frequencies, 5);
+        assert_eq!(frequencies, res.as_slice());
     }
 }

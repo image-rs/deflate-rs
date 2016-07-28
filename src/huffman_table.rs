@@ -18,9 +18,11 @@ pub const NUM_DISTANCE_CODES: usize = 30;
 pub const MIN_MATCH: u16 = 3;
 pub const MAX_MATCH: u16 = 258;
 
+pub const NUM_LITERALS_AND_LENGTHS: usize = 288;
+
 // Bit lengths for literal and length codes in the fixed huffman table
 // The huffman codes are generated from this and the distance bit length table
-pub static FIXED_CODE_LENGTHS: [u8; 288] =
+pub static FIXED_CODE_LENGTHS: [u8; NUM_LITERALS_AND_LENGTHS] =
     [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
      8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
      8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,

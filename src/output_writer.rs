@@ -1,4 +1,5 @@
 use lz77::LDPair;
+use huffman_table::NUM_LITERALS_AND_LENGTHS;
 
 pub trait OutputWriter {
     fn write_literal(&mut self, literal: u8);
@@ -6,6 +7,7 @@ pub trait OutputWriter {
 }
 
 /// OutputWriter that doesn't store frequency information
+#[derive(Debug)]
 pub struct FixedWriter {
     // TODO: Use a writer here instead
     pub buffer: Vec<LDPair>,
@@ -27,5 +29,19 @@ impl OutputWriter for FixedWriter {
             length: length,
             distance: distance,
         })
+    }
+}
+
+pub struct DynamicWriter {
+    fixed_writer: FixedWriter,
+    frequenies: [u32; NUM_LITERALS_AND_LENGTHS],
+}
+
+impl DynamicWriter {
+    pub fn new() -> DynamicWriter {
+        DynamicWriter {
+            fixed_writer: FixedWriter::new(),
+            frequenies: [0; NUM_LITERALS_AND_LENGTHS],
+        }
     }
 }
