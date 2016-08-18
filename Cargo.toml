@@ -5,5 +5,7 @@ license = "MIT"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
 
 [dev-dependencies]
-flate2 = "0.2.13"
+flate2 = { version = "0.2.14", features = ["zlib"], default-features = false }
+#flate2 = "0.2.14"
+inflate = "*"
 

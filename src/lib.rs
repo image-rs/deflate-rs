@@ -1,5 +1,7 @@
 #[cfg(test)]
 extern crate flate2;
+#[cfg(test)]
+extern crate inflate;
 
 mod huffman_table;
 mod lz77;
@@ -7,13 +9,20 @@ mod chained_hash_table;
 mod length_encode;
 mod output_writer;
 mod stored_block;
+mod huffman_lengths;
 use huffman_table::*;
 use lz77::{LDPair, lz77_compress};
+use huffman_lengths::write_huffman_lengths;
 
 // TODO: Adding something in the unused bits here causes some issues
 // Find out why
+// The first bits of each block, which describe the type of the block
+// `-TTF` - TT = type, 00 = stored, 01 = fixed, 10 = dynamic, 11 = reserved, F - 1 if final block
+// `0000`;
 const FIXED_FIRST_BYTE: u16 = 0b0000_0010;
 const FIXED_FIRST_BYTE_FINAL: u16 = 0b0000_0011;
+const DYNAMIC_FIRST_BYTE: u16 = 0b0000_0100;
+const DYNAMIC_FIRST_BYTE_FINAL: u16 = 0b000_00101;
 
 pub enum BType {
     NoCompression = 0b00,
@@ -22,23 +31,23 @@ pub enum BType {
 }
 
 /// A quick implementation of a struct that writes bit data to a buffer
-struct BitWriter {
+pub struct BitWriter {
     bit_position: u8,
     accumulator: u32,
-    // We currently write to a vector, but this might be
+    // We currently just write to a vector, but this should probably be
     // replaced with a writer later
     pub buffer: Vec<u8>,
 }
 
 impl BitWriter {
-    fn new() -> BitWriter {
+    pub fn new() -> BitWriter {
         BitWriter {
             bit_position: 0,
             accumulator: 0,
             buffer: Vec::new(),
         }
     }
-    fn write_bits(&mut self, bits: u16, size: u8) {
+    pub fn write_bits(&mut self, bits: u16, size: u8) {
         if size == 0 {
             return;
         }
@@ -57,7 +66,8 @@ impl BitWriter {
             self.accumulator >>= 8;
         }
     }
-    fn finish(&mut self) {
+
+    pub fn finish(&mut self) {
         if self.bit_position > 7 {
             // This should not happen.
             panic!("Error! Tried to finish bitwriter with more than 7 bits remaining!")
@@ -69,20 +79,27 @@ impl BitWriter {
     }
 }
 
+// TODO: Use a trait here, and have implementations for each block type
 struct EncoderState {
     huffman_table: huffman_table::HuffmanTable,
     writer: BitWriter,
+    fixed: bool,
 }
 
 impl EncoderState {
-    fn new() -> EncoderState {
+    fn new(huffman_table: huffman_table::HuffmanTable) -> EncoderState {
         EncoderState {
-            huffman_table:
-                huffman_table::HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS,
-                                                                &FIXED_CODE_LENGTHS_DISTANCE)
-                .unwrap(),
+            huffman_table: huffman_table,
             writer: BitWriter::new(),
+            fixed: false,
         }
+    }
+
+    fn default() -> EncoderState {
+        let mut ret = EncoderState::new(huffman_table::HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS,
+                                                                                    &FIXED_CODE_LENGTHS_DISTANCE).unwrap());
+            ret.fixed = true;
+        ret
     }
 
     /// Encodes a literal value to the writer
@@ -116,9 +133,17 @@ impl EncoderState {
         if final_block {
             // The final block has one bit flipped to indicate it's
             // the final one one
-            self.writer.write_bits(FIXED_FIRST_BYTE_FINAL, 3);
+            if self.fixed {
+                self.writer.write_bits(FIXED_FIRST_BYTE_FINAL, 3);
+            } else {
+                self.writer.write_bits(DYNAMIC_FIRST_BYTE_FINAL, 3);
+            }
         } else {
-            self.writer.write_bits(FIXED_FIRST_BYTE, 3);
+            if self.fixed {
+                self.writer.write_bits(FIXED_FIRST_BYTE, 3);
+            } else {
+                self.writer.write_bits(DYNAMIC_FIRST_BYTE, 3);
+            }
         }
     }
 
@@ -143,27 +168,17 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     // let block_length = 7;//BLOCK_SIZE as usize;
 
     let mut output = Vec::new();
-    let mut state = EncoderState::new();
+    let mut state = EncoderState::default();
     let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
     let clen = compressed.len();
 
+    //We currently don't split blocks, we should do this eventually
     state.write_start_of_block(true);
     for ld in compressed {
         state.write_ldpair(ld);
     }
+
     state.write_end_of_block();
-
-    // let mut i = input.chunks(block_length).peekable();
-    // while let Some(chunk) = i.next() {
-    // let last_chunk = i.peek().is_none();
-    //
-    // state.write_start_of_block(last_chunk);
-    // for byte in chunk {
-    // state.write_literal(*byte);
-    // }
-    // state.write_end_of_block();
-    // }
-
     state.flush();
 
     output.extend(state.take_buffer());
@@ -174,11 +189,37 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     output
 }
 
+pub fn compress_data_dynamic(input: &[u8]) -> Vec<u8> {
+    let mut output = Vec::new();
+    //NOTE: testing with default table first
+    let mut state = EncoderState::new(huffman_table::HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS,
+                                                                                    &FIXED_CODE_LENGTHS_DISTANCE).unwrap());
+
+    let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
+
+
+
+    state.write_start_of_block(true);
+
+    write_huffman_lengths(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE, &mut state.writer);
+
+    for ld in compressed {
+        state.write_ldpair(ld);
+    }
+
+    state.write_end_of_block();
+    state.flush();
+
+    output.extend(state.take_buffer());
+
+    output
+}
+
 pub fn compress_data(input: &[u8], btype: BType) -> Vec<u8> {
     match btype {
         BType::NoCompression => stored_block::compress_data_stored(input),
         BType::FixedHuffman => compress_data_fixed(input),
-        BType::DynamicHuffman => panic!("ERROR: Dynamic huffman encoding not implemented yet!"),
+        BType::DynamicHuffman => compress_data_dynamic(input),
     }
 }
 
@@ -187,18 +228,18 @@ mod test {
 
     /// Helper function to decompress into a `Vec<u8>`
     fn decompress_to_end(input: &[u8]) -> Vec<u8> {
-        // let mut inflater = super::inflate::InflateStream::new();
-        // let mut out = Vec::new();
-        // let mut n = 0;
-        // println!("input len {}", input.len());
-        // while n < input.len() {
-        // let (num_bytes_read, result) = inflater.update(&input[n..]).unwrap();
-        // println!("result len {}, bytes_read {}", result.len(), num_bytes_read);
-        // n += num_bytes_read;
-        // out.extend(result);
-        // }
-        // out
-
+         let mut inflater = super::inflate::InflateStream::new();
+         let mut out = Vec::new();
+         let mut n = 0;
+         println!("input len {}", input.len());
+         while n < input.len() {
+         let (num_bytes_read, result) = inflater.update(&input[n..]).unwrap();
+         println!("result len {}, bytes_read {}", result.len(), num_bytes_read);
+         n += num_bytes_read;
+         out.extend(result);
+         }
+         out
+/*
         // Using flate2 instead of inflate, there seems to be some issue with inflate
         // for data longer than 399 bytes.
         use std::io::Read;
@@ -207,7 +248,7 @@ mod test {
         let mut result = Vec::new();
         let mut e = DeflateDecoder::new(&input[..]);
         e.read_to_end(&mut result).unwrap();
-        result
+        result*/
     }
 
     use super::*;
@@ -300,8 +341,22 @@ mod test {
         assert!(input == result);
     }
 
+
+
     #[test]
-    fn test_writer() {
+    fn test_dynamic_string_mem() {
+        use std::str;
+        // let test_data = b".......................BB";
+        let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
+        let compressed = compress_data(&test_data, BType::DynamicHuffman);
+
+        let result = decompress_to_end(&compressed);
+        println!("Output: `{}`", str::from_utf8(&result).unwrap());
+        assert_eq!(test_data, result);
+    }
+
+    //#[test]
+    fn _test_writer() {
         let mut w = super::BitWriter::new();
         // w.write_bits(super::FIXED_FIRST_BYTE_FINAL, 3);
         w.write_bits(0b0111_0100, 8);

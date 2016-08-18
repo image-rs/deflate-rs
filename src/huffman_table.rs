@@ -5,7 +5,6 @@ pub enum HuffmanError {
     EmptyLengthTable,
     CodeTooLong,
     _TooManyOfLength,
-    ZeroLengthCode,
 }
 
 // The number of length codes in the huffman table
@@ -250,7 +249,7 @@ fn build_length_count_table(table: &[u8]) -> Result<(usize, Vec<u8>), HuffmanErr
     const MAX_CODE_LENGTH: usize = 15;
 
     let max_length = match table.iter().max() {
-        Some(l) => *l as usize,
+        Some(l) => (*l).into(),
         None => return Err(HuffmanError::EmptyLengthTable),
     };
 
@@ -259,20 +258,20 @@ fn build_length_count_table(table: &[u8]) -> Result<(usize, Vec<u8>), HuffmanErr
         return Err(HuffmanError::CodeTooLong);
     }
 
-    let mut len_counts = vec![0u8; max_length as usize + 1];
+    let mut len_counts = vec![0u8; max_length + 1];
     for length in table {
-        let mut num_lengths = len_counts[*length as usize];
+        let mut num_lengths = len_counts[usize::from(*length)];
         num_lengths += 1;
         // TODO: Make sure we don't have more of one length than we can make
         // codes for
-        len_counts[*length as usize] = num_lengths;
+        len_counts[usize::from(*length)] = num_lengths;
     }
     Ok((max_length, len_counts))
 }
 
 /// Generats a vector of huffman codes given a table of bit lengths
 /// Returns an error if any of the lengths are > 15
-fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanError> {
+pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanError> {
 
     let mut codes = vec!(HuffmanCode {
         code: 0,
@@ -290,14 +289,14 @@ fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanError> {
     }
 
     for n in 0..codes.len() {
-        let length = length_table[n] as usize;
+        let length = usize::from(length_table[n]);
         //            println!("n: {}, length: {}", n, length);
         // TODO: Spec says codes of length 0 should not be assigned a value
         // Should we use a table of options here?
-        if length == 0 {
-            return Err(HuffmanError::ZeroLengthCode);
-        }
-        // The algorithm generats the code in the reverse bit order, so we need to reverse them
+        // if length == 0 {
+        //    return Err(HuffmanError::ZeroLengthCode);
+        // }
+        // The algorithm generates the code in the reverse bit order, so we need to reverse them
         // to get the correct codes.
         codes[n] = try!(HuffmanCode::from_reversed_bits(next_code[length], length as u8)
             .ok_or(HuffmanError::CodeTooLong));
@@ -345,7 +344,7 @@ impl HuffmanTable {
 
     /// Get the huffman code from the corresponding literal value
     pub fn get_literal(&self, value: u8) -> HuffmanCode {
-        self.codes[value as usize]
+        self.codes[usize::from(value)]
     }
 
     /// Get the huffman code for the end of block value

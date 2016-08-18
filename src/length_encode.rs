@@ -12,13 +12,34 @@ pub enum EncodedLength {
     RepeatZero7Bits(u8),
 }
 
+pub const COPY_PREVIOUS: usize = 16;
+pub const REPEAT_ZERO_3_BITS: usize = 17;
+pub const REPEAT_ZERO_7_BITS: usize = 18;
+
 const MIN_REPEAT: u8 = 3;
 
+fn update_out_and_freq(encoded: EncodedLength,
+                       output: &mut Vec<EncodedLength>, frequencies: &mut [u16; 19]) {
+    let index = match encoded {
+        EncodedLength::Length(l) => l,
+        EncodedLength::CopyPrevious(_) => 16,
+        EncodedLength::RepeatZero3Bits(_) => 17,
+        EncodedLength::RepeatZero7Bits(_) => 18,
+    };
+
+    frequencies[usize::from(index)] += 1;
+
+    output.push(encoded);
+}
+
 /// Run-length encodes the lenghts of the values in `lenghts` according to the deflate
-/// specification. This is used for writing the code lenghts for the huffman table for
-/// in the deflate stream.
-pub fn encode_lengths(lengths: &[u8]) -> Option<Vec<EncodedLength>> {
+/// specification. This is used for writing the code lenghts for the huffman tables for
+/// the deflate stream.
+/// Returns a tuple containing a vec of the encoded lengths, and an array describing the frequencies
+/// of the different length codes
+pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])> {
     let mut out = Vec::new();
+    let mut frequencies = [0u16; 19];
     let mut prev = 19;
     let mut repeat = 0;
     let mut iter = lengths.iter().enumerate().peekable();
@@ -32,30 +53,51 @@ pub fn encode_lengths(lengths: &[u8]) -> Option<Vec<EncodedLength>> {
                      repeat,
                      *l,
                      prev);
-            let ret = match *l {
+            match *l {
                 0 => {
                     if repeat <= 10 {
-                        EncodedLength::RepeatZero3Bits(repeat)
+                        update_out_and_freq(EncodedLength::RepeatZero3Bits(repeat),
+                                            &mut out,
+                                            &mut frequencies,
+                        );
+                        //out.push(EncodedLength::RepeatZero3Bits(repeat))
                     } else {
-                        EncodedLength::RepeatZero7Bits(repeat)
+                        update_out_and_freq(EncodedLength::RepeatZero7Bits(repeat),
+                                            &mut out,
+                                            &mut frequencies,
+                        );
+                        //out.push(EncodedLength::RepeatZero7Bits(repeat))
                     }
                 }
-                1...15 => EncodedLength::CopyPrevious(repeat),
+                1...15 => update_out_and_freq(EncodedLength::CopyPrevious(repeat),
+                                            &mut out,
+                                            &mut frequencies,
+                ),//out.push(EncodedLength::CopyPrevious(repeat)),
                 _ => return None,
             };
-            println!("Repeat: {:?}", ret);
-            out.push(ret);
+            //println!("Repeat: {:?}", ret);
+            //out.push(ret);
             repeat = 1;
             if *l != prev || iter.peek().is_none() {
                 println!("Length: {}", l);
-                out.push(EncodedLength::Length(*l));
+                //out.push(EncodedLength::Length(*l));
+                update_out_and_freq(EncodedLength::Length(*l),
+                                            &mut out,
+                                            &mut frequencies,
+                );
                 repeat = 0;
             }
         } else {
             println!("n: {}, repeat: {}, l: {}", n, repeat, *l);
             let mut i = repeat as i32;
             while i >= 0 {
-                out.push(EncodedLength::Length(lengths[n as usize - i as usize]));
+                update_out_and_freq(EncodedLength::Length(
+                    lengths[usize::from(n) - i as usize]
+                ),
+                                            &mut out,
+                                            &mut frequencies,
+                );
+                //out.push(EncodedLength::Length(lengths[n as usize - i as usize]));
                 i -= 1;
             }
             repeat = 0;
@@ -63,7 +105,7 @@ pub fn encode_lengths(lengths: &[u8]) -> Option<Vec<EncodedLength>> {
         }
         prev = *l;
     }
-    Some(out)
+    Some((out, frequencies))
 }
 
 type NodeIndex = usize;
@@ -162,12 +204,7 @@ pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
     }
 }
 
-pub struct CodeLength {
-    length: u8,
-    symbol: u16,
-}
-
-pub fn huffman_lengths_from_frequency(frequencies: &[usize], max_len: usize) -> Vec<usize> {
+pub fn huffman_lengths_from_frequency(frequencies: &[usize], max_len: usize) -> Vec<u8> {
     // Make sure the number of frequencies is sensible since we use u16 to index.
     assert!(frequencies.len() < u16::max_value() as usize);
     assert!(max_len > 1 && max_len < 16);
@@ -255,10 +292,15 @@ mod test {
         // TODO: Write a proper test for this
         use huffman_table::FIXED_CODE_LENGTHS;
         let enc = encode_lengths(&FIXED_CODE_LENGTHS).unwrap();
-        println!("{:?}", enc);
-        println!("Number of 7s: {}",
-                 FIXED_CODE_LENGTHS.iter().filter(|x| **x == 9).count());
-        // panic!();
+        //There are no lengths lower than 6 in the fixed table
+        assert_eq!(enc.1[0..7], [0,0,0,0,0,0, 0]);
+        //Neither are there any lengths above 9
+        assert_eq!(enc.1[10..16], [0,0,0,0,0, 0]);
+        //Also there are no zero-length codes so there shouldn't be any repetitions of zero
+        assert_eq!(enc.1[17..19], [0, 0]);
+//        println!("{:?}", enc);
+//        println!("Number of 7s: {}",
+//                 FIXED_CODE_LENGTHS.iter().filter(|x| **x == 9).count());
     }
 
     #[test]
@@ -293,6 +335,9 @@ mod test {
         // No values
         let frequencies = [0; 30];
         let res = huffman_lengths_from_frequency(&frequencies, 5);
-        assert_eq!(frequencies, res.as_slice());
+        for (a, b) in frequencies.iter().zip(res.iter()) {
+            assert_eq!(*a, (*b).into());
+        }
+        //assert_eq!(frequencies, res.as_slice());
     }
 }
