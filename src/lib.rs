@@ -125,6 +125,9 @@ impl EncoderState {
                 self.writer.write_bits(ldencoded.distance_extra_bits.code,
                                        ldencoded.distance_extra_bits.length);
             }
+            LDPair::BlockStart{is_final: _} => {
+                panic!("Tried to write start of block, this should not be handled here!");
+            }
         };
     }
 
@@ -175,7 +178,13 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     //We currently don't split blocks, we should do this eventually
     state.write_start_of_block(true);
     for ld in compressed {
-        state.write_ldpair(ld);
+        //We ignore end of block here for now since there is no purpose of
+        //splitting a full stream of data using fixed huffman data into blocks
+        match ld {
+            LDPair::BlockStart{is_final: _} =>
+            (),
+                _ => state.write_ldpair(ld),
+        }
     }
 
     state.write_end_of_block();
@@ -197,14 +206,25 @@ pub fn compress_data_dynamic(input: &[u8]) -> Vec<u8> {
 
     let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
 
+/*    state.write_start_of_block(first_block_is_final);
 
+    write_huffman_lengths(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE, &mut state.writer);*/
 
-    state.write_start_of_block(true);
+    if let LDPair::BlockStart{..} = compressed[0] {} else {
+        panic!("Compressed block doesn't start with block start! {:?}", compressed[0]);
+    }
+    //    assert_eq!(compressed[0], LDPair::BlockStart);
 
-    write_huffman_lengths(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE, &mut state.writer);
-
-    for ld in compressed {
-        state.write_ldpair(ld);
+    for (n, ld) in compressed.into_iter().enumerate() {
+        if let LDPair::BlockStart{is_final} = ld {
+            if n > 0 {
+                state.write_end_of_block();
+            }
+            state.write_start_of_block(is_final);
+            write_huffman_lengths(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE, &mut state.writer)
+        } else {
+            state.write_ldpair(ld)
+        }
     }
 
     state.write_end_of_block();

@@ -157,7 +157,7 @@ fn get_length_code_and_extra_bits(length: u16) -> Option<ExtraBits> {
 
 /// Get the spot in the huffman table for distances `distance` corresponds to
 /// Returns none if the distance is 0, or above 32768
-fn get_distance_code(distance: u16) -> Option<u8> {
+pub fn get_distance_code(distance: u16) -> Option<u8> {
     let distance = distance as usize;
     match distance {
         // Since the array starts at 0, we need to subtract 1 to get the correct code number.

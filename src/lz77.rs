@@ -9,10 +9,8 @@ use output_writer::{OutputWriter, FixedWriter};
 #[derive(Debug, PartialEq, Eq)]
 pub enum LDPair {
     Literal(u8),
-    LengthDistance {
-        length: u16,
-        distance: u16,
-    },
+    LengthDistance { length: u16, distance: u16 },
+    BlockStart { is_final: bool },
 }
 
 /// Get the length of the checked match (assuming the two bytes preceeding `current_pos` match)
@@ -112,6 +110,9 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
     let mut insert_it = current_chunk.iter().enumerate();
     let mut hash_it = current_chunk[2..].iter();
 
+    // Write start of block and check if this is the final block (e.g no more input)
+    writer.write_start_of_block(end == data.len());
+
     // Iterate through the slice, adding literals or length/distance pairs
     while let Some((n, b)) = insert_it.next() {
         if let Some(hash_byte) = hash_it.next() {
@@ -149,7 +150,6 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
             writer.write_literal(*b);
         }
     }
-
 }
 
 /// Compress a slice
@@ -215,6 +215,7 @@ mod test {
                         n += 1;
                     }
                 }
+                LDPair::BlockStart { is_final: _ } => (),
             }
         }
         output
@@ -266,6 +267,9 @@ mod test {
                 LDPair::LengthDistance { distance: d, length: l } => {
                     output.extend(format!("<Distance: {}, Length: {}>", d, l).into_bytes())
                 }
+                LDPair::BlockStart { is_final: is_final } => {
+                    output.extend(format!("<End of block (final={})>", is_final).into_bytes())
+                }
             }
         }
 
@@ -287,7 +291,7 @@ mod test {
         let d_str = str::from_utf8(&decompressed).unwrap();
         println!("{}", d_str);
         assert_eq!(test_bytes, decompressed);
-        assert_eq!(res[8],
+        assert_eq!(res[9],
                    LDPair::LengthDistance {
                        distance: 5,
                        length: 4,
