@@ -168,8 +168,6 @@ impl EncoderState {
 }
 
 pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
-    // let block_length = 7;//BLOCK_SIZE as usize;
-
     let mut output = Vec::new();
     let mut state = EncoderState::default();
     let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
@@ -373,6 +371,23 @@ mod test {
         let result = decompress_to_end(&compressed);
         println!("Output: `{}`", str::from_utf8(&result).unwrap());
         assert_eq!(test_data, result);
+    }
+
+    #[test]
+    fn test_dynamic_string_file() {
+        use std::fs::File;
+        use std::io::Read;
+        use std::str;
+        let mut input = Vec::new();
+
+        let mut f = File::open("src/pg11.txt").unwrap();
+
+        f.read_to_end(&mut input).unwrap();
+        let compressed = compress_data(&input, BType::DynamicHuffman);
+        let result = decompress_to_end(&compressed);
+
+        // Not using assert_eq here deliberately to avoid massive amounts of output spam
+        assert!(input == result);
     }
 
     //#[test]

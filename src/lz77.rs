@@ -4,6 +4,28 @@ use huffman_table::{MAX_MATCH, MIN_MATCH};
 use chained_hash_table::{WINDOW_SIZE, ChainedHashTable};
 use output_writer::{OutputWriter, FixedWriter};
 
+pub struct LZ77State {
+    hash_table: ChainedHashTable,
+    current_start: usize,
+    is_first_window: bool,
+    is_last_block: bool,
+}
+
+impl LZ77State {
+    fn from_starting_values(b0: u8, b1: u8) -> LZ77State {
+        LZ77State {
+            hash_table: ChainedHashTable::from_starting_values(b0, b1),
+            current_start: 0,
+            is_first_window: true,
+            is_last_block: false,
+        }
+    }
+
+    fn new(data: &[u8]) -> LZ77State {
+        LZ77State::from_starting_values(data[0], data[1])
+    }
+}
+
 /// A structure representing values in a compressed stream of data before being huffman coded
 /// We might want to represent this differently eventually to save on memory usage
 #[derive(Debug, PartialEq, Eq)]
@@ -103,8 +125,7 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
                                   start: usize,
                                   end: usize,
                                   hash_table: &mut ChainedHashTable,
-                                  writer: &mut W /* ,
-                                                  * output: &mut Vec<LDPair> */) {
+                                  writer: &mut W) {
     let end = cmp::min(data.len(), end);
     let current_chunk = &data[start..end];
     let mut insert_it = current_chunk.iter().enumerate();
@@ -125,11 +146,6 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
             if match_len >= MIN_MATCH {
                 // TODO: Add heuristic checking if outputting a length/distance pair will actually
                 // be shorter than adding the literal bytes
-                //
-                // output.push(LDPair::LengthDistance {
-                // length: match_len,
-                // distance: match_dist,
-                // });
 
                 writer.write_length_distance(match_len, match_dist);
                 let taker = insert_it.by_ref().take(match_len as usize - 1);
@@ -142,57 +158,60 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
                     }
                 }
             } else {
-                // output.push(LDPair::Literal(*b));
                 writer.write_literal(*b);
             }
         } else {
-            // output.push(LDPair::Literal(*b));
             writer.write_literal(*b);
         }
     }
 }
 
 /// Compress a slice
-/// Returns a vector of `LDPair` values on success
-pub fn lz77_compress_w<W: OutputWriter>(data: &[u8], window_size: usize, mut writer: &mut W) {
-    if window_size != DEFAULT_WINDOW_SIZE {
-        // Different window sizes are not supported for now.
-        panic!("Only the standard window size is supported!");
-    }
+/// Will return err on failure eventually, but for now allways succeeds or panics
+pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
+                                            state: &mut LZ77State,
+                                            mut writer: &mut W)
+                                            -> Option<bool> {
+    // Currently we use window size as block length, in the future we might want to allow
+    // differently sized blocks
+    let window_size = DEFAULT_WINDOW_SIZE;
 
-    //    let mut output = Vec::new();
-    // Reserve some extra space in the output vector to prevent excessive allocation
-    // output.reserve(data.len() / 2);
-
-    let mut hash_table = ChainedHashTable::from_starting_values(data[0], data[1]);
-
-    let first_chunk_end = cmp::min(window_size, data.len());
-
-    process_chunk::<W>(data, 0, first_chunk_end, &mut hash_table, &mut writer);
-
-    let mut current_start = window_size;
-    if data.len() > window_size {
-        loop {
-            let start = current_start;
-            let slice = &data[start - window_size..];
-            let end = cmp::min(window_size * 2, slice.len());
-            process_chunk::<W>(slice, window_size, end, &mut hash_table, &mut writer);
-            if end >= slice.len() {
-                break;
-            }
-            current_start += window_size;
-            hash_table.slide(window_size);
+    if state.is_first_window {
+        println!("First! Hash table pos: {}",
+                 state.hash_table.current_position());
+        let first_chunk_end = cmp::min(window_size, data.len());
+        process_chunk::<W>(data, 0, first_chunk_end, &mut state.hash_table, &mut writer);
+        state.current_start += first_chunk_end;
+        if first_chunk_end >= data.len() {
+            state.is_last_block = true;
+        }
+        state.is_first_window = false;
+    } else {
+        println!("Currently at: {}", state.current_start);
+        let start = state.current_start;
+        let slice = &data[start - window_size..];
+        let end = cmp::min(window_size * 2, slice.len());
+        process_chunk::<W>(slice, window_size, end, &mut state.hash_table, &mut writer);
+        if end >= slice.len() {
+            state.is_last_block = true;
+        } else {
+            state.current_start += window_size;
+            state.hash_table.slide(window_size);
         }
     }
 
-    // output.shrink_to_fit();
-
-    //    Some(output)
+    Some(true)
 }
 
-pub fn lz77_compress(data: &[u8], window_size: usize) -> Option<Vec<LDPair>> {
+/// Compress a slice, not storing frequency information
+///
+/// This is a convenience function for compression with fixed huffman values
+pub fn lz77_compress(data: &[u8], _window_size: usize) -> Option<Vec<LDPair>> {
     let mut w = FixedWriter::new();
-    lz77_compress_w(data, window_size, &mut w);
+    let mut state = LZ77State::new(data);
+    while !state.is_last_block {
+        lz77_compress_block(data, &mut state, &mut w);
+    }
     Some(w.buffer)
 }
 
@@ -207,7 +226,6 @@ mod test {
                 LDPair::Literal(l) => output.push(l),
                 LDPair::LengthDistance { distance: d, length: l } => {
                     let start = output.len() - d as usize;
-                    //                    let it = output[start..].iter().enumerate().by_ref();
                     let mut n = 0;
                     while n < l as usize {
                         let b = output[start + n];
@@ -267,7 +285,7 @@ mod test {
                 LDPair::LengthDistance { distance: d, length: l } => {
                     output.extend(format!("<Distance: {}, Length: {}>", d, l).into_bytes())
                 }
-                LDPair::BlockStart { is_final: is_final } => {
+                LDPair::BlockStart { is_final } => {
                     output.extend(format!("<End of block (final={})>", is_final).into_bytes())
                 }
             }
