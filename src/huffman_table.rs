@@ -13,10 +13,17 @@ pub const NUM_LENGTH_CODES: usize = 29;
 // The number of distance codes in the distance huffman table
 pub const NUM_DISTANCE_CODES: usize = 30;
 
+// The maximum length of a huffman code
+pub const MAX_CODE_LENGTH: usize = 15;
+
 // The minimun and maximum lengths for a match according to the DEFLATE specification
 pub const MIN_MATCH: u16 = 3;
 pub const MAX_MATCH: u16 = 258;
 
+// The position in the literal/length table of the end of block symbol
+pub const END_OF_BLOCK_POSITION: usize = 256;
+
+// Combined number of literal and length codes
 pub const NUM_LITERALS_AND_LENGTHS: usize = 288;
 
 // Bit lengths for literal and length codes in the fixed huffman table
@@ -133,6 +140,14 @@ struct ExtraBits {
     pub value: u16,
 }
 
+pub fn get_length_code(length: u16) -> Option<usize> {
+    if let Some(eb) = get_length_code_and_extra_bits(length) {
+        Some(eb.code_number as usize)
+    } else {
+        None
+    }
+}
+
 /// Get the code for the huffman table and the extra bits for the requested length.
 /// returns None if length < 3 or length > 258.
 fn get_length_code_and_extra_bits(length: u16) -> Option<ExtraBits> {
@@ -143,16 +158,18 @@ fn get_length_code_and_extra_bits(length: u16) -> Option<ExtraBits> {
 
     // The minimun match length is 3, but length code table starts at 0,
     // so we need to subtract 3 to get the correct code.
-    let code = LENGTH_CODE[(length - MIN_MATCH) as usize];
+    let n = LENGTH_CODE[(length - MIN_MATCH) as usize];
+
     // We can then get the base length from the base length table,
     // which we use to calculate the value of the extra bits.
-    let base = BASE_LENGTH[code as usize];
-    let num_bits = LENGTH_EXTRA_BITS_LENGTH[code as usize];
+    let base = BASE_LENGTH[n as usize];
+    let num_bits = LENGTH_EXTRA_BITS_LENGTH[n as usize];
     Some(ExtraBits {
-        code_number: code + LENGTH_BITS_START,
+        code_number: n + LENGTH_BITS_START,
         num_bits: num_bits,
         value: length - base - MIN_MATCH,
     })
+
 }
 
 /// Get the spot in the huffman table for distances `distance` corresponds to
@@ -244,10 +261,9 @@ pub struct HuffmanTable {
 /// Counts the number of values of each length.
 /// Returns a tuple containing the longest length value in the table and a vector of lengths
 /// Returns an error if `table` is empty, or if any of the lenghts exceed 15
-fn build_length_count_table(table: &[u8]) -> Result<(usize, Vec<u8>), HuffmanError> {
+fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), HuffmanError> {
     // TODO: Validate the length table properly
-    const MAX_CODE_LENGTH: usize = 15;
-
+    //
     let max_length = match table.iter().max() {
         Some(l) => (*l).into(),
         None => return Err(HuffmanError::EmptyLengthTable),
@@ -258,15 +274,22 @@ fn build_length_count_table(table: &[u8]) -> Result<(usize, Vec<u8>), HuffmanErr
         return Err(HuffmanError::CodeTooLong);
     }
 
-    let mut len_counts = vec![0u8; max_length + 1];
-    for length in table {
-        let mut num_lengths = len_counts[usize::from(*length)];
-        num_lengths += 1;
+
+    let mut max_length_pos = 0;
+    // let mut max_length = 0;
+
+    let mut len_counts = vec![0u16; max_length + 1];
+    for (n, &length) in table.iter().enumerate() {
+        //        let num_lengths = len_counts[usize::from(*length)];
+        // num_lengths += 1;
         // TODO: Make sure we don't have more of one length than we can make
         // codes for
-        len_counts[usize::from(*length)] = num_lengths;
+        len_counts[usize::from(length)] += 1; //num_lengths + 1;
+        if length > 0 {
+            max_length_pos = n;
+        }
     }
-    Ok((max_length, len_counts))
+    Ok((max_length, max_length_pos, len_counts))
 }
 
 /// Generats a vector of huffman codes given a table of bit lengths
@@ -278,29 +301,31 @@ pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanErro
         length: 0,
     }; length_table.len());
 
-    let (max_length, lengths) = try!(build_length_count_table(length_table));
+    let (max_length, max_length_pos, lengths) = try!(build_length_count_table(length_table));
+
+    println!("Max length: {}, max_length_pos: {}",
+             max_length,
+             max_length_pos);
 
     let mut code = 0u16;
-    let mut next_code = vec![0];
+    let mut next_code = vec![0u16];
 
     for bits in 1..max_length + 1 {
-        code = (code + lengths[bits - 1] as u16) << 1;
-        next_code.push(code);
+        code = (code + lengths[bits - 1]) << 1;
+        next_code.push(code.into());
     }
 
-    for n in 0..codes.len() {
+    for n in 0..max_length_pos + 1 {
         let length = usize::from(length_table[n]);
-        //            println!("n: {}, length: {}", n, length);
-        // TODO: Spec says codes of length 0 should not be assigned a value
-        // Should we use a table of options here?
-        // if length == 0 {
-        //    return Err(HuffmanError::ZeroLengthCode);
-        // }
-        // The algorithm generates the code in the reverse bit order, so we need to reverse them
-        // to get the correct codes.
-        codes[n] = try!(HuffmanCode::from_reversed_bits(next_code[length], length as u8)
-            .ok_or(HuffmanError::CodeTooLong));
-        next_code[length] += 1;
+        println!("n: {}, length: {}", n, length);
+        if length != 0 {
+            // The algorithm generates the code in the reverse bit order, so we need to reverse them
+            // to get the correct codes.
+            codes[n] = try!(HuffmanCode::from_reversed_bits(next_code[length], length as u8)
+                .ok_or(HuffmanError::CodeTooLong));
+            println!("Next code: {:b}", next_code[length]);
+            next_code[length] = next_code[length].wrapping_add(1);
+        }
     }
     Ok(codes)
 }
@@ -349,7 +374,6 @@ impl HuffmanTable {
 
     /// Get the huffman code for the end of block value
     pub fn get_end_of_block(&self) -> HuffmanCode {
-        const END_OF_BLOCK_POSITION: usize = 256;
         self.codes[END_OF_BLOCK_POSITION]
     }
 

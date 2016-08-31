@@ -38,9 +38,9 @@ pub fn write_huffman_lengths(literal_len_lengths: &[u8],
     // TODO: Avoid dynamic memory allocation here
     // TODO: repeats can cross over from lit/len to distances, so we should do this to save a few
     // bytes
-    let merged_freqs: Vec<usize> = ll_freqs.iter()
+    let merged_freqs: Vec<u32> = ll_freqs.iter()
         .zip(d_freqs.iter())
-        .map(|(l, d)| (l + d) as usize)
+        .map(|(l, d)| u32::from(*l) + u32::from(*d))
         .collect();
 
     let huffman_table_lengths = huffman_lengths_from_frequency(merged_freqs.as_slice(),
@@ -51,15 +51,10 @@ pub fn write_huffman_lengths(literal_len_lengths: &[u8],
 
     writer.write_bits(hclen as u16, HCLEN_BITS);
 
-    println!("hclen: {}", hclen);
-
     // Write the lengths for the huffman table describing the huffman table
     // Each length is 3 bits
     for n in HUFFMAN_LENGTH_ORDER.iter() {
         writer.write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3);
-        println!("writing length {}: {}",
-                 *n,
-                 huffman_table_lengths[usize::from(*n)]);
     }
 
     // Generate codes for the main huffman table using the lenghts we just wrote
@@ -71,20 +66,12 @@ pub fn write_huffman_lengths(literal_len_lengths: &[u8],
             EncodedLength::Length(n) => {
                 let code = codes[usize::from(n)];
                 writer.write_bits(code.code, code.length);
-                println!("Writing code n: {}: code: {:b}, {}",
-                         n,
-                         code.code,
-                         code.length);
             }
             EncodedLength::CopyPrevious(n) => {
                 let code = codes[COPY_PREVIOUS];
                 writer.write_bits(code.code, code.length);
                 assert!(n >= 3);
                 writer.write_bits((n - 3).into(), 2);
-                println!("Writing copyPrevious({}), code: {:b}, {}",
-                         n,
-                         code.code,
-                         code.length);
             }
             EncodedLength::RepeatZero3Bits(n) => {
                 let code = codes[REPEAT_ZERO_3_BITS];

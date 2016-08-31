@@ -1,10 +1,12 @@
 use lz77::LDPair;
-use huffman_table::{NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, get_distance_code};
+use huffman_table::{NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, END_OF_BLOCK_POSITION,
+                    get_distance_code, get_length_code};
 
 pub trait OutputWriter {
     fn write_literal(&mut self, literal: u8);
     fn write_length_distance(&mut self, length: u16, distance: u16);
     fn write_start_of_block(&mut self, is_final: bool);
+    fn write_end_of_block(&mut self);
 }
 
 /// OutputWriter that doesn't store frequency information
@@ -17,6 +19,10 @@ pub struct FixedWriter {
 impl FixedWriter {
     pub fn new() -> FixedWriter {
         FixedWriter { buffer: Vec::new() }
+    }
+
+    pub fn clear_buffer(&mut self) {
+        self.buffer.clear();
     }
 }
 
@@ -34,6 +40,10 @@ impl OutputWriter for FixedWriter {
 
     fn write_start_of_block(&mut self, is_final: bool) {
         self.buffer.push(LDPair::BlockStart { is_final: is_final });
+    }
+
+    fn write_end_of_block(&mut self) {
+        self.buffer.push(LDPair::EndOfBlock);
     }
 }
 
@@ -54,13 +64,19 @@ impl OutputWriter for DynamicWriter {
 
     fn write_length_distance(&mut self, length: u16, distance: u16) {
         self.fixed_writer.write_length_distance(length, distance);
-        self.frequencies[length as usize] += 1;
+        let l_code_num = get_length_code(length).expect("Invalid length!");
+        self.frequencies[l_code_num as usize] += 1;
         let d_code_num = get_distance_code(distance).expect("Error, distance is out of range!");
-        self.frequencies[usize::from(d_code_num)] += 1;
+        self.distance_frequencies[usize::from(d_code_num)] += 1;
     }
 
     fn write_start_of_block(&mut self, final_block: bool) {
         self.fixed_writer.write_start_of_block(final_block);
+    }
+
+    fn write_end_of_block(&mut self) {
+        self.frequencies[END_OF_BLOCK_POSITION] += 1;
+        self.fixed_writer.write_end_of_block();
     }
 }
 
@@ -73,8 +89,6 @@ impl DynamicWriter {
         }
     }
 
-
-
     pub fn get_frequencies(&self) -> (&[u32], &[u32]) {
         (&self.frequencies, &self.distance_frequencies)
     }
@@ -82,5 +96,18 @@ impl DynamicWriter {
     pub fn clear_frequencies(&mut self) {
         self.frequencies = [0; NUM_LITERALS_AND_LENGTHS];
         self.distance_frequencies = [0; NUM_DISTANCE_CODES];
+    }
+
+    pub fn clear_data(&mut self) {
+        self.fixed_writer.clear_buffer();
+    }
+
+    pub fn clear(&mut self) {
+        self.clear_frequencies();
+        self.clear_data();
+    }
+
+    pub fn get_buffer(&mut self) -> &[LDPair] {
+        &self.fixed_writer.buffer
     }
 }

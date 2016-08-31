@@ -47,12 +47,12 @@ pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])>
         if *l == prev && repeat < 6 && iter.peek().is_some() {
             repeat += 1;
         } else if repeat >= MIN_REPEAT {
-
+/*
             println!("Writing repeat? n: {}, repeat: {}, l: {}, prev: {}",
                      n,
                      repeat,
                      *l,
-                     prev);
+                     prev);*/
             match *l {
                 0 => {
                     if repeat <= 10 {
@@ -88,7 +88,7 @@ pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])>
                 repeat = 0;
             }
         } else {
-            println!("n: {}, repeat: {}, l: {}", n, repeat, *l);
+            //println!("n: {}, repeat: {}, l: {}", n, repeat, *l);
             let mut i = repeat as i32;
             while i >= 0 {
                 update_out_and_freq(EncodedLength::Length(
@@ -115,7 +115,7 @@ type NodeIndex = usize;
 pub struct ChainNode {
     // The weight of the node, which in this case is the frequency of the symbol in the input
     // data we are creating huffman codes for
-    weight: usize,
+    weight: u32,
     // Number of leaf nodes to the left of this node
     // In this case, the count is equal to the symbol in the input data this node represents
     count: u16,
@@ -204,7 +204,7 @@ pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
     }
 }
 
-pub fn huffman_lengths_from_frequency(frequencies: &[usize], max_len: usize) -> Vec<u8> {
+pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Vec<u8> {
     // Make sure the number of frequencies is sensible since we use u16 to index.
     assert!(frequencies.len() < u16::max_value() as usize);
     assert!(max_len > 1 && max_len < 16);

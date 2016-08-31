@@ -21,18 +21,23 @@ impl LZ77State {
         }
     }
 
-    fn new(data: &[u8]) -> LZ77State {
+    pub fn new(data: &[u8]) -> LZ77State {
         LZ77State::from_starting_values(data[0], data[1])
+    }
+
+    pub fn is_last_block(&self) -> bool {
+        self.is_last_block
     }
 }
 
 /// A structure representing values in a compressed stream of data before being huffman coded
 /// We might want to represent this differently eventually to save on memory usage
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum LDPair {
     Literal(u8),
     LengthDistance { length: u16, distance: u16 },
     BlockStart { is_final: bool },
+    EndOfBlock,
 }
 
 /// Get the length of the checked match (assuming the two bytes preceeding `current_pos` match)
@@ -200,6 +205,8 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
         }
     }
 
+    writer.write_end_of_block();
+
     Some(true)
 }
 
@@ -233,7 +240,8 @@ mod test {
                         n += 1;
                     }
                 }
-                LDPair::BlockStart { is_final: _ } => (),
+                LDPair::BlockStart { is_final: _ } |
+                LDPair::EndOfBlock => (),
             }
         }
         output
@@ -286,7 +294,10 @@ mod test {
                     output.extend(format!("<Distance: {}, Length: {}>", d, l).into_bytes())
                 }
                 LDPair::BlockStart { is_final } => {
-                    output.extend(format!("<End of block (final={})>", is_final).into_bytes())
+                    output.extend(format!("<Start of block (final={})>", is_final).into_bytes())
+                }
+                LDPair::EndOfBlock => {
+                    output.extend(format!("<End of block>").into_bytes());
                 }
             }
         }
