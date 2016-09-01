@@ -21,15 +21,20 @@ const MIN_REPEAT: u8 = 3;
 fn update_out_and_freq(encoded: EncodedLength,
                        output: &mut Vec<EncodedLength>, frequencies: &mut [u16; 19]) {
     let index = match encoded {
-        EncodedLength::Length(l) => l,
-        EncodedLength::CopyPrevious(_) => 16,
-        EncodedLength::RepeatZero3Bits(_) => 17,
-        EncodedLength::RepeatZero7Bits(_) => 18,
+        EncodedLength::Length(l) => usize::from(l),
+        EncodedLength::CopyPrevious(_) => COPY_PREVIOUS,
+        EncodedLength::RepeatZero3Bits(_) => REPEAT_ZERO_3_BITS,
+        EncodedLength::RepeatZero7Bits(_) => REPEAT_ZERO_7_BITS,
     };
 
-    frequencies[usize::from(index)] += 1;
+    frequencies[index] += 1;
 
     output.push(encoded);
+}
+
+// Convenience function to check if the repeat counter should be incremented further
+fn not_max_repetitions(length_value: u8, repeats: u8) -> bool{
+    (length_value == 0 && repeats < 138) || repeats < 6
 }
 
 /// Run-length encodes the lenghts of the values in `lenghts` according to the deflate
@@ -40,55 +45,49 @@ fn update_out_and_freq(encoded: EncodedLength,
 pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])> {
     let mut out = Vec::new();
     let mut frequencies = [0u16; 19];
-    let mut prev = 19;
+    let mut prev = 0;
+    // Repeat is set to 0 initially as this lets us start with emitting `repeat zero` of we start
+    // with 0
+    // TODO: Do this on subsequent zeros
     let mut repeat = 0;
     let mut iter = lengths.iter().enumerate().peekable();
-    while let Some((n, l)) = iter.next() {
-        if *l == prev && repeat < 6 && iter.peek().is_some() {
+    while let Some((n, &l)) = iter.next() {
+        if l == prev && not_max_repetitions(l, repeat) && iter.peek().is_some() {
             repeat += 1;
         } else if repeat >= MIN_REPEAT {
-/*
-            println!("Writing repeat? n: {}, repeat: {}, l: {}, prev: {}",
-                     n,
-                     repeat,
-                     *l,
-                     prev);*/
-            match *l {
+            // The previous value has been repeated enough times to write out a repeat code
+            match prev {
                 0 => {
                     if repeat <= 10 {
                         update_out_and_freq(EncodedLength::RepeatZero3Bits(repeat),
                                             &mut out,
                                             &mut frequencies,
                         );
-                        //out.push(EncodedLength::RepeatZero3Bits(repeat))
                     } else {
                         update_out_and_freq(EncodedLength::RepeatZero7Bits(repeat),
                                             &mut out,
                                             &mut frequencies,
                         );
-                        //out.push(EncodedLength::RepeatZero7Bits(repeat))
                     }
                 }
                 1...15 => update_out_and_freq(EncodedLength::CopyPrevious(repeat),
                                             &mut out,
                                             &mut frequencies,
-                ),//out.push(EncodedLength::CopyPrevious(repeat)),
+                ),
                 _ => return None,
             };
-            //println!("Repeat: {:?}", ret);
-            //out.push(ret);
-            repeat = 1;
-            if *l != prev || iter.peek().is_none() {
-                println!("Length: {}", l);
-                //out.push(EncodedLength::Length(*l));
-                update_out_and_freq(EncodedLength::Length(*l),
+                repeat = 1;
+            // If we have a new length value, or are at the end, output l
+            if l != prev || iter.peek().is_none() {
+                update_out_and_freq(EncodedLength::Length(l),
                                             &mut out,
                                             &mut frequencies,
                 );
                 repeat = 0;
             }
         } else {
-            //println!("n: {}, repeat: {}, l: {}", n, repeat, *l);
+            // There haven't been enough repetitions of the previous value,
+            // so just we output the lengths directly
             let mut i = repeat as i32;
             while i >= 0 {
                 update_out_and_freq(EncodedLength::Length(
@@ -97,13 +96,12 @@ pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])>
                                             &mut out,
                                             &mut frequencies,
                 );
-                //out.push(EncodedLength::Length(lengths[n as usize - i as usize]));
                 i -= 1;
             }
             repeat = 0;
 
         }
-        prev = *l;
+        prev = l;
     }
     Some((out, frequencies))
 }

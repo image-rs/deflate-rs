@@ -52,6 +52,8 @@ pub struct DynamicWriter {
     fixed_writer: FixedWriter,
     // We may want to use u16 instead, depending on how large blocks
     // we want to use
+    // The two last length codes are not actually used, but only participates in code construction
+    // Therefore, we ignore them to get the correct number of lengths
     frequencies: [u32; NUM_LITERALS_AND_LENGTHS],
     distance_frequencies: [u32; NUM_DISTANCE_CODES],
 }

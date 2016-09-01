@@ -11,7 +11,13 @@ pub enum HuffmanError {
 pub const NUM_LENGTH_CODES: usize = 29;
 
 // The number of distance codes in the distance huffman table
+// NOTE: two mode codes are actually used when constructing codes
 pub const NUM_DISTANCE_CODES: usize = 30;
+
+// Combined number of literal and length codes
+// NOTE: two mode codes are actually used when constructing codes
+pub const NUM_LITERALS_AND_LENGTHS: usize = 286;
+
 
 // The maximum length of a huffman code
 pub const MAX_CODE_LENGTH: usize = 15;
@@ -23,12 +29,9 @@ pub const MAX_MATCH: u16 = 258;
 // The position in the literal/length table of the end of block symbol
 pub const END_OF_BLOCK_POSITION: usize = 256;
 
-// Combined number of literal and length codes
-pub const NUM_LITERALS_AND_LENGTHS: usize = 288;
-
 // Bit lengths for literal and length codes in the fixed huffman table
 // The huffman codes are generated from this and the distance bit length table
-pub static FIXED_CODE_LENGTHS: [u8; NUM_LITERALS_AND_LENGTHS] =
+pub static FIXED_CODE_LENGTHS: [u8; NUM_LITERALS_AND_LENGTHS + 2] =
     [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
      8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
      8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
@@ -70,7 +73,7 @@ const LENGTH_BITS_START: u16 = 257;
 
 // Lengths for the distance codes in the pre-defined/fixed huffman table
 // (All distance codes are 5 bits long)
-pub static FIXED_CODE_LENGTHS_DISTANCE: [u8; NUM_DISTANCE_CODES] = [5; NUM_DISTANCE_CODES];
+pub static FIXED_CODE_LENGTHS_DISTANCE: [u8; NUM_DISTANCE_CODES + 2] = [5; NUM_DISTANCE_CODES + 2];
 
 pub static DISTANCE_CODES: [u8; 512] =
     [0, 1, 2, 3, 4, 4, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9,
@@ -250,14 +253,6 @@ pub struct LengthAndDistanceBits {
     pub distance_extra_bits: HuffmanCode,
 }
 
-/// A structure containing the tables of huffman codes for lengths, literals and distances
-pub struct HuffmanTable {
-    // Literal, end of block and length codes
-    codes: Vec<HuffmanCode>, // [HuffmanCode; 288],
-    // Distance codes
-    distance_codes: Vec<HuffmanCode>, // [HuffmanCode; 30],
-}
-
 /// Counts the number of values of each length.
 /// Returns a tuple containing the longest length value in the table and a vector of lengths
 /// Returns an error if `table` is empty, or if any of the lenghts exceed 15
@@ -274,14 +269,10 @@ fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), Hu
         return Err(HuffmanError::CodeTooLong);
     }
 
-
     let mut max_length_pos = 0;
-    // let mut max_length = 0;
 
     let mut len_counts = vec![0u16; max_length + 1];
     for (n, &length) in table.iter().enumerate() {
-        //        let num_lengths = len_counts[usize::from(*length)];
-        // num_lengths += 1;
         // TODO: Make sure we don't have more of one length than we can make
         // codes for
         len_counts[usize::from(length)] += 1; //num_lengths + 1;
@@ -317,20 +308,42 @@ pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanErro
 
     for n in 0..max_length_pos + 1 {
         let length = usize::from(length_table[n]);
-        println!("n: {}, length: {}", n, length);
+        // println!("n: {}, length: {}", n, length);
         if length != 0 {
             // The algorithm generates the code in the reverse bit order, so we need to reverse them
             // to get the correct codes.
             codes[n] = try!(HuffmanCode::from_reversed_bits(next_code[length], length as u8)
                 .ok_or(HuffmanError::CodeTooLong));
-            println!("Next code: {:b}", next_code[length]);
+            // We use wrapping here as we would otherwise overflow on the last code
+            // This should be okay as we exit the loop after this so the value is ignored
             next_code[length] = next_code[length].wrapping_add(1);
         }
     }
     Ok(codes)
 }
 
+/// A structure containing the tables of huffman codes for lengths, literals and distances
+pub struct HuffmanTable {
+    // Literal, end of block and length codes
+    codes: Vec<HuffmanCode>, // [HuffmanCode; 288],
+    // Distance codes
+    distance_codes: Vec<HuffmanCode>, // [HuffmanCode; 30],
+}
+
 impl HuffmanTable {
+    pub fn empty() -> HuffmanTable {
+        HuffmanTable {
+            codes: vec!(HuffmanCode {
+                code: 0,
+                length: 0,
+            }; 288),
+            distance_codes: vec!(HuffmanCode {
+                code: 0,
+                length: 0,
+            }; 30),
+        }
+    }
+
     /// Creates a `HuffmanTable` from length tables.
     /// Returns Err if the tables have lengths > 50, the
     /// tables are too short, or are otherwise not formed correctly.
@@ -358,7 +371,6 @@ impl HuffmanTable {
     }
 
     /// Create a HuffmanTable using the fixed tables specified in the DEFLATE format specification.
-    #[allow(dead_code)]
     pub fn fixed_table() -> HuffmanTable {
         // This should be safe to unwrap, if it were to panic the code is wrong,
         // tests should catch it.

@@ -20,10 +20,10 @@ use length_encode::huffman_lengths_from_frequency;
 // The first bits of each block, which describe the type of the block
 // `-TTF` - TT = type, 00 = stored, 01 = fixed, 10 = dynamic, 11 = reserved, F - 1 if final block
 // `0000`;
-const FIXED_FIRST_BYTE: u16 = 0b0000_0010;
-const FIXED_FIRST_BYTE_FINAL: u16 = 0b0000_0011;
-const DYNAMIC_FIRST_BYTE: u16 = 0b0000_0100;
-const DYNAMIC_FIRST_BYTE_FINAL: u16 = 0b000_00101;
+const FIXED_FIRST_BYTE: u16 = 0b010;
+const FIXED_FIRST_BYTE_FINAL: u16 = 0b011;
+const DYNAMIC_FIRST_BYTE: u16 = 0b100;
+const DYNAMIC_FIRST_BYTE_FINAL: u16 = 0b101;
 
 pub enum BType {
     NoCompression = 0b00,
@@ -75,7 +75,6 @@ impl BitWriter {
         }
         // Only do something if there actually are any bits left
         if self.bit_position != 0 {
-            // println!("bit_position: {}, accumulator: {}", self.bit_position, self.accumulator);
             self.buffer.push(self.accumulator as u8);
         }
     }
@@ -97,10 +96,9 @@ impl EncoderState {
         }
     }
 
-    fn default() -> EncoderState {
-        let mut ret = EncoderState::new(HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS,
-                                                                                    &FIXED_CODE_LENGTHS_DISTANCE).unwrap());
-            ret.fixed = true;
+    fn fixed() -> EncoderState {
+        let mut ret = EncoderState::new(HuffmanTable::fixed_table());
+        ret.fixed = true;
         ret
     }
 
@@ -157,9 +155,7 @@ impl EncoderState {
 
     fn write_end_of_block(&mut self) {
         let code = self.huffman_table.get_end_of_block();
-        // println!("End of block code: {:?}", code);
         self.writer.write_bits(code.code, code.length);
-        // self.writer.finish();
     }
 
     /// Move and return the buffer from the writer
@@ -178,7 +174,8 @@ impl EncoderState {
 
 pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
-    let mut state = EncoderState::default();
+    let mut state = EncoderState::fixed();
+    state.set_huffman_table(HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE).unwrap());
     let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
     let clen = compressed.len();
 
@@ -207,11 +204,8 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
 
 pub fn compress_data_dynamic(input: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
-    //NOTE: testing with default table first
-    let mut state = EncoderState::new(huffman_table::HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS,
-                                                                                    &FIXED_CODE_LENGTHS_DISTANCE).unwrap());
+    let mut state = EncoderState::new(huffman_table::HuffmanTable::empty());
 
-//    let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
 
     let mut lz77_state = lz77::LZ77State::new(input);
 
@@ -219,14 +213,11 @@ pub fn compress_data_dynamic(input: &[u8]) -> Vec<u8> {
 
     while !lz77_state.is_last_block() {
         lz77::lz77_compress_block(input, &mut lz77_state, &mut lz77_writer);
-        println!("Is final? {:?}", lz77_state.is_last_block());
         state.write_start_of_block(lz77_state.is_last_block());
 
         let (l_lengths, d_lengths) = {
             let (l_freqs, d_freqs) = lz77_writer.get_frequencies();
-            //println!("l_freqs: {:?}", l_freqs);
-            //println!("length code 18 pos: {}", huffman_table::get_length_code(18).unwrap());
-            //println!("F18 {:?}", l_freqs[huffman_table::get_length_code(18).unwrap() as usize]);
+
             (huffman_lengths_from_frequency(l_freqs, MAX_CODE_LENGTH),
              huffman_lengths_from_frequency(d_freqs, MAX_CODE_LENGTH))
         };
@@ -234,26 +225,18 @@ pub fn compress_data_dynamic(input: &[u8]) -> Vec<u8> {
         let codes = HuffmanTable::from_length_tables(&l_lengths, &d_lengths).expect(
             "Error: Failed to create huffman table!"
         );
-        //println!("l_lengths: {:?}", l_lengths);
-        //println!("L18 code: {:?}", codes.get_length_distance_code(18, 1).unwrap().length_code);
-        //println!("End of block code: {:?}", codes.get_end_of_block());
         state.set_huffman_table(codes);
-        //println!("lz77: {:?}", lz77_writer.get_buffer());
+
         for ld in lz77_writer.get_buffer() {
             match *ld {
                 LDPair::BlockStart{..} => (),
                 _ =>  state.write_ldpair(*ld),
             }
         }
-//        End of block is written in write_ldpair
-//        state.write_end_of_block();
+        // End of block is written in write_ldpair
+
         lz77_writer.clear();
     }
-
-/*
-    if let LDPair::BlockStart{..} = compressed[0] {} else {
-        panic!("Compressed block doesn't start with block start! {:?}", compressed[0]);
-    }*/
 
     state.flush();
 
@@ -275,7 +258,7 @@ mod test {
 
     /// Helper function to decompress into a `Vec<u8>`
     fn decompress_to_end(input: &[u8]) -> Vec<u8> {
-        use std::str;
+        /*use std::str;
         let mut inflater = super::inflate::InflateStream::new();
         let mut out = Vec::new();
         let mut n = 0;
@@ -288,21 +271,30 @@ mod test {
                 out.extend(result);
             } else {
                 //println!("Output: `{}`", str::from_utf8(&out).unwrap());
+                println!("Output decompressed: {}", out.len());
                 res.unwrap();
             }
 
         }
-        out
-/*
+        out*/
+
         // Using flate2 instead of inflate, there seems to be some issue with inflate
         // for data longer than 399 bytes.
         use std::io::Read;
         use flate2::read::DeflateDecoder;
 
         let mut result = Vec::new();
-        let mut e = DeflateDecoder::new(&input[..]);
-        e.read_to_end(&mut result).unwrap();
-        result*/
+        let i = &input[..];
+        let mut e = DeflateDecoder::new(i);
+
+        let res = e.read_to_end(&mut result);
+        if let Ok(n) = res {
+            println!("{} bytes read successfully", n);
+        } else {
+            println!("result size: {}", result.len());
+            res.unwrap();
+        }
+        result
     }
 
     use super::*;
@@ -405,10 +397,6 @@ mod test {
         let compressed = compress_data(&test_data, BType::DynamicHuffman);
 
         let result = decompress_to_end(&compressed);
-        println!("Compressed: {:?}", compressed);
-        println!("Output: `{}`", str::from_utf8(&result).unwrap());
-        println!("D: {:?}", test_data);
-        println!("R: {:?}", result);
         assert_eq!(test_data, result);
     }
 
@@ -423,6 +411,7 @@ mod test {
 
         f.read_to_end(&mut input).unwrap();
         let compressed = compress_data(&input, BType::DynamicHuffman);
+
         let result = decompress_to_end(&compressed);
         // Not using assert_eq here deliberately to avoid massive amounts of output spam
         assert!(input == result);

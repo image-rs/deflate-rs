@@ -35,7 +35,8 @@ pub fn write_huffman_lengths(literal_len_lengths: &[u8],
 
     // Add together frequencies of length and distance tables for generating codes for them as they
     // use the same codes
-    // TODO: Avoid dynamic memory allocation here
+    // TODO: Avoid dynamic memory allocation here (we should probably just write literal and
+    // length frequencies to the same array)
     // TODO: repeats can cross over from lit/len to distances, so we should do this to save a few
     // bytes
     let merged_freqs: Vec<u32> = ll_freqs.iter()
@@ -71,6 +72,7 @@ pub fn write_huffman_lengths(literal_len_lengths: &[u8],
                 let code = codes[COPY_PREVIOUS];
                 writer.write_bits(code.code, code.length);
                 assert!(n >= 3);
+                assert!(n <= 6);
                 writer.write_bits((n - 3).into(), 2);
             }
             EncodedLength::RepeatZero3Bits(n) => {
@@ -83,6 +85,7 @@ pub fn write_huffman_lengths(literal_len_lengths: &[u8],
                 let code = codes[REPEAT_ZERO_7_BITS];
                 writer.write_bits(code.code, code.length);
                 assert!(n >= 11);
+                assert!(n <= 138);
                 writer.write_bits((n - 11).into(), 7);
             }
         }
