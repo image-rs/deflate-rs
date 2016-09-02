@@ -143,6 +143,7 @@ struct ExtraBits {
     pub value: u16,
 }
 
+/// Get the length code that corresponds to the length value
 pub fn get_length_code(length: u16) -> Option<usize> {
     if let Some(eb) = get_length_code_and_extra_bits(length) {
         Some(eb.code_number as usize)
@@ -206,16 +207,6 @@ fn get_distance_code_and_extra_bits(distance: u16) -> Option<ExtraBits> {
     }
 }
 
-// fn get_extra_bits_for_distance_code(distance_code: u16) -> ExtraBits {
-// const DISTANCES_START: u16 = 257;
-// const DISTANCES_END: u16 = 285;
-// if distance_code < DISTANCES_START || distance_code > DISTANCES_END {
-// panic!("Distance ({}) is outside range!", distance_code);
-// }
-// let length = DISTANCE_EXTRA_BITS[distance_code - DISTANCES_START];
-// let bits =
-// }
-
 #[derive(Copy, Clone)]
 pub struct HuffmanCode {
     pub code: u16,
@@ -275,7 +266,7 @@ fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), Hu
     for (n, &length) in table.iter().enumerate() {
         // TODO: Make sure we don't have more of one length than we can make
         // codes for
-        len_counts[usize::from(length)] += 1; //num_lengths + 1;
+        len_counts[usize::from(length)] += 1;
         if length > 0 {
             max_length_pos = n;
         }
@@ -325,22 +316,22 @@ pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanErro
 /// A structure containing the tables of huffman codes for lengths, literals and distances
 pub struct HuffmanTable {
     // Literal, end of block and length codes
-    codes: Vec<HuffmanCode>, // [HuffmanCode; 288],
+    codes: Box<[HuffmanCode]>, // [HuffmanCode; 288],
     // Distance codes
-    distance_codes: Vec<HuffmanCode>, // [HuffmanCode; 30],
+    distance_codes: Box<[HuffmanCode]>, // [HuffmanCode; 30],
 }
 
 impl HuffmanTable {
     pub fn empty() -> HuffmanTable {
         HuffmanTable {
-            codes: vec!(HuffmanCode {
+            codes: Box::new([HuffmanCode {
                 code: 0,
                 length: 0,
-            }; 288),
-            distance_codes: vec!(HuffmanCode {
+            }; 288]),
+            distance_codes: Box::new([HuffmanCode {
                 code: 0,
                 length: 0,
-            }; 30),
+            }; 30]),
         }
     }
 
@@ -350,24 +341,10 @@ impl HuffmanTable {
     pub fn from_length_tables(literals_and_lengths: &[u8],
                               distances: &[u8])
                               -> Result<HuffmanTable, HuffmanError> {
-        let mut ret = HuffmanTable {
-            codes: vec!(HuffmanCode {
-                code: 0,
-                length: 0,
-            }; 288),
-            distance_codes: vec!(HuffmanCode {
-                code: 0,
-                length: 0,
-            }; 30),
-        };
-
-        let literal_and_length_codes = try!(create_codes(literals_and_lengths));
-        let distance_codes = try!(create_codes(distances));
-
-        ret.codes = literal_and_length_codes;
-        ret.distance_codes = distance_codes;
-
-        Ok(ret)
+        Ok(HuffmanTable {
+            codes: try!(create_codes(literals_and_lengths)).into_boxed_slice(),
+            distance_codes: try!(create_codes(distances)).into_boxed_slice(),
+        })
     }
 
     /// Create a HuffmanTable using the fixed tables specified in the DEFLATE format specification.
@@ -434,110 +411,118 @@ impl HuffmanTable {
     }
 }
 
-#[test]
-fn test_get_length_code() {
-    let extra_bits = get_length_code_and_extra_bits(4).unwrap();
-    assert_eq!(extra_bits.code_number, 258);
-    assert_eq!(extra_bits.num_bits, 0);
-    assert_eq!(extra_bits.value, 0);
+mod test {
+    // There seems to be a bug with unused importwarnings here, so we ignore them for now
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use super::{get_length_code_and_extra_bits, get_distance_code_and_extra_bits,
+                build_length_count_table};
+    #[test]
+    fn test_get_length_code() {
+        let extra_bits = get_length_code_and_extra_bits(4).unwrap();
+        assert_eq!(extra_bits.code_number, 258);
+        assert_eq!(extra_bits.num_bits, 0);
+        assert_eq!(extra_bits.value, 0);
 
-    let extra_bits = get_length_code_and_extra_bits(165).unwrap();
-    assert_eq!(extra_bits.code_number, 282);
-    assert_eq!(extra_bits.num_bits, 5);
-    assert_eq!(extra_bits.value, 2);
+        let extra_bits = get_length_code_and_extra_bits(165).unwrap();
+        assert_eq!(extra_bits.code_number, 282);
+        assert_eq!(extra_bits.num_bits, 5);
+        assert_eq!(extra_bits.value, 2);
 
-    let extra_bits = get_length_code_and_extra_bits(257).unwrap();
-    assert_eq!(extra_bits.code_number, 284);
-    assert_eq!(extra_bits.num_bits, 5);
-    assert_eq!(extra_bits.value, 30);
+        let extra_bits = get_length_code_and_extra_bits(257).unwrap();
+        assert_eq!(extra_bits.code_number, 284);
+        assert_eq!(extra_bits.num_bits, 5);
+        assert_eq!(extra_bits.value, 30);
 
-    let extra_bits = get_length_code_and_extra_bits(258).unwrap();
-    assert_eq!(extra_bits.code_number, 285);
-    assert_eq!(extra_bits.num_bits, 0);
-}
-
-#[test]
-fn test_distance_code() {
-    assert_eq!(get_distance_code(1).unwrap(), 0);
-    assert_eq!(get_distance_code(0), None);
-    assert_eq!(get_distance_code(50000), None);
-    assert_eq!(get_distance_code(6146).unwrap(), 25);
-    assert_eq!(get_distance_code(256).unwrap(), 15);
-}
-
-#[test]
-fn test_distance_extra_bits() {
-    let extra = get_distance_code_and_extra_bits(527).unwrap();
-    assert_eq!(extra.value, 0b1110);
-    assert_eq!(extra.code_number, 18);
-    assert_eq!(extra.num_bits, 8);
-    let extra = get_distance_code_and_extra_bits(256).unwrap();
-    assert_eq!(extra.code_number, 15);
-    assert_eq!(extra.num_bits, 6);
-}
-
-#[test]
-fn test_length_table_fixed() {
-    let _ = build_length_count_table(&FIXED_CODE_LENGTHS).unwrap();
-}
-
-#[test]
-fn test_length_table_max_length() {
-    let table = [16u8; 288];
-    let test = build_length_count_table(&table);
-    match test {
-        Err(HuffmanError::CodeTooLong) => (),
-        _ => panic!("Didn't fail with invalid length!"),
-    };
-}
-
-#[test]
-fn test_empty_table() {
-    let table = [];
-    let test = build_length_count_table(&table);
-    match test {
-        Err(HuffmanError::EmptyLengthTable) => (),
-        _ => panic!("Empty length table didn't fail!'"),
+        let extra_bits = get_length_code_and_extra_bits(258).unwrap();
+        assert_eq!(extra_bits.code_number, 285);
+        assert_eq!(extra_bits.num_bits, 0);
     }
-}
 
-#[test]
-fn make_table_fixed() {
-    let table = HuffmanTable::fixed_table();
-    assert_eq!(table.codes[0].code, 0b00001100);
-    assert_eq!(table.codes[143].code, 0b11111101);
-    assert_eq!(table.codes[144].code, 0b000010011);
-    assert_eq!(table.codes[255].code, 0b111111111);
-    assert_eq!(table.codes[256].code, 0b0000000);
-    assert_eq!(table.codes[279].code, 0b1110100);
-    assert_eq!(table.codes[280].code, 0b00000011);
-    assert_eq!(table.codes[287].code, 0b11100011);
+    #[test]
+    fn test_distance_code() {
+        assert_eq!(get_distance_code(1).unwrap(), 0);
+        assert_eq!(get_distance_code(0), None);
+        assert_eq!(get_distance_code(50000), None);
+        assert_eq!(get_distance_code(6146).unwrap(), 25);
+        assert_eq!(get_distance_code(256).unwrap(), 15);
+    }
 
-    assert_eq!(table.distance_codes[0].code, 0);
-    assert_eq!(table.distance_codes[5].code, 20);
+    #[test]
+    fn test_distance_extra_bits() {
+        let extra = get_distance_code_and_extra_bits(527).unwrap();
+        assert_eq!(extra.value, 0b1110);
+        assert_eq!(extra.code_number, 18);
+        assert_eq!(extra.num_bits, 8);
+        let extra = get_distance_code_and_extra_bits(256).unwrap();
+        assert_eq!(extra.code_number, 15);
+        assert_eq!(extra.num_bits, 6);
+    }
 
-    let ld = table.get_length_distance_code(4, 5).unwrap();
+    #[test]
+    fn test_length_table_fixed() {
+        let _ = build_length_count_table(&FIXED_CODE_LENGTHS).unwrap();
+    }
 
-    //    println!("Correct code from pos: {:?}", table.codes[258]);
-    println!("257: {:?}, 258: {:?}, 259: {:?}",
-             table.codes[257],
-             table.codes[258],
-             table.codes[259]);
-    println!("Length code: {:b}, code length: {}",
-             ld.length_code.code,
-             ld.length_code.length);
+    #[test]
+    fn test_length_table_max_length() {
+        let table = [16u8; 288];
+        let test = build_length_count_table(&table);
+        match test {
+            Err(HuffmanError::CodeTooLong) => (),
+            _ => panic!("Didn't fail with invalid length!"),
+        };
+    }
 
-    println!("Distance code {:?}", table.distance_codes[4]);
+    #[test]
+    fn test_empty_table() {
+        let table = [];
+        let test = build_length_count_table(&table);
+        match test {
+            Err(HuffmanError::EmptyLengthTable) => (),
+            _ => panic!("Empty length table didn't fail!'"),
+        }
+    }
 
-    assert_eq!(ld.length_code.code, 0b00100000);
-    assert_eq!(ld.distance_code.code, 0b00100);
-    assert_eq!(ld.distance_extra_bits.length, 1);
-    assert_eq!(ld.distance_extra_bits.code, 0);
-}
+    #[test]
+    fn make_table_fixed() {
+        let table = HuffmanTable::fixed_table();
+        assert_eq!(table.codes[0].code, 0b00001100);
+        assert_eq!(table.codes[143].code, 0b11111101);
+        assert_eq!(table.codes[144].code, 0b000010011);
+        assert_eq!(table.codes[255].code, 0b111111111);
+        assert_eq!(table.codes[256].code, 0b0000000);
+        assert_eq!(table.codes[279].code, 0b1110100);
+        assert_eq!(table.codes[280].code, 0b00000011);
+        assert_eq!(table.codes[287].code, 0b11100011);
 
-#[test]
-fn test_bit_reverse() {
-    let bits = 0b0111_0100;
-    let reversed = reverse_bits(bits, 8).expect("reverse_bits returned None!");
-    assert_eq!(reversed, 0b0010_1110);
+        assert_eq!(table.distance_codes[0].code, 0);
+        assert_eq!(table.distance_codes[5].code, 20);
+
+        let ld = table.get_length_distance_code(4, 5).unwrap();
+
+        //    println!("Correct code from pos: {:?}", table.codes[258]);
+        println!("257: {:?}, 258: {:?}, 259: {:?}",
+                 table.codes[257],
+                 table.codes[258],
+                 table.codes[259]);
+        println!("Length code: {:b}, code length: {}",
+                 ld.length_code.code,
+                 ld.length_code.length);
+
+        println!("Distance code {:?}", table.distance_codes[4]);
+
+        assert_eq!(ld.length_code.code, 0b00100000);
+        assert_eq!(ld.distance_code.code, 0b00100);
+        assert_eq!(ld.distance_extra_bits.length, 1);
+        assert_eq!(ld.distance_extra_bits.code, 0);
+    }
+
+    #[test]
+    fn test_bit_reverse() {
+        let bits = 0b0111_0100;
+        let reversed = super::reverse_bits(bits, 8).expect("reverse_bits returned None!");
+        assert_eq!(reversed, 0b0010_1110);
+    }
 }

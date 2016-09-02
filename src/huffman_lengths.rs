@@ -2,7 +2,7 @@ use length_encode::EncodedLength;
 use length_encode::{encode_lengths, huffman_lengths_from_frequency, COPY_PREVIOUS,
                     REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS};
 use huffman_table::{create_codes, NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES};
-use BitWriter;
+use bit_writer::BitWriter;
 
 // The output ordering of the lenghts for the huffman codes used to encode the lenghts
 // used to build the full huffman tree for length/literal codes.
@@ -54,7 +54,7 @@ pub fn write_huffman_lengths(literal_len_lengths: &[u8],
 
     // Write the lengths for the huffman table describing the huffman table
     // Each length is 3 bits
-    for n in HUFFMAN_LENGTH_ORDER.iter() {
+    for n in &HUFFMAN_LENGTH_ORDER {
         writer.write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3);
     }
 

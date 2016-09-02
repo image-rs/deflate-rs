@@ -43,12 +43,13 @@ fn not_max_repetitions(length_value: u8, repeats: u8) -> bool{
 /// Returns a tuple containing a vec of the encoded lengths, and an array describing the frequencies
 /// of the different length codes
 pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])> {
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(lengths.len() / 2);
     let mut frequencies = [0u16; 19];
+    // Previous value
+    // Set to 0 initially as this lets us start with emitting `repeat zero` of we start with 0
+    // TODO: Do this on subsequent zeros let mut prev = 0;
     let mut prev = 0;
-    // Repeat is set to 0 initially as this lets us start with emitting `repeat zero` of we start
-    // with 0
-    // TODO: Do this on subsequent zeros
+    // Number of repetitions of the current value
     let mut repeat = 0;
     let mut iter = lengths.iter().enumerate().peekable();
     while let Some((n, &l)) = iter.next() {
@@ -139,10 +140,8 @@ pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
 
     let count = nodes[lookahead_indexes[index].1].count;
     let next_count = count + 1;
-    // println!("Count: {}, index: {}", count, index);
-    //    println!("First list: {:?}", lists[0]);
+
     if index == 0 && count >= leaves.len() as u16 {
-        // num_leaves {
         return;
     };
 
@@ -296,9 +295,6 @@ mod test {
         assert_eq!(enc.1[10..16], [0,0,0,0,0, 0]);
         //Also there are no zero-length codes so there shouldn't be any repetitions of zero
         assert_eq!(enc.1[17..19], [0, 0]);
-//        println!("{:?}", enc);
-//        println!("Number of 7s: {}",
-//                 FIXED_CODE_LENGTHS.iter().filter(|x| **x == 9).count());
     }
 
     #[test]

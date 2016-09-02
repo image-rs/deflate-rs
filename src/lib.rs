@@ -1,7 +1,7 @@
 #[cfg(test)]
 extern crate flate2;
-#[cfg(test)]
-extern crate inflate;
+//#[cfg(test)]
+//extern crate inflate;
 
 mod huffman_table;
 mod lz77;
@@ -10,13 +10,13 @@ mod length_encode;
 mod output_writer;
 mod stored_block;
 mod huffman_lengths;
+mod bit_writer;
 use huffman_table::*;
 use lz77::{LDPair, lz77_compress};
 use huffman_lengths::write_huffman_lengths;
 use length_encode::huffman_lengths_from_frequency;
+use bit_writer::BitWriter;
 
-// TODO: Adding something in the unused bits here causes some issues
-// Find out why
 // The first bits of each block, which describe the type of the block
 // `-TTF` - TT = type, 00 = stored, 01 = fixed, 10 = dynamic, 11 = reserved, F - 1 if final block
 // `0000`;
@@ -29,55 +29,6 @@ pub enum BType {
     NoCompression = 0b00,
     FixedHuffman = 0b01,
     DynamicHuffman = 0b10, // Reserved = 0b11, //Error
-}
-
-/// A quick implementation of a struct that writes bit data to a buffer
-pub struct BitWriter {
-    bit_position: u8,
-    accumulator: u32,
-    // We currently just write to a vector, but this should probably be
-    // replaced with a writer later
-    pub buffer: Vec<u8>,
-}
-
-impl BitWriter {
-    pub fn new() -> BitWriter {
-        BitWriter {
-            bit_position: 0,
-            accumulator: 0,
-            buffer: Vec::new(),
-        }
-    }
-    pub fn write_bits(&mut self, bits: u16, size: u8) {
-        if size == 0 {
-            return;
-        }
-
-        // self.accumulator |= (bits as u32) << (32 - size - self.bit_position);
-        self.accumulator |= (bits as u32) << self.bit_position;
-        self.bit_position += size;
-
-        while self.bit_position >= 8 {
-            // let byte = (self.accumulator >> 24) as u8;
-            let byte = self.accumulator as u8;
-            self.buffer.push(byte as u8);
-
-            self.bit_position -= 8;
-            // self.accumulator <<= 8;
-            self.accumulator >>= 8;
-        }
-    }
-
-    pub fn finish(&mut self) {
-        if self.bit_position > 7 {
-            // This should not happen.
-            panic!("Error! Tried to finish bitwriter with more than 7 bits remaining!")
-        }
-        // Only do something if there actually are any bits left
-        if self.bit_position != 0 {
-            self.buffer.push(self.accumulator as u8);
-        }
-    }
 }
 
 // TODO: Use a trait here, and have implementations for each block type
@@ -125,7 +76,7 @@ impl EncoderState {
                 self.writer.write_bits(ldencoded.distance_extra_bits.code,
                                        ldencoded.distance_extra_bits.length);
             }
-            LDPair::BlockStart{is_final: _} => {
+            LDPair::BlockStart{..} => {
                 panic!("Tried to write start of block, this should not be handled here!");
             },
             LDPair::EndOfBlock => {
@@ -144,12 +95,10 @@ impl EncoderState {
             } else {
                 self.writer.write_bits(DYNAMIC_FIRST_BYTE_FINAL, 3);
             }
+        } else if self.fixed {
+            self.writer.write_bits(FIXED_FIRST_BYTE, 3);
         } else {
-            if self.fixed {
-                self.writer.write_bits(FIXED_FIRST_BYTE, 3);
-            } else {
-                self.writer.write_bits(DYNAMIC_FIRST_BYTE, 3);
-            }
+            self.writer.write_bits(DYNAMIC_FIRST_BYTE, 3);
         }
     }
 
@@ -172,10 +121,9 @@ impl EncoderState {
     }
 }
 
-pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
+fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
     let mut state = EncoderState::fixed();
-    state.set_huffman_table(HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE).unwrap());
     let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
     let clen = compressed.len();
 
@@ -185,7 +133,7 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
         //We ignore end of block here for now since there is no purpose of
         //splitting a full stream of data using fixed huffman data into blocks
         match ld {
-            LDPair::BlockStart{is_final: _}|LDPair::EndOfBlock =>
+            LDPair::BlockStart{..}|LDPair::EndOfBlock =>
             (),
                 _ => state.write_ldpair(ld),
         }
@@ -202,13 +150,11 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     output
 }
 
-pub fn compress_data_dynamic(input: &[u8]) -> Vec<u8> {
+fn compress_data_dynamic(input: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
     let mut state = EncoderState::new(huffman_table::HuffmanTable::empty());
 
-
     let mut lz77_state = lz77::LZ77State::new(input);
-
     let mut lz77_writer = output_writer::DynamicWriter::new();
 
     while !lz77_state.is_last_block() {
@@ -253,6 +199,10 @@ pub fn compress_data(input: &[u8], btype: BType) -> Vec<u8> {
     }
 }
 
+pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
+    compress_data_dynamic(input)
+}
+
 #[cfg(test)]
 mod test {
 
@@ -278,8 +228,6 @@ mod test {
         }
         out*/
 
-        // Using flate2 instead of inflate, there seems to be some issue with inflate
-        // for data longer than 399 bytes.
         use std::io::Read;
         use flate2::read::DeflateDecoder;
 
@@ -412,19 +360,11 @@ mod test {
         f.read_to_end(&mut input).unwrap();
         let compressed = compress_data(&input, BType::DynamicHuffman);
 
+        println!("Compressed len: {}", compressed.len());
+
         let result = decompress_to_end(&compressed);
+        assert!(compressed.len() < input.len());
         // Not using assert_eq here deliberately to avoid massive amounts of output spam
         assert!(input == result);
-    }
-
-    //#[test]
-    fn _test_writer() {
-        let mut w = super::BitWriter::new();
-        // w.write_bits(super::FIXED_FIRST_BYTE_FINAL, 3);
-        w.write_bits(0b0111_0100, 8);
-        w.write_bits(0, 8);
-        println!("FIXED_FIRST_BYTE_FINAL: {:#b}",
-                 super::FIXED_FIRST_BYTE_FINAL);
-        println!("BIT: {:#b}", w.buffer[0]);
     }
 }

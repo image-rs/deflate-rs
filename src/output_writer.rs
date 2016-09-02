@@ -9,7 +9,7 @@ pub trait OutputWriter {
     fn write_end_of_block(&mut self);
 }
 
-/// OutputWriter that doesn't store frequency information
+/// `OutputWriter` that doesn't store frequency information
 #[derive(Debug)]
 pub struct FixedWriter {
     // TODO: Use a writer here instead
@@ -47,7 +47,7 @@ impl OutputWriter for FixedWriter {
     }
 }
 
-// OutputWriter that keeps track of the usage of different codes
+// `OutputWriter` that keeps track of the usage of different codes
 pub struct DynamicWriter {
     fixed_writer: FixedWriter,
     // We may want to use u16 instead, depending on how large blocks

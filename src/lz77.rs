@@ -40,8 +40,8 @@ pub enum LDPair {
     EndOfBlock,
 }
 
-/// Get the length of the checked match (assuming the two bytes preceeding `current_pos` match)
-/// The function returns how many bytes after and including `current_pos` match + 2
+/// Get the length of the checked match
+/// The function returns number of bytes after and including `current_pos` match
 fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> u16 {
     // TODO: This can be optimised by checking multiple bytes at once and not checking the
     // first 3 bytes since we already know they match
@@ -86,27 +86,19 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
         let distance = position - current_head as usize;
 
         if distance > 0 {
-            let length = get_match_length(data, position, current_head as usize);
-
-            if length < MIN_MATCH {
-                // If the length is < than MIN_MATCH we are probably at the end of
-                // the chain.
-                // Zlib continues rather than stops at this point, so it might be possible
-                // that there are further matches after this, however continuing here
-                // will currently generate an infinate loop, and adding a loop limit makes
-                // things very slow, so we break for now (which in the worst case would mean
-                // less efficient compression).
-                // TODO: This may not be needed anymore
-                break;
-            }
-
-            if length > best_length {
-                best_length = length;
-                best_distance = distance;
-                if length == max_length {
-                    // We are at the max length, so there is no point
-                    // searching any longer
-                    break;
+            // We only check further if the match length can actually increase
+            if (position + best_length as usize) < data.len() &&
+               data[position + best_length as usize] ==
+               data[current_head as usize + best_length as usize] {
+                let length = get_match_length(data, position, current_head as usize);
+                if length > best_length {
+                    best_length = length;
+                    best_distance = distance;
+                    if length == max_length {
+                        // We are at the max length, so there is no point
+                        // searching any longer
+                        break;
+                    }
                 }
             }
         }
