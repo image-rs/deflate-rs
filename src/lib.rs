@@ -3,6 +3,8 @@ extern crate flate2;
 //#[cfg(test)]
 //extern crate inflate;
 
+extern crate adler32;
+
 mod huffman_table;
 mod lz77;
 mod chained_hash_table;
@@ -11,11 +13,14 @@ mod output_writer;
 mod stored_block;
 mod huffman_lengths;
 mod bit_writer;
+mod zlib;
+mod checksum;
 use huffman_table::*;
 use lz77::{LDPair, lz77_compress};
 use huffman_lengths::write_huffman_lengths;
 use length_encode::huffman_lengths_from_frequency;
 use bit_writer::BitWriter;
+use checksum::RollingChecksum;
 
 // The first bits of each block, which describe the type of the block
 // `-TTF` - TT = type, 00 = stored, 01 = fixed, 10 = dynamic, 11 = reserved, F - 1 if final block
@@ -150,15 +155,17 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     output
 }
 
-fn compress_data_dynamic(input: &[u8]) -> Vec<u8> {
+fn compress_data_dynamic<RC: RollingChecksum>(input: &[u8]) -> (Vec<u8>, u32) {
     let mut output = Vec::new();
     let mut state = EncoderState::new(huffman_table::HuffmanTable::empty());
 
     let mut lz77_state = lz77::LZ77State::new(input);
     let mut lz77_writer = output_writer::DynamicWriter::new();
+    let mut checksum = RC::new();
+    checksum.update_from_slice(&input[..2]);
 
     while !lz77_state.is_last_block() {
-        lz77::lz77_compress_block(input, &mut lz77_state, &mut lz77_writer);
+        lz77::lz77_compress_block(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
         state.write_start_of_block(lz77_state.is_last_block());
 
         let (l_lengths, d_lengths) = {
@@ -188,23 +195,31 @@ fn compress_data_dynamic(input: &[u8]) -> Vec<u8> {
 
     output.extend(state.take_buffer());
 
-    output
-}
-
-pub fn compress_data(input: &[u8], btype: BType) -> Vec<u8> {
-    match btype {
-        BType::NoCompression => stored_block::compress_data_stored(input),
-        BType::FixedHuffman => compress_data_fixed(input),
-        BType::DynamicHuffman => compress_data_dynamic(input),
-    }
+    (output, checksum.current_hash())
 }
 
 pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
-    compress_data_dynamic(input)
+    let (data, _) = compress_data_dynamic::<checksum::NoChecksum>(input);
+    data
+}
+
+pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
+    // Temporary doing this in a hacky way for testing purposes
+    let (mut data, checksum) = compress_data_dynamic::<checksum::Adler32Checksum>(input);
+    data.insert(0, 1);
+    data.insert(0, 120);
+
+    data.push((checksum >> 24) as u8);
+    data.push((checksum >> 16) as u8);
+    data.push((checksum >> 8) as u8);
+    data.push(checksum as u8);
+    data
 }
 
 #[cfg(test)]
 mod test {
+    use stored_block::compress_data_stored;
+    use super::compress_data_fixed;
 
     /// Helper function to decompress into a `Vec<u8>`
     fn decompress_to_end(input: &[u8]) -> Vec<u8> {
@@ -251,7 +266,7 @@ mod test {
     #[test]
     fn test_no_compression_one_chunk() {
         let test_data = vec![1u8, 2, 3, 4, 5, 6, 7, 8];
-        let compressed = compress_data(&test_data, BType::NoCompression);
+        let compressed = compress_data_stored(&test_data);
         let result = decompress_to_end(&compressed);
         assert_eq!(test_data, result);
     }
@@ -259,7 +274,7 @@ mod test {
     #[test]
     fn test_no_compression_multiple_chunks() {
         let test_data = vec![32u8; 40000];
-        let compressed = compress_data(&test_data, BType::NoCompression);
+        let compressed = compress_data_stored(&test_data);
         let result = decompress_to_end(&compressed);
         assert_eq!(test_data, result);
     }
@@ -269,7 +284,7 @@ mod test {
         let test_data = String::from("This is some text, this is some more text, this is even \
                                       more text, lots of text here.")
             .into_bytes();
-        let compressed = compress_data(&test_data, BType::NoCompression);
+        let compressed = compress_data_stored(&test_data);
         let result = decompress_to_end(&compressed);
         assert_eq!(test_data, result);
     }
@@ -279,7 +294,7 @@ mod test {
         use std::str;
         // let test_data = b".......................BB";
         let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
-        let compressed = compress_data(&test_data, BType::FixedHuffman);
+        let compressed = compress_data_fixed(&test_data);
 
         let result = decompress_to_end(&compressed);
         println!("Output: `{}`", str::from_utf8(&result).unwrap());
@@ -290,7 +305,7 @@ mod test {
     fn test_fixed_data() {
 
         let data = vec![190u8; 400];
-        let compressed = compress_data(&data, BType::FixedHuffman);
+        let compressed = compress_data_fixed(&data);
         let result = decompress_to_end(&compressed);
 
         println!("data len: {}, result len: {}", data.len(), result.len());
@@ -307,7 +322,7 @@ mod test {
         // let check =
         // [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0];
         let check = [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0x00, 0x11, 0x00];
-        let compressed = compress_data(test_data, BType::FixedHuffman);
+        let compressed = compress_data_fixed(test_data);
         assert_eq!(&compressed, &check);
         let decompressed = decompress_to_end(&compressed);
         assert_eq!(&decompressed, test_data)
@@ -323,7 +338,7 @@ mod test {
         let mut f = File::open("src/pg11.txt").unwrap();
 
         f.read_to_end(&mut input).unwrap();
-        let compressed = compress_data(&input, BType::FixedHuffman);
+        let compressed = compress_data_fixed(&input);
         println!("Compressed len: {}", compressed.len());
         let result = decompress_to_end(&compressed);
         let out1 = str::from_utf8(&input).unwrap();
@@ -340,9 +355,8 @@ mod test {
     #[test]
     fn test_dynamic_string_mem() {
         use std::str;
-        // let test_data = b".......................BB";
         let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
-        let compressed = compress_data(&test_data, BType::DynamicHuffman);
+        let compressed = deflate_bytes(&test_data);
 
         let result = decompress_to_end(&compressed);
         assert_eq!(test_data, result);
@@ -358,13 +372,28 @@ mod test {
         let mut f = File::open("src/pg11.txt").unwrap();
 
         f.read_to_end(&mut input).unwrap();
-        let compressed = compress_data(&input, BType::DynamicHuffman);
+        let compressed = deflate_bytes(&input);
 
         println!("Compressed len: {}", compressed.len());
 
         let result = decompress_to_end(&compressed);
+        // Check that we actually managed to compress the input
         assert!(compressed.len() < input.len());
         // Not using assert_eq here deliberately to avoid massive amounts of output spam
         assert!(input == result);
+    }
+
+    #[test]
+    fn test_dynamic_string_zlib() {
+        use std::io::Read;
+        use flate2::read::ZlibDecoder;
+        let test_data = String::from("foo zdsujghns aaaaaa hello hello eshtguiq3ayth932wa7tyh13a79hgqae78guh").into_bytes();
+        let compressed = deflate_bytes_zlib(&test_data);
+
+        let mut e = ZlibDecoder::new(&compressed[..]);
+
+        let mut result = Vec::new();
+        let _ = e.read_to_end(&mut result).unwrap();
+        assert_eq!(&test_data, &result);
     }
 }
