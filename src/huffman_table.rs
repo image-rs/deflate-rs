@@ -1,4 +1,5 @@
 use std::fmt;
+use bit_reverse::reverse_bits;
 
 #[derive(Debug)]
 pub enum HuffmanError {
@@ -108,28 +109,6 @@ pub static DISTANCE_BASE: [u16; NUM_DISTANCE_CODES] =
     [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536,
      2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576];
 
-/// Reverse the first `length bits of the code `code`.
-/// Returns None if `length` > 15
-fn reverse_bits(code: u16, length: u8) -> Option<u16> {
-    if length > 15 {
-        return None;
-    }
-    // This is basically ported from zlib, it's not the fastest
-    // or the most idiomatic way of implementing this.
-    // TODO: FIx link
-    // https://github.com/madler/zlib/blob/master/trees.c#L1154
-    let mut ret = 0u16;
-    let mut length = length;
-    let mut code = code;
-    while length > 0 {
-        ret |= code & 1;
-        code >>= 1;
-        ret <<= 1;
-        length -= 1;
-    }
-    Some(ret >> 1)
-}
-
 /// A struct representing the data needed to generate the bit codes for
 /// a given value and huffman table.
 #[derive(Copy, Clone)]
@@ -223,16 +202,16 @@ impl fmt::Debug for HuffmanCode {
 }
 
 impl HuffmanCode {
+    /// Create a new huffman code struct, reversing the bits in the code
+    /// Returns None if the code is longer than 15 bits (the maximum allowed by the DEFLATE spec)
     fn from_reversed_bits(code: u16, length: u8) -> Option<HuffmanCode> {
-        let reversed = reverse_bits(code, length);
-        match reversed {
-            Some(c) => {
-                Some(HuffmanCode {
-                    code: c,
-                    length: length,
-                })
-            }
-            None => None,
+        if length <= 15 {
+            Some(HuffmanCode {
+                code: reverse_bits(code, length),
+                length: length,
+            })
+        } else {
+            None
         }
     }
 }
@@ -517,12 +496,5 @@ mod test {
         assert_eq!(ld.distance_code.code, 0b00100);
         assert_eq!(ld.distance_extra_bits.length, 1);
         assert_eq!(ld.distance_extra_bits.code, 0);
-    }
-
-    #[test]
-    fn test_bit_reverse() {
-        let bits = 0b0111_0100;
-        let reversed = super::reverse_bits(bits, 8).expect("reverse_bits returned None!");
-        assert_eq!(reversed, 0b0010_1110);
     }
 }

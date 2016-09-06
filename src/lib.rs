@@ -15,6 +15,7 @@ mod huffman_lengths;
 mod bit_writer;
 mod zlib;
 mod checksum;
+mod bit_reverse;
 use huffman_table::*;
 use lz77::{LDPair, lz77_compress};
 use huffman_lengths::write_huffman_lengths;

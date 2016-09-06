@@ -37,20 +37,25 @@ fn add_fcheck(cmf: u8, flg: u8) -> u8 {
 }
 
 pub fn write_zlib_header<W: Write>(level: CompressionLevel, writer: &mut W) -> Result<()> {
+    writer.write_all(&get_zlib_header(level))
+}
+
+/// Get the zlib header for the `CompressionLevel` level using the default window size and no
+/// dictionary
+pub fn get_zlib_header(level: CompressionLevel) -> [u8; 2] {
     let cmf = DEFAULT_CMF;
-    let flg = add_fcheck(cmf, (level as u8) << 6);
-    let bytes = [cmf, flg];
-    writer.write_all(&bytes)
+    [cmf, add_fcheck(cmf, (level as u8) << 6)]
 }
 
 #[cfg(test)]
 mod test {
     use super::DEFAULT_CMF;
+    use super::*;
 
     #[test]
     fn test_gen_fcheck() {
         let cmf = DEFAULT_CMF;
-        let flg = super::add_fcheck(DEFAULT_CMF, super::CompressionLevel::Default as u8 | super::DEFAULT_FDICT);
+        let flg = super::add_fcheck(DEFAULT_CMF, CompressionLevel::Default as u8 | super::DEFAULT_FDICT);
         assert_eq!(((usize::from(cmf) * 256) + usize::from(flg)) % 31, 0);
     }
 }
