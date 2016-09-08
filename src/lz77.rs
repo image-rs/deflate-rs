@@ -132,7 +132,7 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
     let end = cmp::min(data.len(), end);
     let current_chunk = &data[start..end];
     let mut insert_it = current_chunk.iter().enumerate();
-    let mut hash_it = current_chunk[2..].iter();
+    let mut hash_it = (&data[start + 2..]).iter();
 
     // Write start of block and check if this is the final block (e.g no more input)
     writer.write_start_of_block(end == data.len());
@@ -223,6 +223,8 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
 /// Compress a slice, not storing frequency information
 ///
 /// This is a convenience function for compression with fixed huffman values
+/// Only used in tests for now
+#[allow(dead_code)]
 pub fn lz77_compress(data: &[u8], _window_size: usize) -> Option<Vec<LDPair>> {
     use checksum::NoChecksum;
     let mut w = FixedWriter::new();

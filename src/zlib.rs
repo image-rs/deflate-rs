@@ -9,17 +9,18 @@ const DEFAULT_CMF: u8 = DEFAULT_CM | DEFAULT_CINFO;
 // No dict by default
 const DEFAULT_FDICT: u8 = 0;
 // FLEVEL = 0 means fastest compression algorithm
-const DEFAULT_FLEVEL: u8 = 0 << 7;
+const _DEFAULT_FLEVEL: u8 = 0 << 7;
 
 // The 16-bit value consisting of CMF and FLG must be divisible by this to be valid
 const FCHECK_DIVISOR: u8 = 31;
 
+#[allow(dead_code)]
 #[repr(u8)]
 pub enum CompressionLevel {
-    Fastest = 0,
-    Fast = 1,
-    Default = 2,
-    Maximum = 3,
+    Fastest = 0 << 6,
+    Fast = 1 << 6,
+    Default = 2 << 6,
+    Maximum = 3 << 6,
 }
 
 /// Generate FCHECK from CMF and FLG (without FCKECH )so that they are correct according to the specification,
@@ -29,14 +30,14 @@ fn add_fcheck(cmf: u8, flg: u8) -> u8 {
     let rem = ((usize::from(cmf) * 256) + usize::from(flg)) % usize::from(FCHECK_DIVISOR);
 
     // Clear existing FCHECK if any
-    let flg = flg & 0b00000111;
+    let flg = flg & 0b11100000;
 
     // Casting is safe as rem can't overflow since it is a value mod 31
     // We can simply add the value to flg as (31 - rem) will never be above 2^5
     flg + (FCHECK_DIVISOR - rem as u8)
 }
 
-pub fn write_zlib_header<W: Write>(level: CompressionLevel, writer: &mut W) -> Result<()> {
+pub fn write_zlib_header<W: Write>(writer: &mut W, level: CompressionLevel) -> Result<()> {
     writer.write_all(&get_zlib_header(level))
 }
 
@@ -44,7 +45,7 @@ pub fn write_zlib_header<W: Write>(level: CompressionLevel, writer: &mut W) -> R
 /// dictionary
 pub fn get_zlib_header(level: CompressionLevel) -> [u8; 2] {
     let cmf = DEFAULT_CMF;
-    [cmf, add_fcheck(cmf, (level as u8) << 6)]
+    [cmf, add_fcheck(cmf, level as u8)]
 }
 
 #[cfg(test)]
@@ -57,5 +58,11 @@ mod test {
         let cmf = DEFAULT_CMF;
         let flg = super::add_fcheck(DEFAULT_CMF, CompressionLevel::Default as u8 | super::DEFAULT_FDICT);
         assert_eq!(((usize::from(cmf) * 256) + usize::from(flg)) % 31, 0);
+    }
+
+    #[test]
+    fn test_header() {
+        let header = get_zlib_header(CompressionLevel::Default);
+        assert_eq!(((usize::from(header[0]) * 256) + usize::from(header[1])) % 31, 0);
     }
 }

@@ -69,11 +69,7 @@ impl ChainedHashTable {
 
     #[allow(dead_code)]
     fn slide_value(b: u16, bytes: u16) -> u16 {
-        if b >= bytes {
-            b - bytes
-        } else {
-            0
-        }
+        if b >= bytes { b - bytes } else { 0 }
     }
 
     pub fn slide(&mut self, bytes: usize) {

@@ -12,16 +12,18 @@ mod length_encode;
 mod output_writer;
 mod stored_block;
 mod huffman_lengths;
-mod bit_writer;
 mod zlib;
 mod checksum;
 mod bit_reverse;
+mod bitstream;
 use huffman_table::*;
 use lz77::{LDPair, lz77_compress};
 use huffman_lengths::write_huffman_lengths;
 use length_encode::huffman_lengths_from_frequency;
-use bit_writer::BitWriter;
 use checksum::RollingChecksum;
+use std::io::{Write, Cursor};
+use std::io;
+use bitstream::{LsbWriter, BitWriter};
 
 // The first bits of each block, which describe the type of the block
 // `-TTF` - TT = type, 00 = stored, 01 = fixed, 10 = dynamic, 11 = reserved, F - 1 if final block
@@ -34,38 +36,38 @@ const DYNAMIC_FIRST_BYTE_FINAL: u16 = 0b101;
 pub enum BType {
     NoCompression = 0b00,
     FixedHuffman = 0b01,
-    DynamicHuffman = 0b10, // Reserved = 0b11, //Error
+    DynamicHuffman = 0b10,
+    // Reserved = 0b11, //Error
 }
 
-// TODO: Use a trait here, and have implementations for each block type
-struct EncoderState {
+struct EncoderState<W: Write> {
     huffman_table: huffman_table::HuffmanTable,
-    writer: BitWriter,
+    writer: LsbWriter<W>,
     fixed: bool,
 }
 
-impl EncoderState {
-    fn new(huffman_table: HuffmanTable) -> EncoderState {
+impl <W: Write> EncoderState<W> {
+    fn new(huffman_table: HuffmanTable, writer: W) -> EncoderState<W> {
         EncoderState {
             huffman_table: huffman_table,
-            writer: BitWriter::new(),
+            writer: LsbWriter::new(writer),
             fixed: false,
         }
     }
 
-    fn fixed() -> EncoderState {
-        let mut ret = EncoderState::new(HuffmanTable::fixed_table());
+    fn fixed(writer: W) -> EncoderState<W> {
+        let mut ret = EncoderState::new(HuffmanTable::fixed_table(), writer);
         ret.fixed = true;
         ret
     }
 
     /// Encodes a literal value to the writer
-    fn write_literal(&mut self, value: u8) {
+    fn write_literal(&mut self, value: u8) -> io::Result<()> {
         let code = self.huffman_table.get_literal(value);
-        self.writer.write_bits(code.code, code.length);
+        self.writer.write_bits(code.code, code.length)
     }
 
-    fn write_ldpair(&mut self, value: LDPair) {
+    fn write_ldpair(&mut self, value: LDPair) -> io::Result<()> {
         match value {
             LDPair::Literal(l) => self.write_literal(l),
             LDPair::LengthDistance { length, distance } => {
@@ -74,52 +76,48 @@ impl EncoderState {
                     .expect(&format!("Failed to get code for length: {}, distance: {}",
                                      length,
                                      distance));
-                self.writer.write_bits(ldencoded.length_code.code, ldencoded.length_code.length);
-                self.writer.write_bits(ldencoded.length_extra_bits.code,
-                                       ldencoded.length_extra_bits.length);
-                self.writer
-                    .write_bits(ldencoded.distance_code.code, ldencoded.distance_code.length);
+                try!(self.writer.write_bits(ldencoded.length_code.code, ldencoded.length_code.length));
+                try!(self.writer.write_bits(ldencoded.length_extra_bits.code,
+                                       ldencoded.length_extra_bits.length));
+                try!(self.writer
+                    .write_bits(ldencoded.distance_code.code, ldencoded.distance_code.length));
                 self.writer.write_bits(ldencoded.distance_extra_bits.code,
-                                       ldencoded.distance_extra_bits.length);
+                                       ldencoded.distance_extra_bits.length)
             }
             LDPair::BlockStart{..} => {
                 panic!("Tried to write start of block, this should not be handled here!");
             },
             LDPair::EndOfBlock => {
-                self.write_end_of_block();
+                self.write_end_of_block()
             }
-        };
+        }
     }
 
     /// Write the start of a block
-    fn write_start_of_block(&mut self, final_block: bool) {
+    fn write_start_of_block(&mut self, final_block: bool) -> io::Result<()> {
         if final_block {
             // The final block has one bit flipped to indicate it's
             // the final one
             if self.fixed {
-                self.writer.write_bits(FIXED_FIRST_BYTE_FINAL, 3);
+                self.writer.write_bits(FIXED_FIRST_BYTE_FINAL, 3)
             } else {
-                self.writer.write_bits(DYNAMIC_FIRST_BYTE_FINAL, 3);
+                self.writer.write_bits(DYNAMIC_FIRST_BYTE_FINAL, 3)
             }
         } else if self.fixed {
-            self.writer.write_bits(FIXED_FIRST_BYTE, 3);
+            self.writer.write_bits(FIXED_FIRST_BYTE, 3)
         } else {
-            self.writer.write_bits(DYNAMIC_FIRST_BYTE, 3);
+            self.writer.write_bits(DYNAMIC_FIRST_BYTE, 3)
         }
     }
 
-    fn write_end_of_block(&mut self) {
+    fn write_end_of_block(&mut self) -> io::Result<()> {
         let code = self.huffman_table.get_end_of_block();
-        self.writer.write_bits(code.code, code.length);
+        self.writer.write_bits(code.code, code.length)
     }
 
-    /// Move and return the buffer from the writer
-    pub fn take_buffer(&mut self) -> Vec<u8> {
-        std::mem::replace(&mut self.writer.buffer, vec![])
-    }
 
-    pub fn flush(&mut self) {
-        self.writer.finish();
+    pub fn flush(&mut self) -> io::Result<()> {
+        self.writer.flush()
     }
 
     pub fn set_huffman_table(&mut self, table: huffman_table::HuffmanTable) {
@@ -128,46 +126,42 @@ impl EncoderState {
 }
 
 fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
-    let mut output = Vec::new();
-    let mut state = EncoderState::fixed();
+    let mut writer = Cursor::new(Vec::new());
+    {
+    let mut state = EncoderState::fixed(&mut writer);
     let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
-    let clen = compressed.len();
 
     //We currently don't split blocks, we should do this eventually
-    state.write_start_of_block(true);
+    state.write_start_of_block(true).expect("Write error!");
     for ld in compressed {
         //We ignore end of block here for now since there is no purpose of
         //splitting a full stream of data using fixed huffman data into blocks
         match ld {
             LDPair::BlockStart{..}|LDPair::EndOfBlock =>
             (),
-                _ => state.write_ldpair(ld),
+            _ => {println!("{:?}", ld);
+                  state.write_ldpair(ld).expect("Write error!")},
         }
     }
 
-    state.write_end_of_block();
-    state.flush();
+    state.write_end_of_block().expect("Write error");
+    state.flush().expect("Writer error!");
 
-    output.extend(state.take_buffer());
-    println!("Input length: {}, Compressed len: {}, Output length: {}",
-             input.len(),
-             clen,
-             output.len());
-    output
+    }
+    writer.into_inner()
 }
 
-fn compress_data_dynamic<RC: RollingChecksum>(input: &[u8]) -> (Vec<u8>, u32) {
-    let mut output = Vec::new();
-    let mut state = EncoderState::new(huffman_table::HuffmanTable::empty());
+fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer: &mut W, mut checksum: &mut RC) -> io::Result<()> {
+    let mut state = EncoderState::new(huffman_table::HuffmanTable::empty(), &mut writer);
 
     let mut lz77_state = lz77::LZ77State::new(input);
     let mut lz77_writer = output_writer::DynamicWriter::new();
-    let mut checksum = RC::new();
+
     checksum.update_from_slice(&input[..2]);
 
     while !lz77_state.is_last_block() {
-        lz77::lz77_compress_block(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
-        state.write_start_of_block(lz77_state.is_last_block());
+        lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
+        try!(state.write_start_of_block(lz77_state.is_last_block()));
 
         let (l_lengths, d_lengths) = {
             let (l_freqs, d_freqs) = lz77_writer.get_frequencies();
@@ -175,7 +169,7 @@ fn compress_data_dynamic<RC: RollingChecksum>(input: &[u8]) -> (Vec<u8>, u32) {
             (huffman_lengths_from_frequency(l_freqs, MAX_CODE_LENGTH),
              huffman_lengths_from_frequency(d_freqs, MAX_CODE_LENGTH))
         };
-        write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer);
+        try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
         let codes = HuffmanTable::from_length_tables(&l_lengths, &d_lengths).expect(
             "Error: Failed to create huffman table!"
         );
@@ -184,37 +178,37 @@ fn compress_data_dynamic<RC: RollingChecksum>(input: &[u8]) -> (Vec<u8>, u32) {
         for ld in lz77_writer.get_buffer() {
             match *ld {
                 LDPair::BlockStart{..} => (),
-                _ =>  state.write_ldpair(*ld),
+                _ =>  try!(state.write_ldpair(*ld)),
             }
         }
-        // End of block is written in write_ldpair
 
+        // End of block is written in write_ldpair
         lz77_writer.clear();
     }
 
-    state.flush();
+    state.flush().unwrap();
 
-    output.extend(state.take_buffer());
-
-    (output, checksum.current_hash())
+    Ok(())
 }
 
 pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
-    let (data, _) = compress_data_dynamic::<checksum::NoChecksum>(input);
-    data
+    let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
+    compress_data_dynamic(input, &mut writer, &mut checksum::NoChecksum::new()).unwrap();
+    writer.into_inner()
 }
 
 pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
-    // Temporary doing this in a hacky way for testing purposes
-    let (mut data, checksum) = compress_data_dynamic::<checksum::Adler32Checksum>(input);
-    data.insert(0, 1);
-    data.insert(0, 120);
+    let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
+    // Write header
+    zlib::write_zlib_header(&mut writer, zlib::CompressionLevel::Default).unwrap();
 
-    data.push((checksum >> 24) as u8);
-    data.push((checksum >> 16) as u8);
-    data.push((checksum >> 8) as u8);
-    data.push(checksum as u8);
-    data
+    let mut checksum = checksum::Adler32Checksum::new();
+    compress_data_dynamic(input, &mut writer, &mut checksum).unwrap();
+
+    let hash = checksum.current_hash();
+    println!("Hash {}", hash);
+    writer.write_all(&[(hash >> 24) as u8, (hash >> 16) as u8, (hash >> 8) as u8, hash as u8]).unwrap();
+    writer.into_inner()
 }
 
 #[cfg(test)]
@@ -263,6 +257,16 @@ mod test {
 
     use super::*;
 
+    fn get_test_file_data(name: &str) -> Vec<u8> {
+        use std::fs::File;
+        use std::io::Read;
+        let mut input = Vec::new();
+        let mut f = File::open(name).unwrap();
+
+        f.read_to_end(&mut input).unwrap();
+        input
+    }
+
 
     #[test]
     fn test_no_compression_one_chunk() {
@@ -310,6 +314,9 @@ mod test {
         let result = decompress_to_end(&compressed);
 
         println!("data len: {}, result len: {}", data.len(), result.len());
+        for n in compressed {
+            println!("{:#b}", n)
+        }
         assert_eq!(data, result);
     }
 
@@ -365,14 +372,8 @@ mod test {
 
     #[test]
     fn test_dynamic_string_file() {
-        use std::fs::File;
-        use std::io::Read;
         use std::str;
-        let mut input = Vec::new();
-
-        let mut f = File::open("src/pg11.txt").unwrap();
-
-        f.read_to_end(&mut input).unwrap();
+        let input = get_test_file_data("src/pg11.txt");
         let compressed = deflate_bytes(&input);
 
         println!("Compressed len: {}", compressed.len());
@@ -388,13 +389,16 @@ mod test {
     fn test_dynamic_string_zlib() {
         use std::io::Read;
         use flate2::read::ZlibDecoder;
-        let test_data = String::from("foo zdsujghns aaaaaa hello hello eshtguiq3ayth932wa7tyh13a79hgqae78guh").into_bytes();
+        use checksum::{RollingChecksum, Adler32Checksum};
+
+        let test_data = get_test_file_data("src/pg11.txt");
+        //let test_data = String::from("foo zdsujghns aaaaaa hello hello eshtguiq3ayth932wa7tyh13a79hgqae78guh").into_bytes();
         let compressed = deflate_bytes_zlib(&test_data);
 
         let mut e = ZlibDecoder::new(&compressed[..]);
 
         let mut result = Vec::new();
-        let _ = e.read_to_end(&mut result).unwrap();
+        e.read_to_end(&mut result).unwrap();
         assert_eq!(&test_data, &result);
     }
 }

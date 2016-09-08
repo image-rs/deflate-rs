@@ -11,6 +11,7 @@ pub fn reverse_bits(mut n: u16, length: u8) -> u16 {
     n >> (16 - min(length, 16))
 }
 
+#[cfg(test)]
 mod test {
     use super::reverse_bits;
     #[test]
