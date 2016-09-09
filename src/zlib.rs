@@ -7,6 +7,7 @@ const DEFAULT_CINFO: u8 = 7 << 4;
 const DEFAULT_CMF: u8 = DEFAULT_CM | DEFAULT_CINFO;
 // const DEFAULT_FCHECK:
 // No dict by default
+#[cfg(test)]
 const DEFAULT_FDICT: u8 = 0;
 // FLEVEL = 0 means fastest compression algorithm
 const _DEFAULT_FLEVEL: u8 = 0 << 7;

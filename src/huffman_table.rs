@@ -32,6 +32,7 @@ pub const END_OF_BLOCK_POSITION: usize = 256;
 
 // Bit lengths for literal and length codes in the fixed huffman table
 // The huffman codes are generated from this and the distance bit length table
+#[allow(unused)]
 pub static FIXED_CODE_LENGTHS: [u8; NUM_LITERALS_AND_LENGTHS + 2] =
     [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
      8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
@@ -100,6 +101,7 @@ const LENGTH_BITS_START: u16 = 257;
 
 // Lengths for the distance codes in the pre-defined/fixed huffman table
 // (All distance codes are 5 bits long)
+#[cfg(test)]
 pub static FIXED_CODE_LENGTHS_DISTANCE: [u8; NUM_DISTANCE_CODES + 2] = [5; NUM_DISTANCE_CODES + 2];
 
 pub static DISTANCE_CODES: [u8; 512] =
@@ -353,6 +355,7 @@ impl HuffmanTable {
     }
 
     /// Create a HuffmanTable using the fixed tables specified in the DEFLATE format specification.
+    #[cfg(test)]
     pub fn fixed_table() -> HuffmanTable {
         // This should be safe to unwrap, if it were to panic the code is wrong,
         // tests should catch it.
