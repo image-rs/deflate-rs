@@ -21,7 +21,7 @@ mod encoder_state;
 
 use huffman_table::*;
 use lz77::LDPair;
-use huffman_lengths::write_huffman_lengths;
+use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes};
 use length_encode::huffman_lengths_from_frequency;
 use checksum::RollingChecksum;
 use std::io::{Write, Cursor};
@@ -78,9 +78,12 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
 
         let (l_lengths, d_lengths) = {
             let (l_freqs, d_freqs) = lz77_writer.get_frequencies();
-
-            (huffman_lengths_from_frequency(l_freqs, MAX_CODE_LENGTH),
-             huffman_lengths_from_frequency(d_freqs, MAX_CODE_LENGTH))
+            // The huffman spec allows us to exclude zeroes at the end of the table of
+            // of huffman lengths. Since a frequency of 0 will give an huffman length of 0
+            // we strip off the trailing zeroes before even generating the lengths to save
+            // some work
+            (huffman_lengths_from_frequency(remove_trailing_zeroes(l_freqs), MAX_CODE_LENGTH),
+             huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs), MAX_CODE_LENGTH))
         };
         try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
         let codes = HuffmanTable::from_length_tables(&l_lengths, &d_lengths).expect(
@@ -121,6 +124,7 @@ pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
     let hash = checksum.current_hash();
     println!("Hash {}", hash);
     writer.write_all(&[(hash >> 24) as u8, (hash >> 16) as u8, (hash >> 8) as u8, hash as u8]).unwrap();
+    println!("last byte: {}", hash as u8);
     writer.into_inner()
 }
 
@@ -307,10 +311,19 @@ mod test {
         //let test_data = String::from("foo zdsujghns aaaaaa hello hello eshtguiq3ayth932wa7tyh13a79hgqae78guh").into_bytes();
         let compressed = deflate_bytes_zlib(&test_data);
 
+        {
+            use std::fs::File;
+            use std::io::Write;
+            let mut f = File::create("out.zlib").unwrap();
+            f.write_all(&compressed).unwrap();
+        }
+
+        println!("Last bytes: {:?}", &compressed[compressed.len() - 11..]);
+
         let mut e = ZlibDecoder::new(&compressed[..]);
 
         let mut result = Vec::new();
         e.read_to_end(&mut result).unwrap();
-        assert_eq!(&test_data, &result);
+        assert!(&test_data == &result);
     }
 }

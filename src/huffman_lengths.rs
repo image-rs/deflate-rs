@@ -2,12 +2,13 @@ use length_encode::EncodedLength;
 use length_encode::{encode_lengths, huffman_lengths_from_frequency, COPY_PREVIOUS,
                     REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS};
 use huffman_table::{create_codes, NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES};
-// use bit_writer::BitWriter;
+
 use bitstream::{BitWriter, LsbWriter};
 use std::io::{Write, Result};
 
 // The output ordering of the lenghts for the huffman codes used to encode the lenghts
 // used to build the full huffman tree for length/literal codes.
+// http://www.gzip.org/zlib/rfc-deflate.html#dyn
 const HUFFMAN_LENGTH_ORDER: [u8; 19] = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14,
                                         1, 15];
 
@@ -19,12 +20,22 @@ const HCLEN_BITS: u8 = 4;
 // The longest a huffman code describing another huffman length can be
 const MAX_HUFFMAN_CODE_LENGTH: usize = 7;
 
+/// Creates a new slice from the input slice that stops at the final non-zero value
+pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T]) -> &[T] {
+    let num_zeroes = input.iter().rev().take_while(|&a| *a == T::from(0)).count();
+    //    println!("input {:?}", input);
+    //    println!("Num zeroes: {}", num_zeroes);
+    &input[0..input.len() - num_zeroes]
+}
+
+/// Write the specified huffman lengths to the bit writer
 pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
                                        distance_lenghts: &[u8],
                                        writer: &mut LsbWriter<W>)
                                        -> Result<()> {
     assert!(literal_len_lengths.len() <= NUM_LITERALS_AND_LENGTHS);
     assert!(distance_lenghts.len() <= NUM_DISTANCE_CODES);
+
     // Number of length codes - 257
     let hlit = (literal_len_lengths.len() - 257) as u16;
     try!(writer.write_bits(hlit, HLIT_BITS));
@@ -38,7 +49,7 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
 
     // Add together frequencies of length and distance tables for generating codes for them as they
     // use the same codes
-    // TODO: Avoid dynamic memory allocation here (we should probably just write literal and
+    // TODO: Avoid dynamic memory allocation here (we should probably just write encoded literal and
     // length frequencies to the same array)
     // TODO: repeats can cross over from lit/len to distances, so we should do this to save a few
     // bytes
@@ -47,8 +58,9 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
         .map(|(l, d)| u32::from(*l) + u32::from(*d))
         .collect();
 
-    let huffman_table_lengths = huffman_lengths_from_frequency(merged_freqs.as_slice(),
-                                                               MAX_HUFFMAN_CODE_LENGTH);
+    let huffman_table_lengths =
+        huffman_lengths_from_frequency(remove_trailing_zeroes(merged_freqs.as_slice()),
+                                       MAX_HUFFMAN_CODE_LENGTH);
 
     // Number of huffman table lengths - 4
     let hclen = huffman_table_lengths.len() - 4;
