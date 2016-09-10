@@ -23,8 +23,6 @@ const MAX_HUFFMAN_CODE_LENGTH: usize = 7;
 /// Creates a new slice from the input slice that stops at the final non-zero value
 pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T]) -> &[T] {
     let num_zeroes = input.iter().rev().take_while(|&a| *a == T::from(0)).count();
-    //    println!("input {:?}", input);
-    //    println!("Num zeroes: {}", num_zeroes);
     &input[0..input.len() - num_zeroes]
 }
 

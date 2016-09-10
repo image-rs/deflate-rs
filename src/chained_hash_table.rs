@@ -173,7 +173,6 @@ mod test {
             let end_byte = input[window_size - 1];
             while pos > 0 {
                 assert_eq!(input[pos as usize & window_size - 1], end_byte);
-                println!("pos: {}", pos);
                 pos = hash_table.get_prev(pos as usize);
             }
 
@@ -194,8 +193,6 @@ mod test {
         let end_byte = input[(window_size / 2) - 1];
         let mut iterations = 0;
         while pos > window_size16 && iterations < 5000 {
-            //            println!("`{}`",
-            // str::from_utf8(&[input[pos as usize & window_size - 1]]).unwrap());
             assert_eq!(input[pos as usize & window_size - 1], end_byte);
 
             pos = hash_table.get_prev(pos as usize);

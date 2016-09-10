@@ -23,28 +23,21 @@ impl RollingChecksum for NoChecksum {
 
 pub struct Adler32Checksum {
     adler32: RollingAdler32,
-    counter: u64,
 }
 
 impl RollingChecksum for Adler32Checksum {
     fn new() -> Self {
-        Adler32Checksum {
-            adler32: RollingAdler32::new(),
-            counter: 0,
-        }
+        Adler32Checksum { adler32: RollingAdler32::new() }
     }
     fn update(&mut self, byte: u8) {
-        self.counter += 1;
         self.adler32.update(byte);
     }
 
     fn update_from_slice(&mut self, data: &[u8]) {
-        self.counter += data.len() as u64;
         self.adler32.update_buffer(data);
     }
 
     fn current_hash(&self) -> u32 {
-        println!("Counter: {}", self.counter);
         self.adler32.hash()
     }
 }

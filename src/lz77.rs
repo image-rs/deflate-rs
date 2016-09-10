@@ -182,7 +182,6 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
     let window_size = DEFAULT_WINDOW_SIZE;
 
     if state.is_first_window {
-        println!("First! Hash table pos: {}",
                  state.hash_table.current_position());
         let first_chunk_end = cmp::min(window_size, data.len());
         process_chunk::<W, RC>(data,
@@ -197,7 +196,6 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
         }
         state.is_first_window = false;
     } else {
-        println!("Currently at: {}", state.current_start);
         let start = state.current_start;
         let slice = &data[start - window_size..];
         let end = cmp::min(window_size * 2, slice.len());

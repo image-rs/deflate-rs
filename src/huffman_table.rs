@@ -292,10 +292,6 @@ pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanErro
 
     let (max_length, max_length_pos, lengths) = try!(build_length_count_table(length_table));
 
-    println!("Max length: {}, max_length_pos: {}",
-             max_length,
-             max_length_pos);
-
     let mut code = 0u16;
     let mut next_code = vec![0u16];
 
@@ -306,7 +302,6 @@ pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanErro
 
     for n in 0..max_length_pos + 1 {
         let length = usize::from(length_table[n]);
-        // println!("n: {}, length: {}", n, length);
         if length != 0 {
             // The algorithm generates the code in the reverse bit order, so we need to reverse them
             // to get the correct codes.
@@ -510,7 +505,6 @@ mod test {
 
         let ld = table.get_length_distance_code(4, 5).unwrap();
 
-        //    println!("Correct code from pos: {:?}", table.codes[258]);
         println!("257: {:?}, 258: {:?}, 259: {:?}",
                  table.codes[257],
                  table.codes[258],

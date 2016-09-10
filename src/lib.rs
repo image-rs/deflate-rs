@@ -324,6 +324,5 @@ mod test {
         let mut result = Vec::new();
         e.read_to_end(&mut result).unwrap();
         assert!(&test_data == &result);
-        panic!();
     }
 }
