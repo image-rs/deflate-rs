@@ -122,9 +122,7 @@ pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
     compress_data_dynamic(input, &mut writer, &mut checksum).unwrap();
 
     let hash = checksum.current_hash();
-    println!("Hash {}", hash);
     writer.write_all(&[(hash >> 24) as u8, (hash >> 16) as u8, (hash >> 8) as u8, hash as u8]).unwrap();
-    println!("last byte: {}", hash as u8);
     writer.into_inner()
 }
 
@@ -303,7 +301,7 @@ mod test {
     }
 
     #[test]
-    fn test_dynamic_string_zlib() {
+    fn test_file_zlib() {
         use std::io::Read;
         use flate2::read::ZlibDecoder;
 
@@ -317,7 +315,8 @@ mod test {
             let mut f = File::create("out.zlib").unwrap();
             f.write_all(&compressed).unwrap();
         }
-*/
+         */
+        println!("compressed length: {}", compressed.len());
 
         let mut e = ZlibDecoder::new(&compressed[..]);
 

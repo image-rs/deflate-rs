@@ -74,23 +74,13 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
     let mut best_length = MIN_MATCH - 1;
     let mut best_distance = 0;
 
-    loop {
-        if (current_head as usize) < limit {
-            break;
-        }
-
-
-        if current_head == 0 {
-            break;
-        }
-
+    while (current_head as usize) >= limit && current_head != 0 {
         let distance = position - current_head as usize;
 
-        if distance > 0 {
-            // We only check further if the match length can actually increase
-            if (position + best_length as usize) < data.len() &&
-               data[position + best_length as usize] ==
-               data[current_head as usize + best_length as usize] {
+        // We only check further if the match length can actually increase
+        if distance > 0 && (position + best_length as usize) < data.len() &&
+            data[position + best_length as usize] ==
+            data[current_head as usize + best_length as usize] {
                 let length = get_match_length(data, position, current_head as usize);
                 if length > best_length {
                     best_length = length;
@@ -101,7 +91,6 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
                         break;
                     }
                 }
-            }
         }
         current_head = hash_table.get_prev(current_head as usize);
         if current_head == starting_head {
@@ -109,6 +98,7 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
             break;
         }
     }
+
     (best_length, best_distance as u16)
 }
 
@@ -182,7 +172,7 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
     let window_size = DEFAULT_WINDOW_SIZE;
 
     if state.is_first_window {
-                 state.hash_table.current_position());
+
         let first_chunk_end = cmp::min(window_size, data.len());
         process_chunk::<W, RC>(data,
                                0,
