@@ -58,18 +58,23 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
         .map(|(l, d)| u32::from(*l) + u32::from(*d))
         .collect();
 
-    let huffman_table_lengths =
-        huffman_lengths_from_frequency(remove_trailing_zeroes(merged_freqs.as_slice()),
-                                       MAX_HUFFMAN_CODE_LENGTH);
+    let huffman_table_lengths = huffman_lengths_from_frequency(merged_freqs.as_slice(),
+                                                               MAX_HUFFMAN_CODE_LENGTH);
+
+    let used_hclens = HUFFMAN_LENGTH_ORDER.len() -
+                      HUFFMAN_LENGTH_ORDER.iter()
+        .rev()
+        .take_while(|&&n| huffman_table_lengths[n as usize] == 0)
+        .count();
 
     // Number of huffman table lengths - 4
-    let hclen = huffman_table_lengths.len() - 4;
+    let hclen = used_hclens - 4;
 
     try!(writer.write_bits(hclen as u16, HCLEN_BITS));
 
     // Write the lengths for the huffman table describing the huffman table
     // Each length is 3 bits
-    for n in &HUFFMAN_LENGTH_ORDER {
+    for n in &HUFFMAN_LENGTH_ORDER[..used_hclens] {
         try!(writer.write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3));
     }
 

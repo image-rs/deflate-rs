@@ -308,22 +308,22 @@ mod test {
         use flate2::read::ZlibDecoder;
 
         let test_data = get_test_file_data("src/pg11.txt");
-        //let test_data = String::from("foo zdsujghns aaaaaa hello hello eshtguiq3ayth932wa7tyh13a79hgqae78guh").into_bytes();
-        let compressed = deflate_bytes_zlib(&test_data);
 
+        let compressed = deflate_bytes_zlib(&test_data);
+/*
         {
             use std::fs::File;
             use std::io::Write;
             let mut f = File::create("out.zlib").unwrap();
             f.write_all(&compressed).unwrap();
         }
-
-        println!("Last bytes: {:?}", &compressed[compressed.len() - 11..]);
+*/
 
         let mut e = ZlibDecoder::new(&compressed[..]);
 
         let mut result = Vec::new();
         e.read_to_end(&mut result).unwrap();
         assert!(&test_data == &result);
+        panic!();
     }
 }
