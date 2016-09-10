@@ -20,6 +20,7 @@ mod bitstream;
 mod encoder_state;
 
 use huffman_table::*;
+#[cfg(test)]
 use lz77::LDPair;
 use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes};
 use length_encode::huffman_lengths_from_frequency;
@@ -41,24 +42,23 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
 
     let mut writer = Cursor::new(Vec::new());
     {
-    let mut state = EncoderState::fixed(&mut writer);
-    let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
+        let mut state = EncoderState::fixed(&mut writer);
+        let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
 
-    //We currently don't split blocks, we should do this eventually
-    state.write_start_of_block(true).expect("Write error!");
-    for ld in compressed {
-        //We ignore end of block here for now since there is no purpose of
-        //splitting a full stream of data using fixed huffman data into blocks
-        match ld {
-            LDPair::BlockStart{..}|LDPair::EndOfBlock =>
-            (),
-            _ => {println!("{:?}", ld);
-                  state.write_ldpair(ld).expect("Write error!")},
+        //We currently don't split blocks, we should do this eventually
+        state.write_start_of_block(true).expect("Write error!");
+        for ld in compressed {
+            //We ignore end of block here for now since there is no purpose of
+            //splitting a full stream of data using fixed huffman data into blocks
+            match ld {
+                LDPair::EndOfBlock => (),
+                _ => state.write_ldpair(ld).expect("Write error!"),
+            }
         }
-    }
 
-    state.write_end_of_block().expect("Write error");
-    state.flush().expect("Writer error!");
+        state.write_end_of_block().expect("Writer error!");
+
+        state.flush().expect("Writer error!");
 
     }
     writer.into_inner()
@@ -86,16 +86,13 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
              huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs), MAX_CODE_LENGTH))
         };
         try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
-        let codes = HuffmanTable::from_length_tables(&l_lengths, &d_lengths).expect(
-            "Error: Failed to create huffman table!"
+
+        state.update_huffman_table(&l_lengths, &d_lengths).expect(
+            "Fatal error!: Failed to create huffman table!"
         );
-        state.set_huffman_table(codes);
 
         for ld in lz77_writer.get_buffer() {
-            match *ld {
-                LDPair::BlockStart{..} => (),
-                _ =>  try!(state.write_ldpair(*ld)),
-            }
+            try!(state.write_ldpair(*ld));
         }
 
         // End of block is written in write_ldpair
@@ -109,20 +106,20 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
 
 pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
     let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
-    compress_data_dynamic(input, &mut writer, &mut checksum::NoChecksum::new()).unwrap();
+    compress_data_dynamic(input, &mut writer, &mut checksum::NoChecksum::new()).expect("Write error!");
     writer.into_inner()
 }
 
 pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
     let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
     // Write header
-    zlib::write_zlib_header(&mut writer, zlib::CompressionLevel::Default).unwrap();
+    zlib::write_zlib_header(&mut writer, zlib::CompressionLevel::Default).expect("Write error when writing zlib header!");
 
     let mut checksum = checksum::Adler32Checksum::new();
-    compress_data_dynamic(input, &mut writer, &mut checksum).unwrap();
+    compress_data_dynamic(input, &mut writer, &mut checksum).expect("Write error when writing compressed data!");
 
     let hash = checksum.current_hash();
-    writer.write_all(&[(hash >> 24) as u8, (hash >> 16) as u8, (hash >> 8) as u8, hash as u8]).unwrap();
+    writer.write_all(&[(hash >> 24) as u8, (hash >> 16) as u8, (hash >> 8) as u8, hash as u8]).expect("Write error when writing checksum!");
     writer.into_inner()
 }
 
@@ -212,7 +209,7 @@ mod test {
     #[test]
     fn test_fixed_string_mem() {
         use std::str;
-        // let test_data = b".......................BB";
+
         let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
         let compressed = compress_data_fixed(&test_data);
 

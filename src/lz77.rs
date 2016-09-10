@@ -37,7 +37,7 @@ impl LZ77State {
 pub enum LDPair {
     Literal(u8),
     LengthDistance { length: u16, distance: u16 },
-    BlockStart { is_final: bool },
+    //    BlockStart { is_final: bool },
     EndOfBlock,
 }
 
@@ -79,18 +79,18 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
 
         // We only check further if the match length can actually increase
         if distance > 0 && (position + best_length as usize) < data.len() &&
-            data[position + best_length as usize] ==
-            data[current_head as usize + best_length as usize] {
-                let length = get_match_length(data, position, current_head as usize);
-                if length > best_length {
-                    best_length = length;
-                    best_distance = distance;
-                    if length == max_length {
-                        // We are at the max length, so there is no point
-                        // searching any longer
-                        break;
-                    }
+           data[position + best_length as usize] ==
+           data[current_head as usize + best_length as usize] {
+            let length = get_match_length(data, position, current_head as usize);
+            if length > best_length {
+                best_length = length;
+                best_distance = distance;
+                if length == max_length {
+                    // We are at the max length, so there is no point
+                    // searching any longer
+                    break;
                 }
+            }
         }
         current_head = hash_table.get_prev(current_head as usize);
         if current_head == starting_head {
@@ -123,9 +123,6 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
     let current_chunk = &data[start..end];
     let mut insert_it = current_chunk.iter().enumerate();
     let mut hash_it = (&data[start + 2..]).iter();
-
-    // Write start of block and check if this is the final block (e.g no more input)
-    writer.write_start_of_block(end == data.len());
 
     // Iterate through the slice, adding literals or length/distance pairs
     while let Some((n, &b)) = insert_it.next() {
@@ -242,7 +239,6 @@ mod test {
                         n += 1;
                     }
                 }
-                LDPair::BlockStart { is_final: _ } |
                 LDPair::EndOfBlock => (),
             }
         }
@@ -295,9 +291,6 @@ mod test {
                 LDPair::LengthDistance { distance: d, length: l } => {
                     output.extend(format!("<Distance: {}, Length: {}>", d, l).into_bytes())
                 }
-                LDPair::BlockStart { is_final } => {
-                    output.extend(format!("<Start of block (final={})>", is_final).into_bytes())
-                }
                 LDPair::EndOfBlock => {
                     output.extend(format!("<End of block>").into_bytes());
                 }
@@ -322,7 +315,7 @@ mod test {
         let d_str = str::from_utf8(&decompressed).unwrap();
         println!("{}", d_str);
         assert_eq!(test_bytes, decompressed);
-        assert_eq!(res[9],
+        assert_eq!(res[8],
                    LDPair::LengthDistance {
                        distance: 5,
                        length: 4,

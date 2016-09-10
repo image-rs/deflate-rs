@@ -214,7 +214,7 @@ fn get_distance_code_and_extra_bits(distance: u16) -> Option<ExtraBits> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct HuffmanCode {
     pub code: u16,
     pub length: u8,
@@ -281,14 +281,18 @@ fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), Hu
     Ok((max_length, max_length_pos, len_counts))
 }
 
+pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanError> {
+    let mut codes = vec![HuffmanCode::default(); length_table.len()];
+    try!(create_codes_in_place(codes.as_mut_slice(), length_table));
+    Ok(codes)
+}
+
 /// Generats a vector of huffman codes given a table of bit lengths
 /// Returns an error if any of the lengths are > 15
-pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanError> {
+pub fn create_codes_in_place(code_table: &mut [HuffmanCode],
+                             length_table: &[u8])
+                             -> Result<(), HuffmanError> {
 
-    let mut codes = vec!(HuffmanCode {
-        code: 0,
-        length: 0,
-    }; length_table.len());
 
     let (max_length, max_length_pos, lengths) = try!(build_length_count_table(length_table));
 
@@ -305,22 +309,22 @@ pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanErro
         if length != 0 {
             // The algorithm generates the code in the reverse bit order, so we need to reverse them
             // to get the correct codes.
-            codes[n] = try!(HuffmanCode::from_reversed_bits(next_code[length], length as u8)
+            code_table[n] = try!(HuffmanCode::from_reversed_bits(next_code[length], length as u8)
                 .ok_or(HuffmanError::CodeTooLong));
             // We use wrapping here as we would otherwise overflow on the last code
             // This should be okay as we exit the loop after this so the value is ignored
             next_code[length] = next_code[length].wrapping_add(1);
         }
     }
-    Ok(codes)
+    Ok(())
 }
 
 /// A structure containing the tables of huffman codes for lengths, literals and distances
 pub struct HuffmanTable {
     // Literal, end of block and length codes
-    codes: Box<[HuffmanCode]>, // [HuffmanCode; 288],
+    codes: Box<[HuffmanCode; 288]>,
     // Distance codes
-    distance_codes: Box<[HuffmanCode]>, // [HuffmanCode; 30],
+    distance_codes: Box<[HuffmanCode; 32]>,
 }
 
 impl HuffmanTable {
@@ -333,20 +337,33 @@ impl HuffmanTable {
             distance_codes: Box::new([HuffmanCode {
                 code: 0,
                 length: 0,
-            }; 30]),
+            }; 32]),
         }
     }
 
-    /// Creates a `HuffmanTable` from length tables.
-    /// Returns Err if the tables have lengths > 50, the
-    /// tables are too short, or are otherwise not formed correctly.
+    #[cfg(test)]
     pub fn from_length_tables(literals_and_lengths: &[u8],
                               distances: &[u8])
                               -> Result<HuffmanTable, HuffmanError> {
-        Ok(HuffmanTable {
-            codes: try!(create_codes(literals_and_lengths)).into_boxed_slice(),
-            distance_codes: try!(create_codes(distances)).into_boxed_slice(),
-        })
+        let mut table = HuffmanTable {
+            codes: Box::new([HuffmanCode::default(); 288]),
+            distance_codes: Box::new([HuffmanCode::default(); 32]),
+        };
+
+        try!(create_codes_in_place(table.codes.as_mut(), literals_and_lengths));
+        try!(create_codes_in_place(table.distance_codes.as_mut(), distances));
+        Ok(table)
+    }
+
+    /// Update the `HuffmanTable` from the provided length tables.
+    /// Returns Err if the tables have lengths > 50, the
+    /// tables are too short, or are otherwise not formed correctly.
+    pub fn update_from_length_tables(&mut self,
+                                     literals_and_lengths: &[u8],
+                                     distances: &[u8])
+                                     -> Result<(), HuffmanError> {
+        try!(create_codes_in_place(self.codes.as_mut(), literals_and_lengths));
+        create_codes_in_place(self.distance_codes.as_mut(), distances)
     }
 
     /// Create a HuffmanTable using the fixed tables specified in the DEFLATE format specification.

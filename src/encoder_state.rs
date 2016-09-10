@@ -1,6 +1,6 @@
 use std::io;
 use std::io::Write;
-use huffman_table::HuffmanTable;
+use huffman_table::{HuffmanTable, HuffmanError};
 use bitstream::{LsbWriter, BitWriter};
 use lz77::LDPair;
 
@@ -59,9 +59,6 @@ impl<W: Write> EncoderState<W> {
                 self.writer.write_bits(ldencoded.distance_extra_bits.code,
                                        ldencoded.distance_extra_bits.length)
             }
-            LDPair::BlockStart { .. } => {
-                panic!("Tried to write start of block, this should not be handled here!");
-            }
             LDPair::EndOfBlock => self.write_end_of_block(),
         }
     }
@@ -93,7 +90,10 @@ impl<W: Write> EncoderState<W> {
         self.writer.flush()
     }
 
-    pub fn set_huffman_table(&mut self, table: HuffmanTable) {
-        self.huffman_table = table;
+    pub fn update_huffman_table(&mut self,
+                                literals_and_lengths: &[u8],
+                                distances: &[u8])
+                                -> Result<(), HuffmanError> {
+        self.huffman_table.update_from_length_tables(literals_and_lengths, distances)
     }
 }

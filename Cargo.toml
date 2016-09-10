@@ -12,3 +12,5 @@ adler32 = "0.2.0"
 flate2 = "0.2.14"
 #inflate = "*"
 
+[profile.bench]
+debug = true
