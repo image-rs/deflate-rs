@@ -101,7 +101,6 @@ const LENGTH_BITS_START: u16 = 257;
 
 // Lengths for the distance codes in the pre-defined/fixed huffman table
 // (All distance codes are 5 bits long)
-#[cfg(test)]
 pub static FIXED_CODE_LENGTHS_DISTANCE: [u8; NUM_DISTANCE_CODES + 2] = [5; NUM_DISTANCE_CODES + 2];
 
 pub static DISTANCE_CODES: [u8; 512] =

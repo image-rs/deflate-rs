@@ -10,7 +10,6 @@ mod lz77;
 mod chained_hash_table;
 mod length_encode;
 mod output_writer;
-#[cfg(test)]
 mod stored_block;
 mod huffman_lengths;
 mod zlib;
@@ -27,13 +26,21 @@ use length_encode::huffman_lengths_from_frequency;
 use checksum::RollingChecksum;
 use std::io::{Write, Cursor};
 use std::io;
-use encoder_state::EncoderState;
+use encoder_state::{EncoderState, BType};
+use stored_block::compress_block_stored;
 
-pub enum BType {
-    NoCompression = 0b00,
-    FixedHuffman = 0b01,
-    DynamicHuffman = 0b10,
-    // Reserved = 0b11, //Error
+
+/// Determine if the block is long enough for it to be worth using dynamic huffman codes or just
+/// Write the data directly
+fn block_type_for_length(length: usize) -> BType {
+    // TODO: Do proper testing to determine what values make sense here
+    if length < 20 {
+        BType::NoCompression
+    } else if length < 70 {
+        BType::FixedHuffman
+    } else {
+        BType::DynamicHuffman
+    }
 }
 
 #[cfg(test)]
@@ -46,7 +53,7 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
         let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
 
         //We currently don't split blocks, we should do this eventually
-        state.write_start_of_block(true).expect("Write error!");
+        state.write_start_of_block(true, true).expect("Write error!");
         for ld in compressed {
             //We ignore end of block here for now since there is no purpose of
             //splitting a full stream of data using fixed huffman data into blocks
@@ -73,30 +80,50 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
     checksum.update_from_slice(&input[..2]);
 
     while !lz77_state.is_last_block() {
-        lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
-        try!(state.write_start_of_block(lz77_state.is_last_block()));
+        match block_type_for_length(input.len() - lz77_state.current_start) {
+            BType::DynamicHuffman => {
+                lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
+                try!(state.write_start_of_block(false, lz77_state.is_last_block()));
 
-        let (l_lengths, d_lengths) = {
-            let (l_freqs, d_freqs) = lz77_writer.get_frequencies();
-            // The huffman spec allows us to exclude zeroes at the end of the table of
-            // of huffman lengths. Since a frequency of 0 will give an huffman length of 0
-            // we strip off the trailing zeroes before even generating the lengths to save
-            // some work
-            (huffman_lengths_from_frequency(remove_trailing_zeroes(l_freqs), MAX_CODE_LENGTH),
-             huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs), MAX_CODE_LENGTH))
-        };
-        try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
+                let (l_lengths, d_lengths) = {
+                    let (l_freqs, d_freqs) = lz77_writer.get_frequencies();
+                    // The huffman spec allows us to exclude zeroes at the end of the table of
+                    // of huffman lengths. Since a frequency of 0 will give an huffman length of 0
+                    // we strip off the trailing zeroes before even generating the lengths to save
+                    // some work
+                    (huffman_lengths_from_frequency(remove_trailing_zeroes(l_freqs), MAX_CODE_LENGTH),
+                     huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs), MAX_CODE_LENGTH))
+                };
+                try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
 
-        state.update_huffman_table(&l_lengths, &d_lengths).expect(
-            "Fatal error!: Failed to create huffman table!"
-        );
+                state.update_huffman_table(&l_lengths, &d_lengths).expect(
+                    "Fatal error!: Failed to create huffman table!"
+                );
 
-        for ld in lz77_writer.get_buffer() {
-            try!(state.write_ldpair(*ld));
+                for &ld in lz77_writer.get_buffer() {
+                    try!(state.write_ldpair(ld));
+                }
+
+                // End of block is written in write_ldpair
+                lz77_writer.clear();
+            },
+            BType::NoCompression => {
+                state.flush().unwrap();
+                compress_block_stored(&input[lz77_state.current_start..], &mut state.writer, true).unwrap();
+                // We need to indicate that this is the last block. For blocks with lz compression this is done in lz77_compress_block
+                // For now, only the ending block may be compressed using stored or fixed blocks
+                lz77_state.set_last();
+            },
+            BType::FixedHuffman => {
+                lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
+                state.update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS, &huffman_table::FIXED_CODE_LENGTHS_DISTANCE).unwrap();
+                try!(state.write_start_of_block(true, true));
+                for &ld in lz77_writer.get_buffer() {
+                    try!(state.write_ldpair(ld));
+                }
+                lz77_writer.clear();
+            }
         }
-
-        // End of block is written in write_ldpair
-        lz77_writer.clear();
     }
 
     state.flush().unwrap();
@@ -278,6 +305,8 @@ mod test {
         let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
         let compressed = deflate_bytes(&test_data);
 
+        assert!(compressed.len() < test_data.len());
+
         let result = decompress_to_end(&compressed);
         assert_eq!(test_data, result);
     }
@@ -314,6 +343,8 @@ mod test {
         }
          */
         println!("compressed length: {}", compressed.len());
+
+        assert!(compressed.len() < test_data.len());
 
         let mut e = ZlibDecoder::new(&compressed[..]);
 

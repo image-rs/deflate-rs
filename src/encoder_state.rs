@@ -12,11 +12,15 @@ const FIXED_FIRST_BYTE_FINAL: u16 = 0b011;
 const DYNAMIC_FIRST_BYTE: u16 = 0b100;
 const DYNAMIC_FIRST_BYTE_FINAL: u16 = 0b101;
 
+pub enum BType {
+    NoCompression = 0b00,
+    FixedHuffman = 0b01,
+    DynamicHuffman = 0b10, // Reserved = 0b11, //Error
+}
 
 pub struct EncoderState<W: Write> {
     huffman_table: HuffmanTable,
     pub writer: LsbWriter<W>,
-    fixed: bool,
 }
 
 impl<W: Write> EncoderState<W> {
@@ -24,15 +28,12 @@ impl<W: Write> EncoderState<W> {
         EncoderState {
             huffman_table: huffman_table,
             writer: LsbWriter::new(writer),
-            fixed: false,
         }
     }
 
     #[cfg(test)]
     pub fn fixed(writer: W) -> EncoderState<W> {
-        let mut ret = EncoderState::new(HuffmanTable::fixed_table(), writer);
-        ret.fixed = true;
-        ret
+        EncoderState::new(HuffmanTable::fixed_table(), writer)
     }
 
     /// Encodes a literal value to the writer
@@ -64,16 +65,16 @@ impl<W: Write> EncoderState<W> {
     }
 
     /// Write the start of a block
-    pub fn write_start_of_block(&mut self, final_block: bool) -> io::Result<()> {
+    pub fn write_start_of_block(&mut self, fixed: bool, final_block: bool) -> io::Result<()> {
         if final_block {
             // The final block has one bit flipped to indicate it's
             // the final one
-            if self.fixed {
+            if fixed {
                 self.writer.write_bits(FIXED_FIRST_BYTE_FINAL, 3)
             } else {
                 self.writer.write_bits(DYNAMIC_FIRST_BYTE_FINAL, 3)
             }
-        } else if self.fixed {
+        } else if fixed {
             self.writer.write_bits(FIXED_FIRST_BYTE, 3)
         } else {
             self.writer.write_bits(DYNAMIC_FIRST_BYTE, 3)
@@ -84,7 +85,6 @@ impl<W: Write> EncoderState<W> {
         let code = self.huffman_table.get_end_of_block();
         self.writer.write_bits(code.code, code.length)
     }
-
 
     pub fn flush(&mut self) -> io::Result<()> {
         self.writer.flush()

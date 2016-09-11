@@ -7,7 +7,7 @@ use checksum::RollingChecksum;
 
 pub struct LZ77State {
     hash_table: ChainedHashTable,
-    current_start: usize,
+    pub current_start: usize,
     is_first_window: bool,
     is_last_block: bool,
 }
@@ -24,6 +24,10 @@ impl LZ77State {
 
     pub fn new(data: &[u8]) -> LZ77State {
         LZ77State::from_starting_values(data[0], data[1])
+    }
+
+    pub fn set_last(&mut self) {
+        self.is_last_block = true;
     }
 
     pub fn is_last_block(&self) -> bool {
