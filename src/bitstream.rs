@@ -163,7 +163,7 @@ impl<W: Write> Write for $name<W> {
     fn flush(&mut self) -> io::Result<()> {
         let missing = 8 - self.bits;
         // NOTE:(oyvindln) Had to add a test for self.bits > 0 here,
-        // otherwise flush would output an extra byte flush was called at a byte boundary
+        // otherwise flush would output an extra when byte flush was called at a byte boundary
         if missing > 0 && self.bits > 0 {
             try!(self.write_bits(0, missing));
         }

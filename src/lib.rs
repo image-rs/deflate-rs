@@ -104,13 +104,22 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
                     try!(state.write_ldpair(ld));
                 }
 
-                // End of block is written in write_ldpair
+                // End of block is written in write_ldpair.
                 lz77_writer.clear();
             },
             BType::NoCompression => {
+                use bitstream::BitWriter;
+                state.writer.write_bits(stored_block::STORED_FIRST_BYTE_FINAL.into(), 3).unwrap();
                 state.flush().unwrap();
-                compress_block_stored(&input[lz77_state.current_start..], &mut state.writer, true).unwrap();
-                // We need to indicate that this is the last block. For blocks with lz compression this is done in lz77_compress_block
+                compress_block_stored(&input[lz77_state.current_start..], &mut state.writer).unwrap();
+                // Update the checksum.
+                // We've already added the two first bytes to the checksum earlier.
+                let checksum_start = lz77_state.current_start + 2;
+                // NOTE: Due to a overflow bug in adler32, we have to do manual loop here for now
+                for &b in &input[checksum_start..] {
+                    checksum.update(b);
+                }
+                // We need to indicate that this is the last block. For blocks with lz compression this is done in lz77_compress_block.
                 // For now, only the ending block may be compressed using stored or fixed blocks
                 lz77_state.set_last();
             },
@@ -326,10 +335,18 @@ mod test {
         assert!(input == result);
     }
 
-    #[test]
-    fn test_file_zlib() {
+    fn decompress_zlib(compressed: &[u8]) -> Vec<u8> {
         use std::io::Read;
         use flate2::read::ZlibDecoder;
+        let mut e = ZlibDecoder::new(&compressed[..]);
+
+        let mut result = Vec::new();
+        e.read_to_end(&mut result).unwrap();
+        result
+    }
+
+    #[test]
+    fn test_file_zlib() {
 
         let test_data = get_test_file_data("src/pg11.txt");
 
@@ -346,10 +363,36 @@ mod test {
 
         assert!(compressed.len() < test_data.len());
 
-        let mut e = ZlibDecoder::new(&compressed[..]);
+        let result = decompress_zlib(&compressed);
 
-        let mut result = Vec::new();
-        e.read_to_end(&mut result).unwrap();
         assert!(&test_data == &result);
+    }
+
+    #[test]
+    fn test_zlib_short() {
+        let test_data = [10, 20, 30, 40, 55];
+        let compressed = deflate_bytes_zlib(&test_data);
+
+
+
+        let result = decompress_zlib(&compressed);
+        assert_eq!(&test_data, result.as_slice());
+    }
+
+    #[test]
+    fn test_zlib_last_block() {
+        let mut test_data = vec![22; 32768];
+        test_data.extend(&[5, 2, 55, 11, 12]);
+        let compressed = deflate_bytes_zlib(&test_data);
+
+        {
+            use std::fs::File;
+            use std::io::Write;
+            let mut f = File::create("out_block.zlib").unwrap();
+            f.write_all(&compressed).unwrap();
+        }
+
+        let result = decompress_zlib(&compressed);
+        assert!(test_data == result);
     }
 }

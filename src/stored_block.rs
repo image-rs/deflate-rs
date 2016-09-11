@@ -3,8 +3,9 @@ use std::io::{Write, Result};
 #[cfg(test)]
 const BLOCK_SIZE: u16 = 32000;
 
+#[cfg(test)]
 const STORED_FIRST_BYTE: u8 = 0b0000_0000;
-const STORED_FIRST_BYTE_FINAL: u8 = 0b0000_0001;
+pub const STORED_FIRST_BYTE_FINAL: u8 = 0b0000_0001;
 
 /// Split an u16 value into two bytes taking into account endianess
 pub fn put16(value: u16) -> (u8, u8) {
@@ -15,22 +16,14 @@ pub fn put16(value: u16) -> (u8, u8) {
 }
 
 // Compress one stored block
-pub fn compress_block_stored<W: Write>(input: &[u8],
-                                       writer: &mut W,
-                                       final_block: bool)
-                                       -> Result<usize> {
-    // First bit tells us if this is the final chunk
-    let first_byte = if final_block {
-        STORED_FIRST_BYTE_FINAL
-    } else {
-        STORED_FIRST_BYTE
-    };
+pub fn compress_block_stored<W: Write>(input: &[u8], writer: &mut W) -> Result<usize> {
 
-    // the next two details compression type (none in this case)
+    // The header is written before this function.
+    // The next two bytes indicates the length
     let (len_0, len_1) = put16(input.len() as u16);
     // the next two after the length is the ones complement of the length
     let (not_len_0, not_len_1) = put16(!input.len() as u16);
-    try!(writer.write(&[first_byte, len_0, len_1, not_len_0, not_len_1]));
+    try!(writer.write(&[len_0, len_1, not_len_0, not_len_1]));
     writer.write(input)
 }
 
@@ -45,7 +38,16 @@ pub fn compress_data_stored(input: &[u8]) -> Vec<u8> {
     let mut i = input.chunks(block_length).peekable();
     while let Some(chunk) = i.next() {
         let last_chunk = i.peek().is_none();
-        compress_block_stored(chunk, &mut output, last_chunk).unwrap();
+        // First bit tells us if this is the final chunk
+        // the next two details compression type (none in this case)
+        let first_byte = if last_chunk {
+            STORED_FIRST_BYTE_FINAL
+        } else {
+            STORED_FIRST_BYTE
+        };
+        output.write(&[first_byte]).unwrap();
+
+        compress_block_stored(chunk, &mut output).unwrap();
     }
     output.into_inner()
 }
