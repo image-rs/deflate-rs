@@ -1,3 +1,11 @@
+//! An implementation an encoder using [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) compression algorightm in pure rust.
+//!
+//! This library provides functions to compress data (currently only in-memory) using DEFLATE,
+//! both with and without a [zlib](https://tools.ietf.org/html/rfc1950) header/trailer
+//! The current implementation is still pretty slow compared to C-libraries like zlib and miniz,
+//! and missing some functionality to achieve the same level of compression, and is therefore not
+//! recommended for production use.
+
 #[cfg(test)]
 extern crate flate2;
 //#[cfg(test)]
@@ -21,14 +29,13 @@ mod encoder_state;
 use huffman_table::*;
 #[cfg(test)]
 use lz77::LDPair;
-use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes};
+use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes, MIN_NUM_LITERALS_AND_LENGTHS, MIN_NUM_DISTANCES};
 use length_encode::huffman_lengths_from_frequency;
 use checksum::RollingChecksum;
 use std::io::{Write, Cursor};
 use std::io;
 use encoder_state::{EncoderState, BType};
 use stored_block::compress_block_stored;
-
 
 /// Determine if the block is long enough for it to be worth using dynamic huffman codes or just
 /// Write the data directly
@@ -91,8 +98,9 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
                     // of huffman lengths. Since a frequency of 0 will give an huffman length of 0
                     // we strip off the trailing zeroes before even generating the lengths to save
                     // some work
-                    (huffman_lengths_from_frequency(remove_trailing_zeroes(l_freqs), MAX_CODE_LENGTH),
-                     huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs), MAX_CODE_LENGTH))
+                    // There is however a minimum number of values we have to keep according to the deflate spec
+                    (huffman_lengths_from_frequency(remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS), MAX_CODE_LENGTH),
+                     huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES), MAX_CODE_LENGTH))
                 };
                 try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
 
@@ -140,12 +148,36 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
     Ok(())
 }
 
+/// Compress the given slice of bytes with DEFLATE compression.
+///
+/// Returns a Vec<u8> of the compressed data.
+///
+/// # Examples
+///
+/// ```
+/// use deflate::deflate_bytes;
+/// let data = b"This is some test data";
+/// let compressed_data = deflate_bytes(data);
+/// ```
 pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
     let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
     compress_data_dynamic(input, &mut writer, &mut checksum::NoChecksum::new()).expect("Write error!");
     writer.into_inner()
 }
 
+/// Compress the given slice of bytes with DEFLATE compression, including a zlib header and trailer.
+///
+/// Returns a Vec<u8> of the compressed data.
+///
+/// Zlib dictionaries are not yet suppored.
+///
+/// # Examples
+///
+/// ```
+/// use deflate::deflate_bytes_zlib;
+/// let data = b"This is some test data";
+/// let compressed_data = deflate_bytes_zlib(data);
+/// ```
 pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
     let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
     // Write header
@@ -384,14 +416,14 @@ mod test {
         let mut test_data = vec![22; 32768];
         test_data.extend(&[5, 2, 55, 11, 12]);
         let compressed = deflate_bytes_zlib(&test_data);
-
+/*
         {
             use std::fs::File;
             use std::io::Write;
             let mut f = File::create("out_block.zlib").unwrap();
             f.write_all(&compressed).unwrap();
         }
-
+*/
         let result = decompress_zlib(&compressed);
         assert!(test_data == result);
     }

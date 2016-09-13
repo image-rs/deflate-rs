@@ -5,6 +5,10 @@ use huffman_table::{create_codes, NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES};
 
 use bitstream::{BitWriter, LsbWriter};
 use std::io::{Write, Result};
+use std::cmp;
+
+pub const MIN_NUM_LITERALS_AND_LENGTHS: usize = 257;
+pub const MIN_NUM_DISTANCES: usize = 1;
 
 // The output ordering of the lenghts for the huffman codes used to encode the lenghts
 // used to build the full huffman tree for length/literal codes.
@@ -21,9 +25,9 @@ const HCLEN_BITS: u8 = 4;
 const MAX_HUFFMAN_CODE_LENGTH: usize = 7;
 
 /// Creates a new slice from the input slice that stops at the final non-zero value
-pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T]) -> &[T] {
+pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T], min_length: usize) -> &[T] {
     let num_zeroes = input.iter().rev().take_while(|&a| *a == T::from(0)).count();
-    &input[0..input.len() - num_zeroes]
+    &input[0..cmp::max(input.len() - num_zeroes, min_length)]
 }
 
 /// Write the specified huffman lengths to the bit writer
@@ -32,13 +36,15 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
                                        writer: &mut LsbWriter<W>)
                                        -> Result<()> {
     assert!(literal_len_lengths.len() <= NUM_LITERALS_AND_LENGTHS);
+    assert!(literal_len_lengths.len() >= MIN_NUM_LITERALS_AND_LENGTHS);
     assert!(distance_lenghts.len() <= NUM_DISTANCE_CODES);
+    assert!(distance_lenghts.len() >= MIN_NUM_DISTANCES);
 
     // Number of length codes - 257
-    let hlit = (literal_len_lengths.len() - 257) as u16;
+    let hlit = (literal_len_lengths.len() - MIN_NUM_LITERALS_AND_LENGTHS) as u16;
     try!(writer.write_bits(hlit, HLIT_BITS));
     // Number of distance codes - 1
-    let hdist = (distance_lenghts.len() - 1) as u16;
+    let hdist = (distance_lenghts.len() - MIN_NUM_DISTANCES) as u16;
     try!(writer.write_bits(hdist, HDIST_BITS));
 
     // Encode length values
