@@ -1,7 +1,7 @@
 # deflate-rs
 An pure rust implementation of a [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) encoder. Not a direct port, but does take some inspiration from [zlib](http://www.zlib.net/) and [zopfli](https://github.com/google/zopfli)(for huffman code length generation).
 
-So far, in-memory deflate encoding (without [lazy matching](http://www.gzip.org/zlib/rfc-deflate.html#algorithm), and no zlib or gzip headers yet) has been is implemented. No unsafe code has been used. Currently not very optimised.
+So far, in-memory deflate encoding (without [lazy matching](http://www.gzip.org/zlib/rfc-deflate.html#algorithm), and no zlib dictionary or gzip support yet) has been is implemented. No unsafe code has been used. Currently not very optimised.
 # Usage:
 ```rust
 let data = ...;
