@@ -47,7 +47,7 @@ pub enum LDPair {
 
 /// Get the length of the checked match
 /// The function returns number of bytes after and including `current_pos` match
-fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> u16 {
+fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usize {
     // TODO: This can be optimised by checking multiple bytes at once and not checking the
     // first 3 bytes since we already know they match
     data[current_pos..]
@@ -55,12 +55,17 @@ fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> u16
         .zip(data[pos_to_check..].iter())
         .enumerate()
         .take_while(|&(n, (&a, &b))| n < MAX_MATCH as usize && a == b)
-        .count() as u16
+        .count()
 }
 
 /// Try finding the position and length of the longest match in the input data.
-fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) -> (u16, u16) {
-    if position == 0 {
+fn longest_match(data: &[u8],
+                 hash_table: &ChainedHashTable,
+                 position: usize,
+                 prev_length: usize)
+                 -> (usize, usize) {
+    // If we are at the start, or we already have a match at the match length, we stop here.
+    if position == 0 || prev_length >= MAX_MATCH as usize{
         return (0, 0);
     }
 
@@ -70,22 +75,22 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
         0
     };
 
-    let max_length = cmp::min((data.len() - position) as u16, MAX_MATCH);
+    let max_length = cmp::min((data.len() - position), MAX_MATCH as usize);
 
-    let mut current_head = hash_table.get_prev(hash_table.current_head() as usize);
+    let mut current_head = hash_table.get_prev(hash_table.current_head() as usize) as usize;
     let starting_head = current_head;
 
-    let mut best_length = MIN_MATCH - 1;
+    let mut best_length = prev_length as usize;//MIN_MATCH - 1;
     let mut best_distance = 0;
 
-    while (current_head as usize) >= limit && current_head != 0 {
-        let distance = position - current_head as usize;
+    while (current_head) >= limit && current_head != 0 {
+        let distance = position - current_head;
 
         // We only check further if the match length can actually increase
-        if distance > 0 && (position + best_length as usize) < data.len() &&
-           data[position + best_length as usize] ==
-           data[current_head as usize + best_length as usize] {
-            let length = get_match_length(data, position, current_head as usize);
+        if distance > 0 && (position + best_length) < data.len() &&
+           data[position + best_length] ==
+           data[current_head + best_length] {
+            let length = get_match_length(data, position, current_head);
             if length > best_length {
                 best_length = length;
                 best_distance = distance;
@@ -96,21 +101,27 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
                 }
             }
         }
-        current_head = hash_table.get_prev(current_head as usize);
+        current_head = hash_table.get_prev(current_head) as usize;
         if current_head == starting_head {
             // We've gone through one cycle.
             break;
         }
     }
-
-    (best_length, best_distance as u16)
+    if best_length > prev_length {
+        (best_length, best_distance)
+    } else {
+        (0, 0)
+    }
 }
 
 // Get the longest match from the current position of the hash table
 #[inline]
 #[cfg(test)]
-fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (u16, u16) {
-    longest_match(data, hash_table, hash_table.current_position())
+fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usize, usize) {
+    longest_match(data,
+                  hash_table,
+                  hash_table.current_position(),
+                  MIN_MATCH as usize- 1)
 }
 
 const DEFAULT_WINDOW_SIZE: usize = 32768;
@@ -139,25 +150,65 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
             // TODO: Currently, we only check for matches up to the end of the chunk, but ideally
             // we should be checking max_match bytes further to achieve the best possible
             // compression.
-            let (match_len, match_dist) = longest_match(&data[..end], hash_table, position);
-            if match_len >= MIN_MATCH {
+            let (match_len, match_dist) =
+                longest_match(&data[..end], hash_table, position, MIN_MATCH as usize - 1);
+
+            // If the match length is less than MIN_MATCH, we didn't find a match
+            if match_len >= MIN_MATCH as usize {
                 // TODO: Add heuristic checking if outputting a length/distance pair will actually
                 // be shorter than adding the literal bytes
 
-                writer.write_length_distance(match_len, match_dist);
-                let taker = insert_it.by_ref().take(match_len as usize - 1);
-                let mut hash_taker = hash_it.by_ref().take(match_len as usize - 1);
+                let (to_subtract_from_length, length, distance) = {
 
+                    let _ = insert_it.next()
+                        .expect("Reached the end of the array even though we had a match! This \
+                                 suggests a bug somewhere!");
+                    let next_pos = position + 1;
+
+                    if let Some(&next_hash_byte) = hash_it.next() {
+                        hash_table.add_hash_value(next_pos, next_hash_byte);
+                        rolling_checksum.update(next_hash_byte);
+
+                        // Check if we can find a better match at the next byte than the one we currently have
+                        let (next_match_len, next_match_dist) =
+                            longest_match(&data[..end], hash_table, next_pos, match_len);
+                        if next_match_len > match_len {
+                            // We found a better match, so output the previous byte
+                            writer.write_literal(b);
+                            (0, next_match_len, next_match_dist)
+                        } else {
+                            (1, match_len, match_dist)
+                        }
+                    } else {
+                        (1, match_len, match_dist)
+                    }
+                };
+                // Casting note: length and distance is already bounded by the longest match function
+                // Usize is just used for convenience
+                writer.write_length_distance(length as u16, distance as u16);
+
+                // If we did not find a better match we need to iterate one time less as we've already added
+                // the next byte to the hash table and checksum
+                let bytes_to_add = length - to_subtract_from_length;
+
+                let taker = insert_it.by_ref().take(bytes_to_add - 1);
+                let mut hash_taker = hash_it.by_ref().take(bytes_to_add - 1);
+
+                // Advance the iterators and add the bytes we jump over to the hash table and checksum
                 for (ipos, _) in taker {
                     if let Some(&i_hash_byte) = hash_taker.next() {
                         rolling_checksum.update(i_hash_byte);
                         hash_table.add_hash_value(ipos + start, i_hash_byte);
                     }
                 }
+
+
             } else {
+                // There was no match, so we simply output another literal
                 writer.write_literal(b);
             }
         } else {
+            // We are at the last two bytes we want to add, so there is no point searching for matches here.
             writer.write_literal(b);
         }
     }
@@ -341,10 +392,11 @@ mod test {
         f.read_to_end(&mut input).unwrap();
         let compressed = super::lz77_compress(&input, WINDOW_SIZE).unwrap();
         assert!(compressed.len() < input.len());
+        //print_output(&compressed);
         let decompressed = decompress_lz77(&compressed);
-        // println!("{}", str::from_utf8(&decompressed).unwrap());
-        assert_eq!(input.len(), decompressed.len());
-        assert!(decompressed == input);
+        //println!("{}", str::from_utf8(&decompressed).unwrap());
+        // assert_eq!(input.len(), decompressed.len());
+        assert!(&decompressed == &input);
     }
 
     /// Test that matches at the window border are working correctly

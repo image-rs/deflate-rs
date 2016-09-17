@@ -16,9 +16,9 @@ pub struct ChainedHashTable {
     // The current position
     current_pos: usize,
     // Starts of hash chains (in prev)
-    head: Vec<u16>,
+    head: Box<[u16; WINDOW_SIZE]>,
     // link to previous occurence of this hash value
-    prev: Vec<u16>,
+    prev: Box<[u16; WINDOW_SIZE]>,
 }
 
 impl ChainedHashTable {
@@ -26,8 +26,8 @@ impl ChainedHashTable {
         ChainedHashTable {
             current_hash: 0,
             current_pos: 0,
-            head: vec!(0; WINDOW_SIZE),
-            prev: vec!(0; WINDOW_SIZE),
+            head: Box::new([0; WINDOW_SIZE]),
+            prev: Box::new([0; WINDOW_SIZE]),
         }
     }
 
@@ -74,11 +74,11 @@ impl ChainedHashTable {
     }
 
     pub fn slide(&mut self, bytes: usize) {
-        for b in &mut self.head {
+        for b in &mut self.head.iter_mut() {
             *b = ChainedHashTable::slide_value(*b, bytes as u16);
         }
 
-        for b in &mut self.prev {
+        for b in &mut self.prev.iter_mut() {
             *b = ChainedHashTable::slide_value(*b, bytes as u16);
         }
     }
