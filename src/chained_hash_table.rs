@@ -53,6 +53,7 @@ impl ChainedHashTable {
         self.head[self.current_hash as usize]
     }
 
+    #[cfg(test)]
     #[inline]
     pub fn current_position(&self) -> usize {
         self.current_pos

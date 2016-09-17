@@ -107,11 +107,12 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
 }
 
 // Get the longest match from the current position of the hash table
-// #[inline]
-// fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (u16, u16) {
-// longest_match(data, hash_table, hash_table.current_position())
-// }
-//
+#[inline]
+#[cfg(test)]
+fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (u16, u16) {
+    longest_match(data, hash_table, hash_table.current_position())
+}
+
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
 // fn add_value<RC: RollingChecksum>(hash_table: &mut ChainedHashTable, rolling_checksum: RC) {
