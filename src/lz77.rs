@@ -106,11 +106,12 @@ fn longest_match(data: &[u8], hash_table: &ChainedHashTable, position: usize) ->
     (best_length, best_distance as u16)
 }
 
-/// Get the longest match from the current position of the hash table
-fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (u16, u16) {
-    longest_match(data, hash_table, hash_table.current_position())
-}
-
+// Get the longest match from the current position of the hash table
+// #[inline]
+// fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (u16, u16) {
+// longest_match(data, hash_table, hash_table.current_position())
+// }
+//
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
 // fn add_value<RC: RollingChecksum>(hash_table: &mut ChainedHashTable, rolling_checksum: RC) {
@@ -137,7 +138,7 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
             // TODO: Currently, we only check for matches up to the end of the chunk, but ideally
             // we should be checking max_match bytes further to achieve the best possible
             // compression.
-            let (match_len, match_dist) = longest_match_current(&data[..end], hash_table);
+            let (match_len, match_dist) = longest_match(&data[..end], hash_table, position);
             if match_len >= MIN_MATCH {
                 // TODO: Add heuristic checking if outputting a length/distance pair will actually
                 // be shorter than adding the literal bytes

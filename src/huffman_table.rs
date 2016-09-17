@@ -321,22 +321,22 @@ pub fn create_codes_in_place(code_table: &mut [HuffmanCode],
 /// A structure containing the tables of huffman codes for lengths, literals and distances
 pub struct HuffmanTable {
     // Literal, end of block and length codes
-    codes: Box<[HuffmanCode; 288]>,
+    codes: [HuffmanCode; 288],
     // Distance codes
-    distance_codes: Box<[HuffmanCode; 32]>,
+    distance_codes: [HuffmanCode; 32],
 }
 
 impl HuffmanTable {
     pub fn empty() -> HuffmanTable {
         HuffmanTable {
-            codes: Box::new([HuffmanCode {
+            codes: [HuffmanCode {
                 code: 0,
                 length: 0,
-            }; 288]),
-            distance_codes: Box::new([HuffmanCode {
+            }; 288],
+            distance_codes: [HuffmanCode {
                 code: 0,
                 length: 0,
-            }; 32]),
+            }; 32],
         }
     }
 
@@ -345,8 +345,8 @@ impl HuffmanTable {
                               distances: &[u8])
                               -> Result<HuffmanTable, HuffmanError> {
         let mut table = HuffmanTable {
-            codes: Box::new([HuffmanCode::default(); 288]),
-            distance_codes: Box::new([HuffmanCode::default(); 32]),
+            codes: [HuffmanCode::default(); 288],
+            distance_codes: [HuffmanCode::default(); 32],
         };
 
         try!(create_codes_in_place(table.codes.as_mut(), literals_and_lengths));

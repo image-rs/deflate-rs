@@ -260,7 +260,6 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Ve
         boundary_package_merge(&mut lookahead_ptrs, &mut nodes, &leaves, max_len - 1, last);
     }
 
-    let mut lengths = vec![0; frequencies.len()];
     let head = lookahead_ptrs[lookahead_ptrs.len() - 1].1;
 
     let mut next_node = head;
