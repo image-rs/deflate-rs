@@ -57,9 +57,9 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     let mut writer = Cursor::new(Vec::new());
     {
         let mut state = EncoderState::fixed(&mut writer);
-        let compressed = lz77_compress(input, chained_hash_table::WINDOW_SIZE).unwrap();
+        let compressed = lz77_compress(input).unwrap();
 
-        //We currently don't split blocks, we should do this eventually
+        //We currently don't split blocks here(this function is just used for tests anyhow)
         state.write_start_of_block(true, true).expect("Write error!");
         for ld in compressed {
             //We ignore end of block here for now since there is no purpose of
@@ -81,66 +81,71 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
 fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer: &mut W, mut checksum: &mut RC) -> io::Result<()> {
     let mut state = EncoderState::new(huffman_table::HuffmanTable::empty(), &mut writer);
 
-    let mut lz77_state = lz77::LZ77State::new(input);
-    let mut lz77_writer = output_writer::DynamicWriter::new();
+    let block_type = block_type_for_length(input.len());
 
-    checksum.update_from_slice(&input[..2]);
+    match block_type {
+        BType::DynamicHuffman | BType::FixedHuffman => {
+            let mut lz77_state = lz77::LZ77State::new(input);
+            let mut lz77_writer = output_writer::DynamicWriter::new();
 
-    while !lz77_state.is_last_block() {
-        match block_type_for_length(input.len() - lz77_state.current_start) {
-            BType::DynamicHuffman => {
-                lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
-                try!(state.write_start_of_block(false, lz77_state.is_last_block()));
+            checksum.update_from_slice(&input[..2]);
 
-                let (l_lengths, d_lengths) = {
-                    let (l_freqs, d_freqs) = lz77_writer.get_frequencies();
-                    // The huffman spec allows us to exclude zeroes at the end of the table of
-                    // of huffman lengths. Since a frequency of 0 will give an huffman length of 0
-                    // we strip off the trailing zeroes before even generating the lengths to save
-                    // some work
-                    // There is however a minimum number of values we have to keep according to the deflate spec
-                    (huffman_lengths_from_frequency(remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS), MAX_CODE_LENGTH),
-                     huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES), MAX_CODE_LENGTH))
-                };
-                try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
+            match block_type {
+                BType::DynamicHuffman => while !lz77_state.is_last_block() {
+                    lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
+                    try!(state.write_start_of_block(false, lz77_state.is_last_block()));
 
-                state.update_huffman_table(&l_lengths, &d_lengths).expect(
-                    "Fatal error!: Failed to create huffman table!"
-                );
+                    let (l_lengths, d_lengths) = {
+                        let (l_freqs, d_freqs) = lz77_writer.get_frequencies();
+                        // The huffman spec allows us to exclude zeroes at the end of the table of
+                        // of huffman lengths. Since a frequency of 0 will give an huffman length of 0
+                        // we strip off the trailing zeroes before even generating the lengths to save
+                        // some work
+                        // There is however a minimum number of values we have to keep according to the deflate spec
+                        (huffman_lengths_from_frequency(remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS), MAX_CODE_LENGTH),
+                         huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES), MAX_CODE_LENGTH))
+                    };
+                    try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
 
-                for &ld in lz77_writer.get_buffer() {
-                    try!(state.write_ldpair(ld));
+                    state.update_huffman_table(&l_lengths, &d_lengths).expect(
+                        "Fatal error!: Failed to create huffman table!"
+                    );
+
+                    for &ld in lz77_writer.get_buffer() {
+                        try!(state.write_ldpair(ld));
+                    }
+
+                    // End of block is written in write_ldpair.
+                    lz77_writer.clear();
+                },
+                BType::FixedHuffman => {
+
+                    lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
+                    state.update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS, &huffman_table::FIXED_CODE_LENGTHS_DISTANCE).unwrap();
+                    try!(state.write_start_of_block(true, true));
+                    for &ld in lz77_writer.get_buffer() {
+                        try!(state.write_ldpair(ld));
+                    }
+                    lz77_writer.clear();
+                },
+                BType::NoCompression => {
+                    unreachable!();
                 }
-
-                // End of block is written in write_ldpair.
-                lz77_writer.clear();
-            },
-            BType::NoCompression => {
-                use bitstream::BitWriter;
-                state.writer.write_bits(stored_block::STORED_FIRST_BYTE_FINAL.into(), 3).unwrap();
-                state.flush().unwrap();
-                compress_block_stored(&input[lz77_state.current_start..], &mut state.writer).unwrap();
-                // Update the checksum.
-                // We've already added the two first bytes to the checksum earlier.
-                let checksum_start = lz77_state.current_start + 2;
-                // NOTE: Due to a overflow bug in adler32, we have to do manual loop here for now
-                for &b in &input[checksum_start..] {
-                    checksum.update(b);
-                }
-                // We need to indicate that this is the last block. For blocks with lz compression this is done in lz77_compress_block.
-                // For now, only the ending block may be compressed using stored or fixed blocks
-                lz77_state.set_last();
-            },
-            BType::FixedHuffman => {
-                lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
-                state.update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS, &huffman_table::FIXED_CODE_LENGTHS_DISTANCE).unwrap();
-                try!(state.write_start_of_block(true, true));
-                for &ld in lz77_writer.get_buffer() {
-                    try!(state.write_ldpair(ld));
-                }
-                lz77_writer.clear();
             }
-        }
+
+        },
+        BType::NoCompression => {
+            use bitstream::BitWriter;
+            state.writer.write_bits(stored_block::STORED_FIRST_BYTE_FINAL.into(), 3).unwrap();
+            state.flush().unwrap();
+            compress_block_stored(input, &mut state.writer).unwrap();
+            // Update the checksum.
+            // We've already added the two first bytes to the checksum earlier.
+            // NOTE: Due to a overflow bug in adler32, we have to do manual loop here for now
+            for &b in input {
+                checksum.update(b);
+            }
+        },
     }
 
     state.flush().unwrap();

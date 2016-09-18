@@ -1,8 +1,9 @@
 #![feature(test)]
+#![feature(rustc_private)]
 
 extern crate deflate;
 extern crate test;
-extern crate flate2;
+extern crate flate;
 use test::Bencher;
 
 fn get_test_file_data(name: &str) -> Vec<u8> {
@@ -19,9 +20,15 @@ fn get_test_file_data(name: &str) -> Vec<u8> {
 fn test_file_zlib(b: &mut Bencher) {
     let test_data = get_test_file_data("src/pg11.txt");
 
-    b.iter(||
-           for _ in 1..5 {
-               deflate::deflate_bytes_zlib(&test_data);
-           }
-    );
+    b.iter(|| for _ in 1..5 {
+        deflate::deflate_bytes_zlib(&test_data);
+    });
+}
+
+#[bench]
+fn test_file_zlib_flate(b: &mut Bencher) {
+    let test_data = get_test_file_data("src/pg11.txt");
+    b.iter(|| for _ in 1..5 {
+        flate::deflate_bytes_zlib(&test_data);
+    });
 }

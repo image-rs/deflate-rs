@@ -5,10 +5,14 @@ use chained_hash_table::{WINDOW_SIZE, ChainedHashTable};
 use output_writer::{OutputWriter, FixedWriter};
 use checksum::RollingChecksum;
 
+/// A struct that contains the hash table, and keeps track of where we are in the input data
 pub struct LZ77State {
     hash_table: ChainedHashTable,
+    // The current position in the input slice
     pub current_start: usize,
+    // True if this is the first window
     is_first_window: bool,
+    // True if the last block has been output
     is_last_block: bool,
 }
 
@@ -22,6 +26,7 @@ impl LZ77State {
         }
     }
 
+    /// Creates a new LZ77 state, adding the first to bytes to the hash table
     pub fn new(data: &[u8]) -> LZ77State {
         LZ77State::from_starting_values(data[0], data[1])
     }
@@ -37,11 +42,11 @@ impl LZ77State {
 
 /// A structure representing values in a compressed stream of data before being huffman coded
 /// We might want to represent this differently eventually to save on memory usage
+/// (We don't actually need the full 16 bytes to store the length and distance data)
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum LDPair {
     Literal(u8),
     LengthDistance { length: u16, distance: u16 },
-    //    BlockStart { is_final: bool },
     EndOfBlock,
 }
 
@@ -59,6 +64,8 @@ fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usi
 }
 
 /// Try finding the position and length of the longest match in the input data.
+/// If no match is found that was better than `prev_length` or at all, or we are at the start
+/// This returns (0, 0)
 fn longest_match(data: &[u8],
                  hash_table: &ChainedHashTable,
                  position: usize,
@@ -225,35 +232,54 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
     // differently sized blocks
     let window_size = DEFAULT_WINDOW_SIZE;
 
+    // If the next block is very short, we merge it into the current block as the huffman tables
+    // for a new block may otherwise waste space.
+    const MIN_BLOCK_LENGTH: usize = 500;
+    let next_block_merge = data.len() - state.current_start > window_size && data.len() - state.current_start - window_size < MIN_BLOCK_LENGTH;
+
     if state.is_first_window {
 
-        let first_chunk_end = cmp::min(window_size, data.len());
+        let first_chunk_end = if next_block_merge {
+            data.len()
+        } else {
+            cmp::min(window_size, data.len())
+        };
         process_chunk::<W, RC>(data,
                                0,
                                first_chunk_end,
                                &mut state.hash_table,
                                &mut writer,
                                &mut rolling_checksum);
+        // We are at the first block so we don't need to slide the hash table
         state.current_start += first_chunk_end;
         if first_chunk_end >= data.len() {
-            state.is_last_block = true;
+            state.set_last();
         }
         state.is_first_window = false;
     } else {
-        let start = state.current_start;
-        let slice = &data[start - window_size..];
-        let end = cmp::min(window_size * 2, slice.len());
-        process_chunk::<W, RC>(slice,
+        for _ in 0..1 {
+            let start = state.current_start;
+            let slice = &data[start - window_size..];
+            let end = cmp::min(window_size * 2, slice.len());
+            process_chunk::<W, RC>(slice,
                                window_size,
                                end,
                                &mut state.hash_table,
                                &mut writer,
                                &mut rolling_checksum);
-        if end >= slice.len() {
-            state.is_last_block = true;
-        } else {
-            state.current_start += window_size;
-            state.hash_table.slide(window_size);
+            if end >= slice.len() {
+                state.set_last();
+            } else {
+                state.current_start += window_size;
+                // We slide the hash table back to make space for new hash values
+                // We only need to remember 32k bytes back (the maximum distance allowed by the
+                // deflate spec)
+                state.hash_table.slide(window_size);
+            }
+
+            if !next_block_merge {
+                break;
+            }
         }
     }
 
@@ -267,7 +293,7 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
 /// This is a convenience function for compression with fixed huffman values
 /// Only used in tests for now
 #[allow(dead_code)]
-pub fn lz77_compress(data: &[u8], _window_size: usize) -> Option<Vec<LDPair>> {
+pub fn lz77_compress(data: &[u8]) -> Option<Vec<LDPair>> {
     use checksum::NoChecksum;
     let mut w = FixedWriter::new();
     let mut state = LZ77State::new(data);
@@ -361,10 +387,9 @@ mod test {
     #[test]
     fn test_lz77_short() {
         use std::str;
-        use chained_hash_table::WINDOW_SIZE;
 
         let test_bytes = String::from("Deflate late").into_bytes();
-        let res = super::lz77_compress(&test_bytes, WINDOW_SIZE).unwrap();
+        let res = super::lz77_compress(&test_bytes).unwrap();
         // println!("{:?}", res);
         // TODO: Check that compression is correct
         print_output(&res);
@@ -385,12 +410,11 @@ mod test {
         use std::fs::File;
         use std::io::Read;
         use std::str;
-        use chained_hash_table::WINDOW_SIZE;
         let mut input = Vec::new();
 
         let mut f = File::open("src/pg11.txt").unwrap();
         f.read_to_end(&mut input).unwrap();
-        let compressed = super::lz77_compress(&input, WINDOW_SIZE).unwrap();
+        let compressed = super::lz77_compress(&input).unwrap();
         assert!(compressed.len() < input.len());
         //print_output(&compressed);
         let decompressed = decompress_lz77(&compressed);
@@ -403,8 +427,18 @@ mod test {
     #[test]
     fn test_lz77_border() {
         use chained_hash_table::WINDOW_SIZE;
-        let data = vec![0; 34000];
-        let compressed = super::lz77_compress(&data, WINDOW_SIZE).unwrap();
+        let data = vec![0; WINDOW_SIZE + 50];
+        let compressed = super::lz77_compress(&data).unwrap();
+        assert!(compressed.len() < data.len());
+        let decompressed = decompress_lz77(&compressed);
+        assert!(decompressed == data);
+    }
+
+    #[test]
+    fn test_lz77_border_multiple_blocks() {
+        use chained_hash_table::WINDOW_SIZE;
+        let data = vec![0; (WINDOW_SIZE * 2) + 50];
+        let compressed = super::lz77_compress(&data).unwrap();
         assert!(compressed.len() < data.len());
         let decompressed = decompress_lz77(&compressed);
         assert!(decompressed == data);
