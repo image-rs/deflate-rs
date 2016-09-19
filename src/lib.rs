@@ -328,7 +328,7 @@ mod test {
         use std::str;
         let mut input = Vec::new();
 
-        let mut f = File::open("src/pg11.txt").unwrap();
+        let mut f = File::open("tests/pg11.txt").unwrap();
 
         f.read_to_end(&mut input).unwrap();
         let compressed = compress_data_fixed(&input);
@@ -360,7 +360,7 @@ mod test {
     #[test]
     fn test_dynamic_string_file() {
         use std::str;
-        let input = get_test_file_data("src/pg11.txt");
+        let input = get_test_file_data("tests/pg11.txt");
         let compressed = deflate_bytes(&input);
 
         println!("Compressed len: {}", compressed.len());
@@ -385,7 +385,7 @@ mod test {
     #[test]
     fn test_file_zlib() {
 
-        let test_data = get_test_file_data("src/pg11.txt");
+        let test_data = get_test_file_data("tests/pg11.txt");
 
         let compressed = deflate_bytes_zlib(&test_data);
 /*

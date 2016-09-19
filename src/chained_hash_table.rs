@@ -150,7 +150,7 @@ mod test {
 
         let mut input = Vec::new();
 
-        let mut f = File::open("src/gpl-3.0.txt").unwrap();
+        let mut f = File::open("tests/pg11.txt").unwrap();
 
         f.read_to_end(&mut input).unwrap();
 

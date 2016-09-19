@@ -1,8 +1,15 @@
 [package]
 name = "deflate"
 version = "0.1.0"
-license = "MIT"
+license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
+readme = "README.md"
+keywords = ["deflate", "zlib", "endoding", "compression"]
+repository = "https://github.com/oyvindln/deflate-rs"
+homepage = "https://github.com/oyvindln/deflate-rs"
+description = """
+An in-memory DEFLATE and zlib encoder written in safe rust
+"""
 
 [dependencies]
 adler32 = "0.2.0"
@@ -14,3 +21,7 @@ flate2 = "0.2.14"
 
 [profile.bench]
 debug = true
+
+[features]
+default = []
+unstable = []

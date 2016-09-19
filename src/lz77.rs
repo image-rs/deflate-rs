@@ -412,7 +412,7 @@ mod test {
         use std::str;
         let mut input = Vec::new();
 
-        let mut f = File::open("src/pg11.txt").unwrap();
+        let mut f = File::open("tests/pg11.txt").unwrap();
         f.read_to_end(&mut input).unwrap();
         let compressed = super::lz77_compress(&input).unwrap();
         assert!(compressed.len() < input.len());

@@ -9,10 +9,14 @@ let compressed = deflate_bytes(&data);
 ```
 # Other deflate/zlib rust projects
 * [libflate](https://github.com/rust-lang/rust/tree/master/src/libflate) Bindings to [miniz.c](https://github.com/richgel999/miniz) that are part of the rust distribution.
-* [flate2](http://alexcrichton.com/flate2-rs/flate2/index.html) FLATE, Gzip, and Zlib bindings for Rust 
+* [flate2](http://alexcrichton.com/flate2-rs/flate2/index.html) FLATE, Gzip, and Zlib bindings for Rust
 * [Zopfli in Rust](https://github.com/carols10cents/zopfli) Rust port of zopfli
 * [inflate](https://github.com/PistonDevelopers/inflate) Pure rust DEFLATE decoder
 * [miniz-rs](https://github.com/alexchandel/miniz-rs) Direct rust translation of miniz.c
 
 # License
-Both MIT and Apache 2.0
+deflate is distributed under the terms of both the MIT and Apache 2.0 licences.
+
+bitstream.rs is © @nwin and was released under both MIT and Apache 2.0
+
+The test data (src/pg11.txt) is borrowed from [Project Gutenberg](https://www.gutenberg.org/ebooks/11) and is available under public domain, or the Project Gutenberg Licence
