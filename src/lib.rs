@@ -141,10 +141,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
             compress_block_stored(input, &mut state.writer).unwrap();
             // Update the checksum.
             // We've already added the two first bytes to the checksum earlier.
-            // NOTE: Due to a overflow bug in adler32, we have to do manual loop here for now
-            for &b in input {
-                checksum.update(b);
-            }
+            checksum.update_from_slice(&input);
         },
     }
 

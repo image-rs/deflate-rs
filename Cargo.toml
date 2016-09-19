@@ -12,7 +12,7 @@ An in-memory DEFLATE and zlib encoder written in safe rust
 """
 
 [dependencies]
-adler32 = "0.2.0"
+adler32 = "0.3.0"
 
 [dev-dependencies]
 #flate2 = { version = "0.2.14", features = ["zlib"], default-features = false }
