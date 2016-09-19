@@ -19,12 +19,12 @@ fn test_file_zlib_compare_output() {
     let test_data = get_test_file_data("tests/pg11.txt");
     let flate2_compressed = {
         let mut e = flate2::write::ZlibEncoder::new(Vec::new(), Compression::Best);
-        e.write(&test_data).unwrap();
-        let b = e.finish().unwrap();
-        b
+        e.write_all(&test_data).unwrap();
+        e.finish().unwrap()
     };
 
     let deflate_compressed = deflate::deflate_bytes_zlib(&test_data);
+
     println!("libflate: {}, deflate: {}",
              flate2_compressed.len(),
              deflate_compressed.len());

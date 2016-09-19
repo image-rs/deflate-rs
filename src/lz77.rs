@@ -148,6 +148,12 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
     let mut insert_it = current_chunk.iter().enumerate();
     let mut hash_it = (&data[start + 2..]).iter();
 
+    const NO_LENGTH: usize = MIN_MATCH as usize - 1;
+
+    let mut prev_byte = 0u8;
+    let mut prev_length = NO_LENGTH;
+    let mut prev_distance = 0;
+
     // Iterate through the slice, adding literals or length/distance pairs
     while let Some((n, &b)) = insert_it.next() {
         if let Some(&hash_byte) = hash_it.next() {
@@ -158,62 +164,53 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
             // we should be checking max_match bytes further to achieve the best possible
             // compression.
             let (match_len, match_dist) =
-                longest_match(&data[..end], hash_table, position, MIN_MATCH as usize - 1);
+                longest_match(&data[..end], hash_table, position, prev_length);
 
             // If the match length is less than MIN_MATCH, we didn't find a match
             if match_len >= MIN_MATCH as usize {
                 // TODO: Add heuristic checking if outputting a length/distance pair will actually
                 // be shorter than adding the literal bytes
 
-                let (to_subtract_from_length, length, distance) = {
 
-                    let _ = insert_it.next()
-                        .expect("Reached the end of the array even though we had a match! This \
-                                 suggests a bug somewhere!");
-                    let next_pos = position + 1;
+                // We found a better match, so output the previous byte
+                if prev_length >= MIN_MATCH as usize {
+                    writer.write_literal(prev_byte);
+                }
+                prev_length = match_len;
+                prev_distance = match_dist;
+            } else {
+                if prev_length >= MIN_MATCH as usize {
+                    // The previous match was better so we add it
+                    // Casting note: length and distance is already bounded by the longest match function
+                    // Usize is just used for convenience
+                    writer.write_length_distance(prev_length as u16, prev_distance as u16);
 
-                    if let Some(&next_hash_byte) = hash_it.next() {
-                        hash_table.add_hash_value(next_pos, next_hash_byte);
-                        rolling_checksum.update(next_hash_byte);
+                    // We add the bytes to the hash table and checksum.
+                    // Since we've already added two of them, we need to add two less than
+                    // the length
+                    let bytes_to_add = prev_length - 2;
+                    let taker = insert_it.by_ref().take(bytes_to_add);
+                    let mut hash_taker = hash_it.by_ref().take(bytes_to_add);
 
-                        // Check if we can find a better match at the next byte than the one we currently have
-                        let (next_match_len, next_match_dist) =
-                            longest_match(&data[..end], hash_table, next_pos, match_len);
-                        if next_match_len > match_len {
-                            // We found a better match, so output the previous byte
-                            writer.write_literal(b);
-                            (0, next_match_len, next_match_dist)
-                        } else {
-                            (1, match_len, match_dist)
+                    // Advance the iterators and add the bytes we jump over to the hash table and
+                    // checksum
+                    for (ipos, _) in taker {
+                        if let Some(&i_hash_byte) = hash_taker.next() {
+                            rolling_checksum.update(i_hash_byte);
+                            hash_table.add_hash_value(ipos + start, i_hash_byte);
                         }
-                    } else {
-                        (1, match_len, match_dist)
                     }
-                };
-                // Casting note: length and distance is already bounded by the longest match function
-                // Usize is just used for convenience
-                writer.write_length_distance(length as u16, distance as u16);
 
-                // If we did not find a better match we need to iterate one time less as we've already added
-                // the next byte to the hash table and checksum
-                let bytes_to_add = length - to_subtract_from_length;
 
-                let taker = insert_it.by_ref().take(bytes_to_add - 1);
-                let mut hash_taker = hash_it.by_ref().take(bytes_to_add - 1);
-
-                // Advance the iterators and add the bytes we jump over to the hash table and checksum
-                for (ipos, _) in taker {
-                    if let Some(&i_hash_byte) = hash_taker.next() {
-                        rolling_checksum.update(i_hash_byte);
-                        hash_table.add_hash_value(ipos + start, i_hash_byte);
-                    }
+                } else {
+                    // There was no match, so we simply output another literal
+                    writer.write_literal(b);
                 }
 
-
-            } else {
-                // There was no match, so we simply output another literal
-                writer.write_literal(b);
+                prev_length = NO_LENGTH;
+                prev_distance = 0;
             }
+            prev_byte = b;
         } else {
             // We are at the last two bytes we want to add, so there is no point searching for matches here.
             writer.write_literal(b);
@@ -380,7 +377,7 @@ mod test {
             }
         }
 
-        println!("{}", String::from_utf8(output).unwrap());
+        println!("\"{}\"", String::from_utf8(output).unwrap());
     }
 
     /// Test that a short string from an example on SO compresses correctly
