@@ -18,13 +18,10 @@ fn test_file_zlib_compare_output() {
     use std::io::{Write, Read};
     let test_data = get_test_file_data("tests/pg11.txt");
     let flate2_compressed = {
-        let mut out = Vec::new();
-        {
-            let mut e = flate2::write::ZlibEncoder::new(&mut out, Compression::Best);
-            e.write(&test_data).unwrap();
-            e.finish().unwrap();
-        }
-        out
+        let mut e = flate2::write::ZlibEncoder::new(Vec::new(), Compression::Best);
+        e.write(&test_data).unwrap();
+        let b = e.finish().unwrap();
+        b
     };
 
     let deflate_compressed = deflate::deflate_bytes_zlib(&test_data);
@@ -37,5 +34,19 @@ fn test_file_zlib_compare_output() {
         d.read_to_end(&mut out).unwrap();
         out
     };
+
+
     assert!(decompressed == test_data);
+    // {
+    // use std::fs::File;
+    // use std::io::Write;
+    // {
+    // let mut f = File::create("out.deflate").unwrap();
+    // f.write_all(&deflate_compressed).unwrap();
+    // }
+    // {
+    // let mut f = File::create("out.flate2").unwrap();
+    // f.write_all(&flate2_compressed).unwrap();
+    // }
+    // }
 }

@@ -87,16 +87,16 @@ fn longest_match(data: &[u8],
     let mut current_head = hash_table.get_prev(hash_table.current_head() as usize) as usize;
     let starting_head = current_head;
 
-    let mut best_length = prev_length as usize;//MIN_MATCH - 1;
+    let mut best_length = prev_length;
     let mut best_distance = 0;
 
-    while (current_head) >= limit && current_head != 0 {
+    while current_head >= limit && current_head != 0 {
         let distance = position - current_head;
 
         // We only check further if the match length can actually increase
-        if distance > 0 && (position + best_length) < data.len() &&
-           data[position + best_length] ==
-           data[current_head + best_length] {
+        if distance > 0 && (position + best_length + 1) < data.len() &&
+           data[position + best_length + 1] ==
+           data[current_head + best_length + 1] {
             let length = get_match_length(data, position, current_head);
             if length > best_length {
                 best_length = length;

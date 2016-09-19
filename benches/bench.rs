@@ -20,15 +20,11 @@ fn get_test_file_data(name: &str) -> Vec<u8> {
 fn test_file_zlib(b: &mut Bencher) {
     let test_data = get_test_file_data("tests/pg11.txt");
 
-    b.iter(|| for _ in 1..5 {
-        deflate::deflate_bytes_zlib(&test_data);
-    });
+    b.iter(|| deflate::deflate_bytes_zlib(&test_data));
 }
 
 #[bench]
 fn test_file_zlib_flate(b: &mut Bencher) {
     let test_data = get_test_file_data("tests/pg11.txt");
-    b.iter(|| for _ in 1..5 {
-        flate::deflate_bytes_zlib(&test_data);
-    });
+    b.iter(|| flate::deflate_bytes_zlib(&test_data));
 }
