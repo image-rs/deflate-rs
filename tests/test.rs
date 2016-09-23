@@ -11,7 +11,7 @@ fn get_test_file_data(name: &str) -> Vec<u8> {
     input
 }
 
-// A test comparing the compression ratio of library with libflate from the std library
+// A test comparing the compression ratio of the library with flate2
 #[test]
 fn test_file_zlib_compare_output() {
     use flate2::Compression;

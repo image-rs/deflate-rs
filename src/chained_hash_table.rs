@@ -2,10 +2,11 @@ pub const WINDOW_SIZE: usize = 32768;
 pub const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 #[allow(dead_code)]
 pub const HASH_BYTES: usize = 3;
+/// The number of bits to shift on each hash update. Not sure if 5 or 6 is better.
 const HASH_SHIFT: u32 = 5;
 const HASH_MASK: u32 = WINDOW_MASK as u32;
 
-// Returns a new hash value based on the previous value and the next byte
+/// Returns a new hash value based on the previous value and the next byte
 fn update_hash(current_hash: u32, to_insert: u8, shift: u32, mask: u32) -> u32 {
     ((current_hash << shift) ^ (to_insert as u32)) & mask
 }

@@ -94,9 +94,9 @@ fn longest_match(data: &[u8],
         let distance = position - current_head;
 
         // We only check further if the match length can actually increase
-        if distance > 0 && (position + best_length + 1) < data.len() &&
-           data[position + best_length + 1] ==
-           data[current_head + best_length + 1] {
+        if distance > 0 && (position + best_length) < data.len() &&
+           data[position + best_length] ==
+           data[current_head + best_length] {
             let length = get_match_length(data, position, current_head);
             if length > best_length {
                 best_length = length;
@@ -153,6 +153,7 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
     let mut prev_byte = 0u8;
     let mut prev_length = NO_LENGTH;
     let mut prev_distance = 0;
+    let mut add = false;
 
     // Iterate through the slice, adding literals or length/distance pairs
     while let Some((n, &b)) = insert_it.next() {
@@ -160,26 +161,14 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
             let position = n + start;
             hash_table.add_hash_value(position, hash_byte);
             rolling_checksum.update(hash_byte);
+
             // TODO: Currently, we only check for matches up to the end of the chunk, but ideally
             // we should be checking max_match bytes further to achieve the best possible
             // compression.
             let (match_len, match_dist) =
                 longest_match(&data[..end], hash_table, position, prev_length);
 
-            // If the match length is less than MIN_MATCH, we didn't find a match
-            if match_len >= MIN_MATCH as usize {
-                // TODO: Add heuristic checking if outputting a length/distance pair will actually
-                // be shorter than adding the literal bytes
-
-
-                // We found a better match, so output the previous byte
-                if prev_length >= MIN_MATCH as usize {
-                    writer.write_literal(prev_byte);
-                }
-                prev_length = match_len;
-                prev_distance = match_dist;
-            } else {
-                if prev_length >= MIN_MATCH as usize {
+            if prev_length >= match_len && prev_length >= MIN_MATCH as usize {
                     // The previous match was better so we add it
                     // Casting note: length and distance is already bounded by the longest match function
                     // Usize is just used for convenience
@@ -201,20 +190,32 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
                         }
                     }
 
+                    add = false;
 
-                } else {
-                    // There was no match, so we simply output another literal
-                    writer.write_literal(b);
-                }
-
-                prev_length = NO_LENGTH;
-                prev_distance = 0;
+            } else if add {
+                // We found a better match (or there was no previous match)
+                // so output the previous byte
+                writer.write_literal(prev_byte);
+            } else {
+                add = true
             }
+
+            prev_length = match_len;
+            prev_distance = match_dist;
             prev_byte = b;
         } else {
+            if add {
+                // We may still have a leftover byte at this point, so we add it here if needed.
+                writer.write_literal(prev_byte);
+                add = false;
+            }
             // We are at the last two bytes we want to add, so there is no point searching for matches here.
             writer.write_literal(b);
         }
+    }
+    if add {
+        // We may still have a leftover byte at this point, so we add it here if needed.
+        writer.write_literal(prev_byte);
     }
 }
 
@@ -319,7 +320,7 @@ mod test {
                         n += 1;
                     }
                 }
-                LDPair::EndOfBlock => (),
+                LDPair::EndOfBlock => println!("Block end at vec len: {}", output.len()),
             }
         }
         output
@@ -386,7 +387,7 @@ mod test {
         use std::str;
 
         let test_bytes = String::from("Deflate late").into_bytes();
-        let res = super::lz77_compress(&test_bytes).unwrap();
+        let res = lz77_compress(&test_bytes).unwrap();
         // println!("{:?}", res);
         // TODO: Check that compression is correct
         print_output(&res);
@@ -411,13 +412,36 @@ mod test {
 
         let mut f = File::open("tests/pg11.txt").unwrap();
         f.read_to_end(&mut input).unwrap();
-        let compressed = super::lz77_compress(&input).unwrap();
+        let compressed = lz77_compress(&input).unwrap();
         assert!(compressed.len() < input.len());
-        //print_output(&compressed);
+        // print_output(&compressed);
         let decompressed = decompress_lz77(&compressed);
-        //println!("{}", str::from_utf8(&decompressed).unwrap());
-        // assert_eq!(input.len(), decompressed.len());
+        // println!("{}", str::from_utf8(&decompressed).unwrap());
+        // This is to check where the compression fails, if it were to
+        for (n, (&a, &b)) in input.iter().zip(decompressed.iter()).enumerate() {
+            if a != b {
+                println!("First difference at {}, input: {}, output: {}", n, a, b);
+                break;
+            }
+        }
+        assert_eq!(input.len(), decompressed.len());
         assert!(&decompressed == &input);
+    }
+
+    /// Check that lazy matching is working as intended
+    #[test]
+    fn test_lazy() {
+        // We want to match on `badger` rather than `nba` as it is longer
+        //let data = b" nba nbadg badger nbadger";
+        let data = b"nba badger nbadger";
+        let compressed = lz77_compress(data).unwrap();
+        let test = compressed[compressed.len() - 2];
+        if let LDPair::LengthDistance{length: n, distance: _} = test {
+            assert_eq!(n, 6);
+        } else {
+            print_output(&compressed);
+            panic!();
+        }
     }
 
     /// Test that matches at the window border are working correctly
