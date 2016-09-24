@@ -42,7 +42,7 @@ impl ChainedHashTable {
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
         // TODO: Do we need to allow different shifts/masks?
         self.current_hash = update_hash(self.current_hash, value, HASH_SHIFT, HASH_MASK);
-        self.prev[position & WINDOW_MASK] = self.current_head();
+        self.prev[position & WINDOW_MASK] = self.head[self.current_hash as usize];
         self.head[self.current_hash as usize] = position as u16;
         self.current_pos = position;
     }

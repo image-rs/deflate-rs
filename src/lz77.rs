@@ -43,6 +43,17 @@ impl LZ77State {
     }
 }
 
+pub fn create_buffer(data: &[u8]) -> Vec<u8> {
+    let end = cmp::min((WINDOW_SIZE * 2) + 2, data.len());
+    Vec::from(&data[..end])
+}
+
+fn slide_buffer(buffer: &mut [u8], data: &[u8]) {
+    let (lower, upper) = buffer[..].split_at_mut(WINDOW_SIZE);
+    lower.copy_from_slice(&upper[..WINDOW_SIZE]);
+    upper[..data.len()].copy_from_slice(data);
+}
+
 /// A structure representing values in a compressed stream of data before being huffman coded
 /// We might want to represent this differently eventually to save on memory usage
 /// (We don't actually need the full 16 bytes to store the length and distance data)
@@ -74,6 +85,8 @@ impl LDPair {
 
 /// Get the length of the checked match
 /// The function returns number of bytes after and including `current_pos` match
+/// Preventing this from being inlined seems to improve performance slightly
+#[inline(never)]
 fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usize {
     // TODO: This can be maybe be optimised by checking multiple bytes at once
     data[current_pos..]
@@ -92,22 +105,23 @@ fn longest_match(data: &[u8],
                  position: usize,
                  prev_length: usize)
                  -> (usize, usize) {
+
     // If we are at the start, or we already have a match at the maximum length, we stop here.
     if position == 0 || prev_length >= MAX_MATCH {
         return (0, 0);
     }
-
-    let limit = if position > WINDOW_SIZE {
-        position - WINDOW_SIZE
-    } else {
-        0
-    };
 
     // We can't grow any further
     if position + prev_length >= data.len() {
         return (0, 0);
     };
 
+
+    let limit = if position > WINDOW_SIZE {
+        position - WINDOW_SIZE
+    } else {
+        0
+    };
 
     let max_length = cmp::min((data.len() - position), MAX_MATCH);
 
@@ -172,7 +186,7 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
                                                        end: usize,
                                                        hash_table: &mut ChainedHashTable,
                                                        writer: &mut W,
-                                                       rolling_checksum: &mut RC) {
+                                                       _rolling_checksum: &mut RC) {
     let end = cmp::min(data.len(), end);
     let current_chunk = &data[start..end];
     let mut insert_it = current_chunk.iter().enumerate();
@@ -190,7 +204,7 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
         if let Some(&hash_byte) = hash_it.next() {
             let position = n + start;
             hash_table.add_hash_value(position, hash_byte);
-            rolling_checksum.update(hash_byte);
+            // rolling_checksum.update(hash_byte);
 
             // TODO: Currently, we only check for matches up to the end of the chunk, but ideally
             // we should be checking max_match bytes further to achieve the best possible
@@ -215,7 +229,7 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
                 // checksum
                 for (ipos, _) in taker {
                     if let Some(&i_hash_byte) = hash_taker.next() {
-                        rolling_checksum.update(i_hash_byte);
+                        // rolling_checksum.update(i_hash_byte);
                         hash_table.add_hash_value(ipos + start, i_hash_byte);
                     }
                 }
@@ -254,6 +268,7 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
 /// Will return err on failure eventually, but for now allways succeeds or panics
 pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
                                                                  state: &mut LZ77State,
+                                                                 buffer: &mut [u8],
                                                                  mut writer: &mut W,
                                                                  mut rolling_checksum: &mut RC)
                                                                  -> Option<bool> {
@@ -274,7 +289,7 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
         } else {
             cmp::min(window_size, data.len())
         };
-        process_chunk::<W, RC>(data,
+        process_chunk::<W, RC>(buffer,
                                0,
                                first_chunk_end,
                                &mut state.hash_table,
@@ -291,7 +306,7 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
             let start = state.current_start;
             let slice = &data[start - window_size..];
             let end = cmp::min(window_size * 2, slice.len());
-            process_chunk::<W, RC>(slice,
+            process_chunk::<W, RC>(buffer,
                                    window_size,
                                    end,
                                    &mut state.hash_table,
@@ -301,10 +316,14 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
                 state.set_last();
             } else {
                 state.current_start += window_size;
+                let start = state.current_start;
                 // We slide the hash table back to make space for new hash values
                 // We only need to remember 32k bytes back (the maximum distance allowed by the
                 // deflate spec)
                 state.hash_table.slide(window_size);
+                let end = cmp::min(start + window_size + 2, data.len());
+                //                rolling_checksum.update_from_slice(&data[start + 2..end]);
+                slide_buffer(buffer, &data[start..end]);
             }
 
             if !next_block_merge {
@@ -328,8 +347,9 @@ pub fn lz77_compress(data: &[u8]) -> Option<Vec<LDPair>> {
     let mut w = FixedWriter::new();
     let mut state = LZ77State::new(data);
     let mut dummy_checksum = NoChecksum::new();
+    let mut buffer = create_buffer(&data);
     while !state.is_last_block {
-        lz77_compress_block(data, &mut state, &mut w, &mut dummy_checksum);
+        lz77_compress_block(data, &mut state, &mut buffer, &mut w, &mut dummy_checksum);
     }
     Some(w.buffer)
 }

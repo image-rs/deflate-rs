@@ -4,8 +4,7 @@
 //! This library provides functions to compress data (currently only in-memory) using DEFLATE,
 //! both with and without a [zlib](https://tools.ietf.org/html/rfc1950) header/trailer
 //! The current implementation is still pretty slow compared to C-libraries like zlib and miniz,
-//! and missing some functionality to achieve the same level of compression, and is therefore not
-//! recommended for production use.
+//! particularly for large files, and is therefore not recommended for production use.
 
 #[cfg(test)]
 extern crate flate2;
@@ -30,6 +29,7 @@ mod encoder_state;
 use huffman_table::*;
 #[cfg(test)]
 use lz77::LDPair;
+use lz77::create_buffer;
 use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes, MIN_NUM_LITERALS_AND_LENGTHS,
                       MIN_NUM_DISTANCES};
 use length_encode::huffman_lengths_from_frequency;
@@ -92,8 +92,10 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
         BType::DynamicHuffman | BType::FixedHuffman => {
             let mut lz77_state = lz77::LZ77State::new(input);
             let mut lz77_writer = output_writer::DynamicWriter::new();
+            let mut buffer = create_buffer(input);
 
-            checksum.update_from_slice(&input[..2]);
+            checksum.update_from_slice(// &input[..2]
+                                       &input);
 
             match block_type {
                 BType::DynamicHuffman => {
@@ -101,6 +103,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                         lz77::lz77_compress_block::<output_writer::DynamicWriter,
                                                     RC>(input,
                                                         &mut lz77_state,
+                                                        &mut buffer,
                                                         &mut lz77_writer,
                                                         &mut checksum);
                         try!(state.write_start_of_block(false, lz77_state.is_last_block()));
@@ -140,6 +143,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
 
                     lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input,
                                                                                   &mut lz77_state,
+                                                                                  &mut buffer,
                                                                                   &mut lz77_writer,
                                                                                   &mut checksum);
                     state.update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS,
