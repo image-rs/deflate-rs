@@ -1,8 +1,7 @@
 pub const WINDOW_SIZE: usize = 32768;
-pub const WINDOW_MASK: usize = WINDOW_SIZE - 1;
-#[allow(dead_code)]
+const WINDOW_MASK: usize = WINDOW_SIZE - 1;
+#[cfg(test)]
 pub const HASH_BYTES: usize = 3;
-/// The number of bits to shift on each hash update. Not sure if 5 or 6 is better.
 const HASH_SHIFT: u32 = 5;
 const HASH_MASK: u32 = WINDOW_MASK as u32;
 

@@ -24,8 +24,8 @@ pub enum CompressionLevel {
     Maximum = 3 << 6,
 }
 
-/// Generate FCHECK from CMF and FLG (without FCKECH )so that they are correct according to the specification,
-/// i.e (CMF*256 + FCHK) % 31 = 0
+/// Generate FCHECK from CMF and FLG (without FCKECH )so that they are correct according to the
+/// specification, i.e (CMF*256 + FCHK) % 31 = 0
 /// Returns flg with the FCHKECK bits added (any existing FCHECK bits are ignored)
 fn add_fcheck(cmf: u8, flg: u8) -> u8 {
     let rem = ((usize::from(cmf) * 256) + usize::from(flg)) % usize::from(FCHECK_DIVISOR);
@@ -57,13 +57,15 @@ mod test {
     #[test]
     fn test_gen_fcheck() {
         let cmf = DEFAULT_CMF;
-        let flg = super::add_fcheck(DEFAULT_CMF, CompressionLevel::Default as u8 | super::DEFAULT_FDICT);
+        let flg = super::add_fcheck(DEFAULT_CMF,
+                                    CompressionLevel::Default as u8 | super::DEFAULT_FDICT);
         assert_eq!(((usize::from(cmf) * 256) + usize::from(flg)) % 31, 0);
     }
 
     #[test]
     fn test_header() {
         let header = get_zlib_header(CompressionLevel::Default);
-        assert_eq!(((usize::from(header[0]) * 256) + usize::from(header[1])) % 31, 0);
+        assert_eq!(((usize::from(header[0]) * 256) + usize::from(header[1])) % 31,
+                   0);
     }
 }

@@ -19,7 +19,8 @@ pub const REPEAT_ZERO_7_BITS: usize = 18;
 const MIN_REPEAT: u8 = 3;
 
 fn update_out_and_freq(encoded: EncodedLength,
-                       output: &mut Vec<EncodedLength>, frequencies: &mut [u16; 19]) {
+                       output: &mut Vec<EncodedLength>,
+                       frequencies: &mut [u16; 19]) {
     let index = match encoded {
         EncodedLength::Length(l) => usize::from(l),
         EncodedLength::CopyPrevious(_) => COPY_PREVIOUS,
@@ -33,7 +34,7 @@ fn update_out_and_freq(encoded: EncodedLength,
 }
 
 // Convenience function to check if the repeat counter should be incremented further
-fn not_max_repetitions(length_value: u8, repeats: u8) -> bool{
+fn not_max_repetitions(length_value: u8, repeats: u8) -> bool {
     (length_value == 0 && repeats < 138) || repeats < 6
 }
 
@@ -62,28 +63,24 @@ pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])>
                     if repeat <= 10 {
                         update_out_and_freq(EncodedLength::RepeatZero3Bits(repeat),
                                             &mut out,
-                                            &mut frequencies,
-                        );
+                                            &mut frequencies);
                     } else {
                         update_out_and_freq(EncodedLength::RepeatZero7Bits(repeat),
                                             &mut out,
-                                            &mut frequencies,
-                        );
+                                            &mut frequencies);
                     }
                 }
-                1...15 => update_out_and_freq(EncodedLength::CopyPrevious(repeat),
-                                            &mut out,
-                                            &mut frequencies,
-                ),
+                1...15 => {
+                    update_out_and_freq(EncodedLength::CopyPrevious(repeat),
+                                        &mut out,
+                                        &mut frequencies)
+                }
                 _ => return None,
             };
-                repeat = 1;
+            repeat = 1;
             // If we have a new length value, or are at the end, output l
             if l != prev || iter.peek().is_none() {
-                update_out_and_freq(EncodedLength::Length(l),
-                                            &mut out,
-                                            &mut frequencies,
-                );
+                update_out_and_freq(EncodedLength::Length(l), &mut out, &mut frequencies);
                 repeat = 0;
             }
         } else {
@@ -91,12 +88,9 @@ pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])>
             // so just we output the lengths directly
             let mut i = repeat as i32;
             while i >= 0 {
-                update_out_and_freq(EncodedLength::Length(
-                    lengths[usize::from(n) - i as usize]
-                ),
-                                            &mut out,
-                                            &mut frequencies,
-                );
+                update_out_and_freq(EncodedLength::Length(lengths[usize::from(n) - i as usize]),
+                                    &mut out,
+                                    &mut frequencies);
                 i -= 1;
             }
             repeat = 0;
@@ -209,7 +203,8 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Ve
     let mut lengths = vec![0; frequencies.len()];
 
     // Create a vector of nodes used by the package merge algorithm
-    // We start by adding a leaf node for each nonzero frequency, and subsequently sorting them by weight.
+    // We start by adding a leaf node for each nonzero frequency, and subsequently
+    // sorting them by weight.
     let mut leaves: Vec<_> = frequencies.iter()
         .enumerate()
         .filter_map(|(n, f)| {
@@ -225,7 +220,8 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Ve
         })
         .collect();
 
-    // Special case with zero or 1 value having a non-zero frequency (this will break the package merge otherwise)
+    // Special case with zero or 1 value having a non-zero frequency
+    // (this will break the package merge otherwise)
     if leaves.len() == 1 {
         lengths[leaves[0].count as usize] += 1;
         return lengths;
@@ -288,11 +284,11 @@ mod test {
         // TODO: Write a proper test for this
         use huffman_table::FIXED_CODE_LENGTHS;
         let enc = encode_lengths(&FIXED_CODE_LENGTHS).unwrap();
-        //There are no lengths lower than 6 in the fixed table
-        assert_eq!(enc.1[0..7], [0,0,0,0,0,0, 0]);
-        //Neither are there any lengths above 9
-        assert_eq!(enc.1[10..16], [0,0,0,0,0, 0]);
-        //Also there are no zero-length codes so there shouldn't be any repetitions of zero
+        // There are no lengths lower than 6 in the fixed table
+        assert_eq!(enc.1[0..7], [0, 0, 0, 0, 0, 0, 0]);
+        // Neither are there any lengths above 9
+        assert_eq!(enc.1[10..16], [0, 0, 0, 0, 0, 0]);
+        // Also there are no zero-length codes so there shouldn't be any repetitions of zero
         assert_eq!(enc.1[17..19], [0, 0]);
     }
 
@@ -331,6 +327,6 @@ mod test {
         for (a, b) in frequencies.iter().zip(res.iter()) {
             assert_eq!(*a, (*b).into());
         }
-        //assert_eq!(frequencies, res.as_slice());
+        // assert_eq!(frequencies, res.as_slice());
     }
 }

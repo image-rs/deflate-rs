@@ -20,7 +20,7 @@ pub struct FixedWriter {
 
 impl FixedWriter {
     pub fn new() -> FixedWriter {
-        FixedWriter { buffer: Vec::new() }
+        FixedWriter { buffer: Vec::with_capacity(10000) }
     }
 
     pub fn clear_buffer(&mut self) {
@@ -34,10 +34,8 @@ impl OutputWriter for FixedWriter {
     }
 
     fn write_length_distance(&mut self, length: u16, distance: u16) {
-        self.buffer.push(LDPair::LengthDistance {
-            length: length,
-            distance: distance,
-        })
+        self.buffer.push(LDPair::length(length));
+        self.buffer.push(LDPair::distance(distance));
     }
 
     fn write_end_of_block(&mut self) {

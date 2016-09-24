@@ -1,4 +1,5 @@
-//! An implementation an encoder using [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) compression algorightm in pure rust.
+//! An implementation an encoder using [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) \
+//! compression algorightm in pure rust.
 //!
 //! This library provides functions to compress data (currently only in-memory) using DEFLATE,
 //! both with and without a [zlib](https://tools.ietf.org/html/rfc1950) header/trailer
@@ -8,8 +9,8 @@
 
 #[cfg(test)]
 extern crate flate2;
-//#[cfg(test)]
-//extern crate inflate;
+// #[cfg(test)]
+// extern crate inflate;
 
 extern crate adler32;
 
@@ -29,7 +30,8 @@ mod encoder_state;
 use huffman_table::*;
 #[cfg(test)]
 use lz77::LDPair;
-use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes, MIN_NUM_LITERALS_AND_LENGTHS, MIN_NUM_DISTANCES};
+use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes, MIN_NUM_LITERALS_AND_LENGTHS,
+                      MIN_NUM_DISTANCES};
 use length_encode::huffman_lengths_from_frequency;
 use checksum::RollingChecksum;
 use std::io::{Write, Cursor};
@@ -59,11 +61,11 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
         let mut state = EncoderState::fixed(&mut writer);
         let compressed = lz77_compress(input).unwrap();
 
-        //We currently don't split blocks here(this function is just used for tests anyhow)
+        // We currently don't split blocks here(this function is just used for tests anyhow)
         state.write_start_of_block(true, true).expect("Write error!");
         for ld in compressed {
-            //We ignore end of block here for now since there is no purpose of
-            //splitting a full stream of data using fixed huffman data into blocks
+            // We ignore end of block here for now since there is no purpose of
+            // splitting a full stream of data using fixed huffman data into blocks
             match ld {
                 LDPair::EndOfBlock => (),
                 _ => state.write_ldpair(ld).expect("Write error!"),
@@ -78,7 +80,10 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     writer.into_inner()
 }
 
-fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer: &mut W, mut checksum: &mut RC) -> io::Result<()> {
+fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
+                                                        mut writer: &mut W,
+                                                        mut checksum: &mut RC)
+                                                        -> io::Result<()> {
     let mut state = EncoderState::new(huffman_table::HuffmanTable::empty(), &mut writer);
 
     let block_type = block_type_for_length(input.len());
@@ -91,49 +96,67 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
             checksum.update_from_slice(&input[..2]);
 
             match block_type {
-                BType::DynamicHuffman => while !lz77_state.is_last_block() {
-                    lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
-                    try!(state.write_start_of_block(false, lz77_state.is_last_block()));
+                BType::DynamicHuffman => {
+                    while !lz77_state.is_last_block() {
+                        lz77::lz77_compress_block::<output_writer::DynamicWriter,
+                                                    RC>(input,
+                                                        &mut lz77_state,
+                                                        &mut lz77_writer,
+                                                        &mut checksum);
+                        try!(state.write_start_of_block(false, lz77_state.is_last_block()));
 
-                    let (l_lengths, d_lengths) = {
-                        let (l_freqs, d_freqs) = lz77_writer.get_frequencies();
-                        // The huffman spec allows us to exclude zeroes at the end of the table of
-                        // of huffman lengths. Since a frequency of 0 will give an huffman length of 0
-                        // we strip off the trailing zeroes before even generating the lengths to save
-                        // some work
-                        // There is however a minimum number of values we have to keep according to the deflate spec
-                        (huffman_lengths_from_frequency(remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS), MAX_CODE_LENGTH),
-                         huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES), MAX_CODE_LENGTH))
-                    };
-                    try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
+                        let (l_lengths, d_lengths) = {
+                            let (l_freqs, d_freqs) = lz77_writer.get_frequencies();
+                            // The huffman spec allows us to exclude zeroes at the end of the table
+                            // of huffman lengths. Since a frequency of 0 will give an huffman
+                            // length of 0. We strip off the trailing zeroes before even generating
+                            // the lengths to save some work.
+                            // There is however a minimum number of values we have to keep according
+                            // to the deflate spec.
+                            (
+                                huffman_lengths_from_frequency(
+                                    remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS),
+                                    MAX_CODE_LENGTH
+                            ),
+                                huffman_lengths_from_frequency(
+                                    remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES),
+                                    MAX_CODE_LENGTH)
+                            )
+                        };
+                        try!(write_huffman_lengths(&l_lengths, &d_lengths, &mut state.writer));
 
-                    state.update_huffman_table(&l_lengths, &d_lengths).expect(
-                        "Fatal error!: Failed to create huffman table!"
-                    );
+                        state.update_huffman_table(&l_lengths, &d_lengths)
+                            .expect("Fatal error!: Failed to create huffman table!");
 
-                    for &ld in lz77_writer.get_buffer() {
-                        try!(state.write_ldpair(ld));
+                        for &ld in lz77_writer.get_buffer() {
+                            try!(state.write_ldpair(ld));
+                        }
+
+                        // End of block is written in write_ldpair.
+                        lz77_writer.clear();
                     }
-
-                    // End of block is written in write_ldpair.
-                    lz77_writer.clear();
-                },
+                }
                 BType::FixedHuffman => {
 
-                    lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input, &mut lz77_state, &mut lz77_writer, &mut checksum);
-                    state.update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS, &huffman_table::FIXED_CODE_LENGTHS_DISTANCE).unwrap();
+                    lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input,
+                                                                                  &mut lz77_state,
+                                                                                  &mut lz77_writer,
+                                                                                  &mut checksum);
+                    state.update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS,
+                                              &huffman_table::FIXED_CODE_LENGTHS_DISTANCE)
+                        .unwrap();
                     try!(state.write_start_of_block(true, true));
                     for &ld in lz77_writer.get_buffer() {
                         try!(state.write_ldpair(ld));
                     }
                     lz77_writer.clear();
-                },
+                }
                 BType::NoCompression => {
                     unreachable!();
                 }
             }
 
-        },
+        }
         BType::NoCompression => {
             use bitstream::BitWriter;
             state.writer.write_bits(stored_block::STORED_FIRST_BYTE_FINAL.into(), 3).unwrap();
@@ -142,7 +165,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
             // Update the checksum.
             // We've already added the two first bytes to the checksum earlier.
             checksum.update_from_slice(&input);
-        },
+        }
     }
 
     state.flush().unwrap();
@@ -163,7 +186,8 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8], mut writer
 /// ```
 pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
     let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
-    compress_data_dynamic(input, &mut writer, &mut checksum::NoChecksum::new()).expect("Write error!");
+    compress_data_dynamic(input, &mut writer, &mut checksum::NoChecksum::new())
+        .expect("Write error!");
     writer.into_inner()
 }
 
@@ -183,13 +207,16 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
     let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
     // Write header
-    zlib::write_zlib_header(&mut writer, zlib::CompressionLevel::Default).expect("Write error when writing zlib header!");
+    zlib::write_zlib_header(&mut writer, zlib::CompressionLevel::Default)
+        .expect("Write error when writing zlib header!");
 
     let mut checksum = checksum::Adler32Checksum::new();
-    compress_data_dynamic(input, &mut writer, &mut checksum).expect("Write error when writing compressed data!");
+    compress_data_dynamic(input, &mut writer, &mut checksum)
+        .expect("Write error when writing compressed data!");
 
     let hash = checksum.current_hash();
-    writer.write_all(&[(hash >> 24) as u8, (hash >> 16) as u8, (hash >> 8) as u8, hash as u8]).expect("Write error when writing checksum!");
+    writer.write_all(&[(hash >> 24) as u8, (hash >> 16) as u8, (hash >> 8) as u8, hash as u8])
+        .expect("Write error when writing checksum!");
     writer.into_inner()
 }
 
@@ -200,25 +227,25 @@ mod test {
 
     /// Helper function to decompress into a `Vec<u8>`
     fn decompress_to_end(input: &[u8]) -> Vec<u8> {
-        /*use std::str;
-        let mut inflater = super::inflate::InflateStream::new();
-        let mut out = Vec::new();
-        let mut n = 0;
-        println!("input len {}", input.len());
-        while n < input.len() {
-            let res = inflater.update(&input[n..]) ;
-            if let Ok((num_bytes_read, result)) = res {
-                println!("result len {}, bytes_read {}", result.len(), num_bytes_read);
-                n += num_bytes_read;
-                out.extend(result);
-            } else {
-                //println!("Output: `{}`", str::from_utf8(&out).unwrap());
-                println!("Output decompressed: {}", out.len());
-                res.unwrap();
-            }
-
-        }
-        out*/
+        // use std::str;
+        // let mut inflater = super::inflate::InflateStream::new();
+        // let mut out = Vec::new();
+        // let mut n = 0;
+        // println!("input len {}", input.len());
+        // while n < input.len() {
+        // let res = inflater.update(&input[n..]) ;
+        // if let Ok((num_bytes_read, result)) = res {
+        // println!("result len {}, bytes_read {}", result.len(), num_bytes_read);
+        // n += num_bytes_read;
+        // out.extend(result);
+        // } else {
+        // println!("Output: `{}`", str::from_utf8(&out).unwrap());
+        // println!("Output decompressed: {}", out.len());
+        // res.unwrap();
+        // }
+        //
+        // }
+        // out
 
         use std::io::Read;
         use flate2::read::DeflateDecoder;
@@ -385,14 +412,13 @@ mod test {
         let test_data = get_test_file_data("tests/pg11.txt");
 
         let compressed = deflate_bytes_zlib(&test_data);
-/*
-        {
-            use std::fs::File;
-            use std::io::Write;
-            let mut f = File::create("out.zlib").unwrap();
-            f.write_all(&compressed).unwrap();
-        }
-         */
+        // {
+        // use std::fs::File;
+        // use std::io::Write;
+        // let mut f = File::create("out.zlib").unwrap();
+        // f.write_all(&compressed).unwrap();
+        // }
+        //
         println!("compressed length: {}", compressed.len());
 
         assert!(compressed.len() < test_data.len());
@@ -418,14 +444,13 @@ mod test {
         let mut test_data = vec![22; 32768];
         test_data.extend(&[5, 2, 55, 11, 12]);
         let compressed = deflate_bytes_zlib(&test_data);
-/*
-        {
-            use std::fs::File;
-            use std::io::Write;
-            let mut f = File::create("out_block.zlib").unwrap();
-            f.write_all(&compressed).unwrap();
-        }
-*/
+        // {
+        // use std::fs::File;
+        // use std::io::Write;
+        // let mut f = File::create("out_block.zlib").unwrap();
+        // f.write_all(&compressed).unwrap();
+        // }
+        //
         let result = decompress_zlib(&compressed);
         assert!(test_data == result);
     }

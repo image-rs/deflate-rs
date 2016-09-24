@@ -37,7 +37,7 @@ impl<W: Write> EncoderState<W> {
     }
 
     /// Encodes a literal value to the writer
-    pub fn write_literal(&mut self, value: u8) -> io::Result<()> {
+    fn write_literal(&mut self, value: u8) -> io::Result<()> {
         let code = self.huffman_table.get_literal(value);
         self.writer.write_bits(code.code, code.length)
     }
@@ -45,16 +45,18 @@ impl<W: Write> EncoderState<W> {
     pub fn write_ldpair(&mut self, value: LDPair) -> io::Result<()> {
         match value {
             LDPair::Literal(l) => self.write_literal(l),
-            LDPair::LengthDistance { length, distance } => {
-                let ldencoded = self.huffman_table
-                    .get_length_distance_code(length, distance)
-                    .expect(&format!("Failed to get code for length: {}, distance: {}",
-                                     length,
-                                     distance));
+            LDPair::Length(l) => {
+                let ldencoded = self.huffman_table.get_length_distance_code(l, 22).unwrap();
                 try!(self.writer
                     .write_bits(ldencoded.length_code.code, ldencoded.length_code.length));
-                try!(self.writer.write_bits(ldencoded.length_extra_bits.code,
-                                            ldencoded.length_extra_bits.length));
+                self.writer.write_bits(ldencoded.length_extra_bits.code,
+                                       ldencoded.length_extra_bits.length)
+            }
+            LDPair::Distance(d) => {
+                let ldencoded = self.huffman_table
+                    .get_length_distance_code(10, d)
+                    .expect(&format!("Failed to get code for length: {}, distance: {}", 0, d));
+
                 try!(self.writer
                     .write_bits(ldencoded.distance_code.code, ldencoded.distance_code.length));
                 self.writer.write_bits(ldencoded.distance_extra_bits.code,
