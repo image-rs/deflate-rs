@@ -12,6 +12,7 @@ extern crate flate2;
 // extern crate inflate;
 
 extern crate adler32;
+extern crate byteorder;
 
 mod huffman_table;
 mod lz77;
@@ -25,6 +26,8 @@ mod checksum;
 mod bit_reverse;
 mod bitstream;
 mod encoder_state;
+
+use byteorder::BigEndian;
 
 use huffman_table::*;
 #[cfg(test)]
@@ -94,8 +97,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
             let mut lz77_writer = output_writer::DynamicWriter::new();
             let mut buffer = create_buffer(input);
 
-            checksum.update_from_slice(// &input[..2]
-                                       &input);
+            checksum.update_from_slice(input);
 
             match block_type {
                 BType::DynamicHuffman => {
@@ -168,7 +170,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
             compress_block_stored(input, &mut state.writer).unwrap();
             // Update the checksum.
             // We've already added the two first bytes to the checksum earlier.
-            checksum.update_from_slice(&input);
+            checksum.update_from_slice(input);
         }
     }
 
@@ -209,6 +211,7 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 /// let compressed_data = deflate_bytes_zlib(data);
 /// ```
 pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
+    use byteorder::WriteBytesExt;
     let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
     // Write header
     zlib::write_zlib_header(&mut writer, zlib::CompressionLevel::Default)
@@ -219,8 +222,8 @@ pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
         .expect("Write error when writing compressed data!");
 
     let hash = checksum.current_hash();
-    writer.write_all(&[(hash >> 24) as u8, (hash >> 16) as u8, (hash >> 8) as u8, hash as u8])
-        .expect("Write error when writing checksum!");
+
+    writer.write_u32::<BigEndian>(hash).expect("Write error when writing checksum!");
     writer.into_inner()
 }
 

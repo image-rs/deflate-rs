@@ -88,7 +88,6 @@ impl LDPair {
 /// Preventing this from being inlined seems to improve performance slightly
 #[inline(never)]
 fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usize {
-    // TODO: This can be maybe be optimised by checking multiple bytes at once
     data[current_pos..]
         .iter()
         .zip(data[pos_to_check..].iter())
@@ -135,7 +134,10 @@ fn longest_match(data: &[u8],
     let mut best_length = prev_length;
     let mut best_distance = 0;
 
-    while current_head >= limit && current_head != 0 {
+    let mut iters = 0;
+
+    // We limit the chain length to 4096 for now to avoid taking too long
+    while current_head >= limit && current_head != 0 && iters <= 4096 {
 
         // We only check further if the match length can actually increase
         if data[position + best_length] == data[current_head + best_length] {
@@ -156,6 +158,7 @@ fn longest_match(data: &[u8],
             // We've gone through one cycle.
             break;
         }
+        iters += 1;
     }
 
     if best_length > prev_length {
@@ -347,7 +350,7 @@ pub fn lz77_compress(data: &[u8]) -> Option<Vec<LDPair>> {
     let mut w = FixedWriter::new();
     let mut state = LZ77State::new(data);
     let mut dummy_checksum = NoChecksum::new();
-    let mut buffer = create_buffer(&data);
+    let mut buffer = create_buffer(data);
     while !state.is_last_block {
         lz77_compress_block(data, &mut state, &mut buffer, &mut w, &mut dummy_checksum);
     }

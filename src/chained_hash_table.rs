@@ -68,7 +68,6 @@ impl ChainedHashTable {
         self.current_hash
     }
 
-    #[allow(dead_code)]
     fn slide_value(b: u16, bytes: u16) -> u16 {
         if b >= bytes { b - bytes } else { 0 }
     }
