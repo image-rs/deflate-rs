@@ -11,12 +11,18 @@ fn get_test_file_data(name: &str) -> Vec<u8> {
     input
 }
 
+fn get_test_data() -> Vec<u8> {
+    use std::env;
+    let path = env::var("TEST_FILE").unwrap_or("tests/pg11.txt".to_string());
+    get_test_file_data(&path)
+}
+
 // A test comparing the compression ratio of the library with flate2
 #[test]
 fn test_file_zlib_compare_output() {
     use flate2::Compression;
     use std::io::{Write, Read};
-    let test_data = get_test_file_data("tests/pg11.txt");
+    let test_data = get_test_data();
     let flate2_compressed = {
         let mut e = flate2::write::ZlibEncoder::new(Vec::new(), Compression::Best);
         e.write_all(&test_data).unwrap();
