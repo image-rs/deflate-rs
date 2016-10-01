@@ -84,15 +84,32 @@ impl LDPair {
 }
 
 /// Get the length of the checked match
-/// The function returns number of bytes after and including `current_pos` match
-/// Preventing this from being inlined seems to improve performance slightly
-#[inline(never)]
+/// The function returns number of bytes at and including `current_pos` that are the same as the
+/// ones at `pos_to_check`
 fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usize {
+    // Unsafe version for comparison
+    // let mut counter = 0;
+    // let max = cmp::min(data.len() - current_pos, MAX_MATCH);
+
+    // unsafe {
+    //     let mut cur = data.as_ptr().offset(current_pos as isize);
+    //     let mut tc = data.as_ptr().offset(pos_to_check as isize);
+
+
+    //     while (counter < max) & (*cur == *tc) {
+    //         counter += 1;
+    //         cur = cur.offset(1);
+    //         tc = tc.offset(1);
+    //     }
+    // }
+
+    // counter
+
     data[current_pos..]
         .iter()
         .zip(data[pos_to_check..].iter())
-        .enumerate()
-        .take_while(|&(n, (&a, &b))| n < MAX_MATCH && a == b)
+        .take(MAX_MATCH)
+        .take_while(|&(&a, &b)| a == b)
         .count()
 }
 
@@ -458,16 +475,28 @@ mod test {
         // });
     }
 
+    fn get_test_file_data(name: &str) -> Vec<u8> {
+        use std::fs::File;
+        use std::io::Read;
+        let mut input = Vec::new();
+        let mut f = File::open(name).unwrap();
+
+        f.read_to_end(&mut input).unwrap();
+        input
+    }
+
+    fn get_test_data() -> Vec<u8> {
+        use std::env;
+        let path = env::var("TEST_FILE").unwrap_or("tests/pg11.txt".to_string());
+        get_test_file_data(&path)
+    }
+
+
     /// Test that compression is working for a longer file
     #[test]
     fn test_lz77_long() {
-        use std::fs::File;
-        use std::io::Read;
         use std::str;
-        let mut input = Vec::new();
-
-        let mut f = File::open("tests/pg11.txt").unwrap();
-        f.read_to_end(&mut input).unwrap();
+        let input = get_test_data();
         let compressed = lz77_compress(&input).unwrap();
         assert!(compressed.len() < input.len());
         // print_output(&compressed);

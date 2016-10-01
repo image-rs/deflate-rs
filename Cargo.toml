@@ -23,6 +23,9 @@ flate2 = "0.2.14"
 [profile.bench]
 debug = true
 
+[profile.test]
+debug = true
+
 [features]
 default = []
 unstable = []

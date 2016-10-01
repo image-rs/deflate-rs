@@ -189,6 +189,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
 /// use deflate::deflate_bytes;
 /// let data = b"This is some test data";
 /// let compressed_data = deflate_bytes(data);
+/// # let _ = compressed_data;
 /// ```
 pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
     let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
@@ -209,6 +210,7 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 /// use deflate::deflate_bytes_zlib;
 /// let data = b"This is some test data";
 /// let compressed_data = deflate_bytes_zlib(data);
+/// # let _ = compressed_data;
 /// ```
 pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
     use byteorder::WriteBytesExt;
@@ -283,6 +285,11 @@ mod test {
         input
     }
 
+    fn get_test_data() -> Vec<u8> {
+        use std::env;
+        let path = env::var("TEST_FILE").unwrap_or("tests/pg11.txt".to_string());
+        get_test_file_data(&path)
+    }
 
     #[test]
     fn test_no_compression_one_chunk() {
@@ -324,7 +331,6 @@ mod test {
 
     #[test]
     fn test_fixed_data() {
-
         let data = vec![190u8; 400];
         let compressed = compress_data_fixed(&data);
         let result = decompress_to_end(&compressed);
@@ -354,14 +360,10 @@ mod test {
 
     #[test]
     fn test_fixed_string_file() {
-        use std::fs::File;
-        use std::io::Read;
         use std::str;
-        let mut input = Vec::new();
 
-        let mut f = File::open("tests/pg11.txt").unwrap();
+        let input = get_test_data();
 
-        f.read_to_end(&mut input).unwrap();
         let compressed = compress_data_fixed(&input);
         println!("Compressed len: {}", compressed.len());
         let result = decompress_to_end(&compressed);
@@ -391,7 +393,7 @@ mod test {
     #[test]
     fn test_dynamic_string_file() {
         use std::str;
-        let input = get_test_file_data("tests/pg11.txt");
+        let input = get_test_data();;
         let compressed = deflate_bytes(&input);
 
         println!("Compressed len: {}", compressed.len());
@@ -415,8 +417,7 @@ mod test {
 
     #[test]
     fn test_file_zlib() {
-
-        let test_data = get_test_file_data("tests/pg11.txt");
+        let test_data = get_test_data();
 
         let compressed = deflate_bytes_zlib(&test_data);
         // {

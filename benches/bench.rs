@@ -7,9 +7,7 @@ extern crate flate;
 extern crate flate2;
 use test::Bencher;
 
-const FILENAME: &'static str = "tests/pg11.txt";
-
-fn get_test_file_data(name: &str) -> Vec<u8> {
+fn load_from_file(name: &str) -> Vec<u8> {
     use std::fs::File;
     use std::io::Read;
     let mut input = Vec::new();
@@ -19,11 +17,17 @@ fn get_test_file_data(name: &str) -> Vec<u8> {
     input
 }
 
+fn get_test_data() -> Vec<u8> {
+    use std::env;
+    let path = env::var("TEST_FILE").unwrap_or("tests/pg11.txt".to_string());
+    load_from_file(&path)
+}
+
 #[bench]
 fn test_file_zlib(b: &mut Bencher) {
-    let test_data = get_test_file_data(FILENAME);
+    let test_data = get_test_data();
 
-    let _ = b.iter(|| deflate::deflate_bytes_zlib(&test_data));
+    b.iter(|| deflate::deflate_bytes_zlib(&test_data));
 }
 
 fn deflate_bytes_flate2_zlib(input: &[u8]) -> Vec<u8> {
@@ -38,12 +42,12 @@ fn deflate_bytes_flate2_zlib(input: &[u8]) -> Vec<u8> {
 
 #[bench]
 fn test_file_zlib_flate(b: &mut Bencher) {
-    let test_data = get_test_file_data(FILENAME);
-    let _ = b.iter(|| flate::deflate_bytes_zlib(&test_data));
+    let test_data = get_test_data();
+    b.iter(|| flate::deflate_bytes_zlib(&test_data));
 }
 
 #[bench]
 fn test_file_zlib_flate2(b: &mut Bencher) {
-    let test_data = get_test_file_data(FILENAME);
+    let test_data = get_test_data();
     b.iter(|| deflate_bytes_flate2_zlib(&test_data));
 }
