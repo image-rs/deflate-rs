@@ -2,17 +2,17 @@ pub const WINDOW_SIZE: usize = 32768;
 const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 #[cfg(test)]
 pub const HASH_BYTES: usize = 3;
-const HASH_SHIFT: u32 = 5;
-const HASH_MASK: u32 = WINDOW_MASK as u32;
+const HASH_SHIFT: u16 = 5;
+const HASH_MASK: u16 = WINDOW_MASK as u16;
 
 /// Returns a new hash value based on the previous value and the next byte
-fn update_hash(current_hash: u32, to_insert: u8, shift: u32, mask: u32) -> u32 {
-    ((current_hash << shift) ^ (to_insert as u32)) & mask
+fn update_hash(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> u16 {
+    ((current_hash << shift) ^ (to_insert as u16)) & mask
 }
 
 pub struct ChainedHashTable {
     // Current running hash value of the last 3 bytes
-    current_hash: u32,
+    current_hash: u16,
     // The current position
     current_pos: usize,
     // Starts of hash chains (in prev)
@@ -63,11 +63,10 @@ impl ChainedHashTable {
     pub fn get_prev(&self, bytes: usize) -> u16 {
         self.prev[bytes & WINDOW_MASK]
     }
-
-    pub fn _current_hash(&self) -> u32 {
-        self.current_hash
-    }
-
+    // pub fn _current_hash(&self) -> u32 {
+    // self.current_hash
+    // }
+    //
     fn slide_value(b: u16, bytes: u16) -> u16 {
         if b >= bytes { b - bytes } else { 0 }
     }

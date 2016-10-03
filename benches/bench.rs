@@ -1,11 +1,10 @@
 #![feature(test)]
-#![feature(rustc_private)]
 
 extern crate deflate;
 extern crate test;
-extern crate flate;
 extern crate flate2;
 use test::Bencher;
+use flate2::Compression;
 
 fn load_from_file(name: &str) -> Vec<u8> {
     use std::fs::File;
@@ -30,24 +29,23 @@ fn test_file_zlib(b: &mut Bencher) {
     b.iter(|| deflate::deflate_bytes_zlib(&test_data));
 }
 
-fn deflate_bytes_flate2_zlib(input: &[u8]) -> Vec<u8> {
-    use flate2::Compression;
+fn deflate_bytes_flate2_zlib(level: Compression, input: &[u8]) -> Vec<u8> {
     use flate2::write::ZlibEncoder;
     use std::io::Write;
 
-    let mut e = ZlibEncoder::new(Vec::new(), Compression::Best);
+    let mut e = ZlibEncoder::new(Vec::new(), level);
     e.write_all(input).unwrap();
     e.finish().unwrap()
 }
 
 #[bench]
-fn test_file_zlib_flate(b: &mut Bencher) {
+fn test_file_zlib_flate2_def(b: &mut Bencher) {
     let test_data = get_test_data();
-    b.iter(|| flate::deflate_bytes_zlib(&test_data));
+    b.iter(|| deflate_bytes_flate2_zlib(Compression::Default, &test_data));
 }
 
 #[bench]
-fn test_file_zlib_flate2(b: &mut Bencher) {
+fn test_file_zlib_flate2_max(b: &mut Bencher) {
     let test_data = get_test_data();
-    b.iter(|| deflate_bytes_flate2_zlib(&test_data));
+    b.iter(|| deflate_bytes_flate2_zlib(Compression::Best, &test_data));
 }

@@ -91,23 +91,35 @@ impl LDPair {
 /// ones at `pos_to_check`
 fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usize {
     // Unsafe version for comparison
-    // This doesn't actually make it any faster
+    // This doesn't actually make it much faster
+
+    // use std::mem::transmute_copy;
+
     // let mut counter = 0;
     // let max = cmp::min(data.len() - current_pos, MAX_MATCH);
 
     // unsafe {
     //     let mut cur = data.as_ptr().offset(current_pos as isize);
     //     let mut tc = data.as_ptr().offset(pos_to_check as isize);
-
-    //     while (counter < max) & (*cur == *tc) {
+    //     while (counter < max) &&
+    //           (transmute_copy::<u8, u32>(&*cur) == transmute_copy::<u8, u32>(&*tc)) {
+    //         counter += 4;
+    //         cur = cur.offset(4);
+    //         tc = tc.offset(4);
+    //     }
+    //     if counter > 3 {
+    //         cur = cur.offset(-4);
+    //         tc = tc.offset(-4);
+    //         counter -= 4;
+    //     }
+    //     while counter < max && *cur == *tc {
     //         counter += 1;
     //         cur = cur.offset(1);
     //         tc = tc.offset(1);
     //     }
     // }
 
-    // counter
-
+    //    counter
     data[current_pos..]
         .iter()
         .zip(data[pos_to_check..].iter())
@@ -125,6 +137,8 @@ fn longest_match(data: &[u8],
                  prev_length: usize)
                  -> (usize, usize) {
 
+    debug_assert_eq!(position, hash_table.current_head() as usize);
+
     // If we are at the start, or we already have a match at the maximum length, we stop here.
     if position == 0 || prev_length >= MAX_MATCH {
         return (2, 0);
@@ -135,7 +149,6 @@ fn longest_match(data: &[u8],
         return (2, 0);
     };
 
-
     let limit = if position > WINDOW_SIZE {
         position - WINDOW_SIZE
     } else {
@@ -144,9 +157,9 @@ fn longest_match(data: &[u8],
 
     let max_length = cmp::min((data.len() - position), MAX_MATCH);
 
-    let mut current_head = hash_table.get_prev(hash_table.current_head() as usize) as usize;
+    let mut current_head = hash_table.get_prev(position) as usize;
     let starting_head = current_head;
-    if starting_head == hash_table.current_head() as usize {
+    if starting_head == position as usize {
         // Not sure if this can actually happen
         return (2, 0);
     }
@@ -158,7 +171,6 @@ fn longest_match(data: &[u8],
 
     // We limit the chain length to 4096 for now to avoid taking too long
     while current_head >= limit && current_head != 0 && iters <= 4096 {
-
         // We only check further if the match length can actually increase
         if data[position + best_length] == data[current_head + best_length] {
             let length = get_match_length(data, position, current_head);
@@ -484,7 +496,7 @@ mod test {
         let res = lz77_compress(&test_bytes).unwrap();
         // println!("{:?}", res);
         // TODO: Check that compression is correct
-        print_output(&res);
+        // print_output(&res);
         let decompressed = decompress_lz77(&res);
         let d_str = str::from_utf8(&decompressed).unwrap();
         println!("{}", d_str);
@@ -520,7 +532,7 @@ mod test {
         let input = get_test_data();
         let compressed = lz77_compress(&input).unwrap();
         assert!(compressed.len() < input.len());
-        print_output(&compressed);
+        // print_output(&compressed);
         let decompressed = decompress_lz77(&compressed);
         // println!("{}", str::from_utf8(&decompressed).unwrap());
         // This is to check where the compression fails, if it were to

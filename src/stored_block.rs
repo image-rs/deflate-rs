@@ -30,11 +30,9 @@ pub fn compress_block_stored<W: Write>(input: &[u8], writer: &mut W) -> Result<u
 #[cfg(test)]
 pub fn compress_data_stored(input: &[u8]) -> Vec<u8> {
     // TODO: Validate that block size is not too large
-    use std::io::Cursor;
-
     let block_length = BLOCK_SIZE as usize;
 
-    let mut output = Cursor::new(Vec::with_capacity(input.len() + 2));
+    let mut output = Vec::with_capacity(input.len() + 2);
     let mut i = input.chunks(block_length).peekable();
     while let Some(chunk) = i.next() {
         let last_chunk = i.peek().is_none();
@@ -49,7 +47,7 @@ pub fn compress_data_stored(input: &[u8]) -> Vec<u8> {
 
         compress_block_stored(chunk, &mut output).unwrap();
     }
-    output.into_inner()
+    output
 }
 
 

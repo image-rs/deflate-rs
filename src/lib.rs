@@ -37,7 +37,7 @@ use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes, MIN_NUM_LIT
                       MIN_NUM_DISTANCES};
 use length_encode::huffman_lengths_from_frequency;
 use checksum::RollingChecksum;
-use std::io::{Write, Cursor};
+use std::io::Write;
 use std::io;
 use encoder_state::{EncoderState, BType};
 use stored_block::compress_block_stored;
@@ -59,7 +59,7 @@ fn block_type_for_length(length: usize) -> BType {
 fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     use lz77::lz77_compress;
 
-    let mut writer = Cursor::new(Vec::new());
+    let mut writer = Vec::new();
     {
         let mut state = EncoderState::fixed(&mut writer);
         let compressed = lz77_compress(input).unwrap();
@@ -80,7 +80,7 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
         state.flush().expect("Writer error!");
 
     }
-    writer.into_inner()
+    writer
 }
 
 fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
@@ -192,10 +192,10 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
 /// # let _ = compressed_data;
 /// ```
 pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
-    let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
+    let mut writer = Vec::with_capacity(input.len() / 3);
     compress_data_dynamic(input, &mut writer, &mut checksum::NoChecksum::new())
         .expect("Write error!");
-    writer.into_inner()
+    writer
 }
 
 /// Compress the given slice of bytes with DEFLATE compression, including a zlib header and trailer.
@@ -214,7 +214,7 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 /// ```
 pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
     use byteorder::WriteBytesExt;
-    let mut writer = Cursor::new(Vec::with_capacity(input.len() / 3));
+    let mut writer = Vec::with_capacity(input.len() / 3);
     // Write header
     zlib::write_zlib_header(&mut writer, zlib::CompressionLevel::Default)
         .expect("Write error when writing zlib header!");
@@ -226,7 +226,7 @@ pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
     let hash = checksum.current_hash();
 
     writer.write_u32::<BigEndian>(hash).expect("Write error when writing checksum!");
-    writer.into_inner()
+    writer
 }
 
 #[cfg(test)]
@@ -367,11 +367,11 @@ mod test {
         let compressed = compress_data_fixed(&input);
         println!("Compressed len: {}", compressed.len());
         let result = decompress_to_end(&compressed);
-        let out1 = str::from_utf8(&input).unwrap();
-        let out2 = str::from_utf8(&result).unwrap();
+        //let out1 = str::from_utf8(&input).unwrap();
+        //let out2 = str::from_utf8(&result).unwrap();
         // println!("Orig:\n{}", out1);
         // println!("Compr:\n{}", out2);
-        println!("Orig len: {}, out len: {}", out1.len(), out2.len());
+        assert_eq!(input.len(), result.len());
         // Not using assert_eq here deliberately to avoid massive amounts of output spam
         assert!(input == result);
     }

@@ -243,6 +243,7 @@ impl HuffmanCode {
     }
 }
 
+#[cfg(test)]
 pub struct LengthAndDistanceBits {
     pub length_code: HuffmanCode,
     pub length_extra_bits: HuffmanCode,
@@ -385,19 +386,8 @@ impl HuffmanTable {
         self.codes[END_OF_BLOCK_POSITION]
     }
 
-    pub fn get_length_distance_code(&self,
-                                    length: u16,
-                                    distance: u16)
-                                    -> Option<(LengthAndDistanceBits)> {
-
-        // FIXME: We should probably validate using table length
+    pub fn get_length_huffman(&self, length: u16) -> Option<((HuffmanCode, HuffmanCode))> {
         if length < MIN_MATCH || length > MAX_MATCH {
-            return None;
-        }
-
-        const MIN_DISTANCE: u16 = 1;
-        const MAX_DISTANCE: u16 = 32768;
-        if distance < MIN_DISTANCE || distance > MAX_DISTANCE {
             return None;
         }
 
@@ -407,6 +397,19 @@ impl HuffmanTable {
         };
 
         let length_huffman_code = self.codes[length_data.code_number as usize];
+        Some((length_huffman_code,
+              HuffmanCode {
+            code: length_data.value,
+            length: length_data.num_bits,
+        }))
+    }
+
+    pub fn get_distance_huffman(&self, distance: u16) -> Option<((HuffmanCode, HuffmanCode))> {
+        const MIN_DISTANCE: u16 = 1;
+        const MAX_DISTANCE: u16 = 32768;
+        if distance < MIN_DISTANCE || distance > MAX_DISTANCE {
+            return None;
+        }
 
         let distance_data = match get_distance_code_and_extra_bits(distance) {
             Some(t) => t,
@@ -415,17 +418,25 @@ impl HuffmanTable {
 
         let distance_huffman_code = self.distance_codes[distance_data.code_number as usize];
 
+        Some((distance_huffman_code,
+              HuffmanCode {
+            code: distance_data.value,
+            length: distance_data.num_bits,
+        }))
+    }
+
+    #[cfg(test)]
+    pub fn get_length_distance_code(&self,
+                                    length: u16,
+                                    distance: u16)
+                                    -> Option<(LengthAndDistanceBits)> {
+        let l_codes = self.get_length_huffman(length).unwrap();
+        let d_codes = self.get_distance_huffman(distance).unwrap();
         Some(LengthAndDistanceBits {
-            length_code: length_huffman_code,
-            length_extra_bits: HuffmanCode {
-                code: length_data.value,
-                length: length_data.num_bits,
-            },
-            distance_code: distance_huffman_code,
-            distance_extra_bits: HuffmanCode {
-                code: distance_data.value,
-                length: distance_data.num_bits,
-            },
+            length_code: l_codes.0,
+            length_extra_bits: l_codes.1,
+            distance_code: d_codes.0,
+            distance_extra_bits: d_codes.1,
         })
     }
 }

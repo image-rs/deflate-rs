@@ -46,21 +46,20 @@ impl<W: Write> EncoderState<W> {
         match value {
             LDPair::Literal(l) => self.write_literal(l),
             LDPair::Length(l) => {
-                let ldencoded = self.huffman_table.get_length_distance_code(l, 22).unwrap();
+                let (code, extra_bits_code) = self.huffman_table.get_length_huffman(l).unwrap();
                 try!(self.writer
-                    .write_bits(ldencoded.length_code.code, ldencoded.length_code.length));
-                self.writer.write_bits(ldencoded.length_extra_bits.code,
-                                       ldencoded.length_extra_bits.length)
+                    .write_bits(code.code, code.length));
+                self.writer.write_bits(extra_bits_code.code, extra_bits_code.length)
             }
             LDPair::Distance(d) => {
-                let ldencoded = self.huffman_table
-                    .get_length_distance_code(10, d)
-                    .expect(&format!("Failed to get code for length: {}, distance: {}", 0, d));
+                let (code, extra_bits_code) = self.huffman_table
+                    .get_distance_huffman(d)
+                    .unwrap();
+                // .expect("failed to get code");
 
                 try!(self.writer
-                    .write_bits(ldencoded.distance_code.code, ldencoded.distance_code.length));
-                self.writer.write_bits(ldencoded.distance_extra_bits.code,
-                                       ldencoded.distance_extra_bits.length)
+                    .write_bits(code.code, code.length));
+                self.writer.write_bits(extra_bits_code.code, extra_bits_code.length)
             }
             LDPair::EndOfBlock => self.write_end_of_block(),
         }
