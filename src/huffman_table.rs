@@ -52,7 +52,7 @@ pub static LENGTH_EXTRA_BITS_LENGTH: [u8; NUM_LENGTH_CODES] =
     [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
 
 // Table used to get a code from a length value (see get_distance_code_and_extra_bits)
-pub static LENGTH_CODE: [u16; 256] =
+pub static LENGTH_CODE: [u8; 256] =
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13, 14, 14,
      14, 14, 15, 15, 15, 15, 16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 17, 17, 17, 17, 18,
      18, 18, 18, 18, 18, 18, 18, 19, 19, 19, 19, 19, 19, 19, 19, 20, 20, 20, 20, 20, 20, 20, 20,
@@ -151,8 +151,8 @@ struct ExtraBits {
 
 /// Get the length code that corresponds to the length value
 pub fn get_length_code(length: u16) -> Option<usize> {
-    if let Some(eb) = get_length_code_and_extra_bits(length) {
-        Some(eb.code_number as usize)
+    if let Some(c) = Some(usize::from(LENGTH_CODE[(length - MIN_MATCH) as usize])) {
+        Some(c + LENGTH_BITS_START as usize)
     } else {
         None
     }
@@ -175,7 +175,7 @@ fn get_length_code_and_extra_bits(length: u16) -> Option<ExtraBits> {
     let base = BASE_LENGTH[n as usize];
     let num_bits = LENGTH_EXTRA_BITS_LENGTH[n as usize];
     Some(ExtraBits {
-        code_number: n + LENGTH_BITS_START,
+        code_number: u16::from(n) + LENGTH_BITS_START,
         num_bits: num_bits,
         value: length - base - MIN_MATCH,
     })
@@ -386,6 +386,9 @@ impl HuffmanTable {
         self.codes[END_OF_BLOCK_POSITION]
     }
 
+    /// Get the huffman code and extra bits for the specified length
+    ///
+    /// returns None if the length is larger than MIN_MATCH or smaller than MAX_MATCH
     pub fn get_length_huffman(&self, length: u16) -> Option<((HuffmanCode, HuffmanCode))> {
         if length < MIN_MATCH || length > MAX_MATCH {
             return None;
@@ -404,6 +407,9 @@ impl HuffmanTable {
         }))
     }
 
+    /// Get the huffman code and extra bits for the specified distance
+    ///
+    /// Returns None if distance is 0 or above 32768
     pub fn get_distance_huffman(&self, distance: u16) -> Option<((HuffmanCode, HuffmanCode))> {
         const MIN_DISTANCE: u16 = 1;
         const MAX_DISTANCE: u16 = 32768;

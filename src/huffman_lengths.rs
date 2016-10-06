@@ -57,9 +57,9 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
     // length frequencies to the same array)
     // TODO: repeats can cross over from lit/len to distances, so we should do this to save a few
     // bytes
-    let merged_freqs: Vec<u32> = ll_freqs.iter()
+    let merged_freqs: Vec<u16> = ll_freqs.iter()
         .zip(d_freqs.iter())
-        .map(|(l, d)| u32::from(*l) + u32::from(*d))
+        .map(|(l, d)| u16::from(*l) + u16::from(*d))
         .collect();
 
     let huffman_table_lengths = huffman_lengths_from_frequency(merged_freqs.as_slice(),

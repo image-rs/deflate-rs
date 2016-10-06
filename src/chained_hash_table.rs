@@ -6,15 +6,17 @@ const HASH_SHIFT: u16 = 5;
 const HASH_MASK: u16 = WINDOW_MASK as u16;
 
 /// Returns a new hash value based on the previous value and the next byte
-fn update_hash(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> u16 {
+fn update_hash(current_hash: u16, to_insert: u8) -> u16 {
+    update_hash_conf(current_hash, to_insert, HASH_SHIFT, HASH_MASK)
+}
+
+fn update_hash_conf(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> u16 {
     ((current_hash << shift) ^ (to_insert as u16)) & mask
 }
 
 pub struct ChainedHashTable {
     // Current running hash value of the last 3 bytes
     current_hash: u16,
-    // The current position
-    current_pos: usize,
     // Starts of hash chains (in prev)
     head: Box<[u16; WINDOW_SIZE]>,
     // link to previous occurence of this hash value
@@ -25,7 +27,6 @@ impl ChainedHashTable {
     fn new() -> ChainedHashTable {
         ChainedHashTable {
             current_hash: 0,
-            current_pos: 0,
             head: Box::new([0; WINDOW_SIZE]),
             prev: Box::new([0; WINDOW_SIZE]),
         }
@@ -33,18 +34,16 @@ impl ChainedHashTable {
 
     pub fn from_starting_values(v1: u8, v2: u8) -> ChainedHashTable {
         let mut t = ChainedHashTable::new();
-        t.add_hash_value(0, v1);
-        t.add_hash_value(1, v2);
+        t.current_hash = update_hash(t.current_hash, v1);
+        t.current_hash = update_hash(t.current_hash, v2);
         t
     }
 
     // Insert a byte into the hash table
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
-        // TODO: Do we need to allow different shifts/masks?
-        self.current_hash = update_hash(self.current_hash, value, HASH_SHIFT, HASH_MASK);
+        self.current_hash = update_hash(self.current_hash, value);
         self.prev[position & WINDOW_MASK] = self.head[self.current_hash as usize];
         self.head[self.current_hash as usize] = position as u16;
-        self.current_pos = position;
     }
 
     // Get the head of the hash chain of the current hash value
@@ -56,19 +55,18 @@ impl ChainedHashTable {
     #[cfg(test)]
     #[inline]
     pub fn current_position(&self) -> usize {
-        self.current_pos
+        self.current_head() as usize
     }
 
     #[inline]
     pub fn get_prev(&self, bytes: usize) -> u16 {
         self.prev[bytes & WINDOW_MASK]
     }
-    // pub fn _current_hash(&self) -> u32 {
-    // self.current_hash
-    // }
-    //
+
+    #[inline(always)]
     fn slide_value(b: u16, bytes: u16) -> u16 {
-        if b >= bytes { b - bytes } else { 0 }
+        // Using b.saturating_sub(bytes) here would be cleaner, but it makes vectorisation fail
+        if b > bytes { b - bytes } else { 0 }
     }
 
     pub fn slide(&mut self, bytes: usize) {

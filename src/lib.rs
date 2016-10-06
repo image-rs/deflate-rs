@@ -30,8 +30,6 @@ mod encoder_state;
 use byteorder::BigEndian;
 
 use huffman_table::*;
-#[cfg(test)]
-use lz77::LDPair;
 use lz77::create_buffer;
 use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes, MIN_NUM_LITERALS_AND_LENGTHS,
                       MIN_NUM_DISTANCES};
@@ -41,6 +39,8 @@ use std::io::Write;
 use std::io;
 use encoder_state::{EncoderState, BType};
 use stored_block::compress_block_stored;
+
+pub use lz77::lz77_compress;
 
 /// Determine if the block is long enough for it to be worth using dynamic huffman codes or just
 /// Write the data directly
@@ -55,6 +55,14 @@ fn block_type_for_length(length: usize) -> BType {
     }
 }
 
+fn flush_to_bitstream<W: std::io::Write>(buffer: &[lz77::LDPair], state: &mut EncoderState<W>) -> io::Result<()> {
+    for &b in buffer {
+        try!(state.write_ldpair(&b))
+    }
+    try!(state.write_end_of_block());
+    Ok(())
+}
+
 #[cfg(test)]
 fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     use lz77::lz77_compress;
@@ -66,18 +74,9 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
 
         // We currently don't split blocks here(this function is just used for tests anyhow)
         state.write_start_of_block(true, true).expect("Write error!");
-        for ld in compressed {
-            // We ignore end of block here for now since there is no purpose of
-            // splitting a full stream of data using fixed huffman data into blocks
-            match ld {
-                LDPair::EndOfBlock => (),
-                _ => state.write_ldpair(ld).expect("Write error!"),
-            }
-        }
+        flush_to_bitstream(&compressed, &mut state).expect("Write error!");
 
-        state.write_end_of_block().expect("Writer error!");
-
-        state.flush().expect("Writer error!");
+        state.flush().expect("Write error!");
 
     }
     writer
@@ -133,9 +132,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                         state.update_huffman_table(&l_lengths, &d_lengths)
                             .expect("Fatal error!: Failed to create huffman table!");
 
-                        for &ld in lz77_writer.get_buffer() {
-                            try!(state.write_ldpair(ld));
-                        }
+                        try!(flush_to_bitstream(lz77_writer.get_buffer(), &mut state));
 
                         // End of block is written in write_ldpair.
                         lz77_writer.clear();
@@ -152,9 +149,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                                               &huffman_table::FIXED_CODE_LENGTHS_DISTANCE)
                         .unwrap();
                     try!(state.write_start_of_block(true, true));
-                    for &ld in lz77_writer.get_buffer() {
-                        try!(state.write_ldpair(ld));
-                    }
+                    try!(flush_to_bitstream(lz77_writer.get_buffer(), &mut state));
                     lz77_writer.clear();
                 }
                 BType::NoCompression => {

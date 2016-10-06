@@ -101,14 +101,15 @@ pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])>
     Some((out, frequencies))
 }
 
-type NodeIndex = usize;
+type NodeIndex = u16;
+type WeightType = u32;
 
 /// A struct representing a node used in the package-merge algorithm
 #[derive(Copy, Clone, Debug)]
-pub struct ChainNode {
+struct ChainNode {
     // The weight of the node, which in this case is the frequency of the symbol in the input
     // data we are creating huffman codes for
-    weight: u32,
+    weight: WeightType,
     // Number of leaf nodes to the left of this node
     // In this case, the count is equal to the symbol in the input data this node represents
     count: u16,
@@ -119,6 +120,12 @@ pub struct ChainNode {
     tail: Option<NodeIndex>,
 }
 
+/// A struct representing leaves (same as chainNode, but without the tail)
+struct Leaf {
+    weight: WeightType,
+    count: u16,
+}
+
 fn advance_lookahead(indexes: &mut [(usize, usize)], index: usize, next: usize) {
     indexes[index].0 = indexes[index].1;
     indexes[index].1 = next;
@@ -126,11 +133,11 @@ fn advance_lookahead(indexes: &mut [(usize, usize)], index: usize, next: usize) 
 
 /// Implementation of boundary package merge algorithm described by Katajainen/Moffat/Turpin in
 /// "A Fast and Space-Economical Algorithm for Length-Limited Coding"
-pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
-                              nodes: &mut Vec<ChainNode>,
-                              leaves: &[ChainNode],
-                              index: usize,
-                              last: bool) {
+fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
+                          nodes: &mut Vec<ChainNode>,
+                          leaves: &[Leaf],
+                          index: usize,
+                          last: bool) {
 
     let count = nodes[lookahead_indexes[index].1].count;
     let next_count = count + 1;
@@ -181,7 +188,7 @@ pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
             nodes.push(ChainNode {
                 weight: sum,
                 count: count,
-                tail: Some(lookahead_indexes[index - 1].1),
+                tail: Some(lookahead_indexes[index - 1].1 as NodeIndex),
             });
         }
         if !last {
@@ -195,9 +202,8 @@ pub fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
     }
 }
 
-pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Vec<u8> {
+pub fn huffman_lengths_from_frequency(frequencies: &[u16], max_len: usize) -> Vec<u8> {
     // Make sure the number of frequencies is sensible since we use u16 to index.
-    assert!(frequencies.len() < u16::max_value() as usize);
     assert!(max_len > 1 && max_len < 16);
 
     let mut lengths = vec![0; frequencies.len()];
@@ -209,16 +215,18 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Ve
         .enumerate()
         .filter_map(|(n, f)| {
             if *f > 0 {
-                Some(ChainNode {
-                    weight: *f,
+                Some(Leaf {
+                    weight: *f as WeightType,
                     count: n as u16,
-                    tail: None,
                 })
             } else {
                 None
             }
         })
         .collect();
+    // NOTE: We might want to consider normalising the
+    // frequencies if we are going to use very large blocks as large freq values
+    // result in a large number of nodes
 
     // Special case with zero or 1 value having a non-zero frequency
     // (this will break the package merge otherwise)
@@ -232,7 +240,9 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Ve
     leaves.sort_by(|a, b| a.weight.cmp(&b.weight));
 
     // We create the two first lookahead nodes from the two first leaves, with counts 1 and 2
-    let mut nodes: Vec<_> = leaves.iter()
+    // TODO: Find an algorhithm to approximate the number of nodes we will get
+    let mut nodes = Vec::with_capacity(8 * leaves.len());
+    nodes.extend(leaves.iter()
         .take(2)
         .enumerate()
         .map(|(n, f)| {
@@ -241,8 +251,7 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Ve
                 count: n as u16 + 1,
                 tail: None,
             }
-        })
-        .collect();
+        }));
 
     // Indexes to the current lookahead nodes in each list
     // The lookahead indexes in each list start out pointing to the first two leaves.
@@ -256,7 +265,7 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Ve
         boundary_package_merge(&mut lookahead_ptrs, &mut nodes, &leaves, max_len - 1, last);
     }
 
-    let head = lookahead_ptrs[lookahead_ptrs.len() - 1].1;
+    let head = lookahead_ptrs.last().unwrap().1;
 
     let mut next_node = head;
     loop {
@@ -267,7 +276,7 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Ve
         }
 
         if let Some(n) = node.tail {
-            next_node = n;
+            next_node = n as usize;
         } else {
             break;
         }
@@ -278,6 +287,8 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u32], max_len: usize) -> Ve
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::u16;
+    use huffman_table::NUM_LITERALS_AND_LENGTHS;
 
     #[test]
     fn test_encode_lengths() {
@@ -328,5 +339,14 @@ mod test {
             assert_eq!(*a, (*b).into());
         }
         // assert_eq!(frequencies, res.as_slice());
+
+        let mut frequencies = vec![3; NUM_LITERALS_AND_LENGTHS];
+        frequencies[55] = u16::MAX / 3;
+        frequencies[125] = u16::MAX / 3;
+
+        let res = huffman_lengths_from_frequency(&frequencies, 15);
+        assert_eq!(res.len(), NUM_LITERALS_AND_LENGTHS);
+        assert!(res[55] < 3);
+        assert!(res[125] < 3);
     }
 }

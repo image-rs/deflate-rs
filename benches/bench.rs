@@ -23,6 +23,12 @@ fn get_test_data() -> Vec<u8> {
 }
 
 #[bench]
+fn test_file_zlib_lz77_only(b: &mut Bencher) {
+    let test_data = get_test_data();
+    b.iter(|| deflate::lz77_compress(&test_data));
+}
+
+#[bench]
 fn test_file_zlib(b: &mut Bencher) {
     let test_data = get_test_data();
 

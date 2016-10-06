@@ -22,6 +22,7 @@ flate2 = "0.2.14"
 
 [profile.bench]
 debug = true
+lto = true
 
 [profile.test]
 debug = true

@@ -42,8 +42,8 @@ impl<W: Write> EncoderState<W> {
         self.writer.write_bits(code.code, code.length)
     }
 
-    pub fn write_ldpair(&mut self, value: LDPair) -> io::Result<()> {
-        match value {
+    pub fn write_ldpair(&mut self, value: &LDPair) -> io::Result<()> {
+        match *value {
             LDPair::Literal(l) => self.write_literal(l),
             LDPair::Length(l) => {
                 let (code, extra_bits_code) = self.huffman_table.get_length_huffman(l).unwrap();
@@ -55,13 +55,11 @@ impl<W: Write> EncoderState<W> {
                 let (code, extra_bits_code) = self.huffman_table
                     .get_distance_huffman(d)
                     .unwrap();
-                // .expect("failed to get code");
 
                 try!(self.writer
                     .write_bits(code.code, code.length));
                 self.writer.write_bits(extra_bits_code.code, extra_bits_code.length)
             }
-            LDPair::EndOfBlock => self.write_end_of_block(),
         }
     }
 

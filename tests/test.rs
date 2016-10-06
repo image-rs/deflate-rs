@@ -31,6 +31,19 @@ fn test_file_zlib_compare_output() {
 
     let deflate_compressed = deflate::deflate_bytes_zlib(&test_data);
 
+    // {
+    //     use std::fs::File;
+    //     use std::io::Write;
+    //     {
+    //         let mut f = File::create("out.deflate").unwrap();
+    //         f.write_all(&deflate_compressed).unwrap();
+    //     }
+    //     {
+    //         let mut f = File::create("out.flate2").unwrap();
+    //         f.write_all(&flate2_compressed).unwrap();
+    //     }
+    // }
+
     println!("libflate: {}, deflate: {}",
              flate2_compressed.len(),
              deflate_compressed.len());
@@ -43,16 +56,4 @@ fn test_file_zlib_compare_output() {
 
 
     assert!(decompressed == test_data);
-    // {
-    // use std::fs::File;
-    // use std::io::Write;
-    // {
-    // let mut f = File::create("out.deflate").unwrap();
-    // f.write_all(&deflate_compressed).unwrap();
-    // }
-    // {
-    // let mut f = File::create("out.flate2").unwrap();
-    // f.write_all(&flate2_compressed).unwrap();
-    // }
-    // }
 }

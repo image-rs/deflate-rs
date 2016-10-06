@@ -65,7 +65,6 @@ pub enum LDPair {
     Literal(u8),
     Length(u16),
     Distance(u16),
-    EndOfBlock,
 }
 
 impl LDPair {
@@ -79,10 +78,6 @@ impl LDPair {
 
     pub fn distance(distance: u16) -> LDPair {
         LDPair::Distance(distance)
-    }
-
-    pub fn _end_of_block() -> LDPair {
-        LDPair::EndOfBlock
     }
 }
 
@@ -158,21 +153,18 @@ fn longest_match(data: &[u8],
     let max_length = cmp::min((data.len() - position), MAX_MATCH);
 
     let mut current_head = hash_table.get_prev(position) as usize;
-    let starting_head = current_head;
-    if starting_head == position as usize {
-        // Not sure if this can actually happen
-        return (2, 0);
-    }
 
     let mut best_length = prev_length;
     let mut best_distance = 0;
 
     let mut iters = 0;
 
+
     // We limit the chain length to 4096 for now to avoid taking too long
-    while current_head >= limit && current_head != 0 && iters <= 4096 {
+    while current_head >= limit && current_head != 0 && iters < 4096 {
         // We only check further if the match length can actually increase
-        if data[position + best_length] == data[current_head + best_length] {
+        if data[position + best_length] == data[current_head + best_length] &&
+           data[position + best_length - 1] == data[current_head + best_length - 1] {
             let length = get_match_length(data, position, current_head);
             if length > best_length {
                 best_length = length;
@@ -185,9 +177,9 @@ fn longest_match(data: &[u8],
             }
         }
 
+        let prev_head = current_head;
         current_head = hash_table.get_prev(current_head) as usize;
-        if current_head == starting_head {
-            // We've gone through one cycle.
+        if current_head >= prev_head {
             break;
         }
         iters += 1;
@@ -196,7 +188,7 @@ fn longest_match(data: &[u8],
     if best_length > prev_length {
         (best_length, best_distance)
     } else {
-        (2, 0)
+        (2, best_distance)
     }
 }
 
@@ -211,10 +203,6 @@ fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usize, 
 }
 
 const DEFAULT_WINDOW_SIZE: usize = 32768;
-
-// fn add_value<RC: RollingChecksum>(hash_table: &mut ChainedHashTable, rolling_checksum: RC) {
-// hash_table.
-// }
 
 fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
                                                        start: usize,
@@ -383,8 +371,6 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
         }
     }
 
-    writer.write_end_of_block();
-
     Some(true)
 }
 
@@ -425,7 +411,6 @@ mod test {
                         n += 1;
                     }
                 }
-                LDPair::EndOfBlock => ()/*println!("Block end at vec len: {}", output.len())*/,
             }
         }
         output
@@ -471,16 +456,11 @@ mod test {
     /// Helper function to print the output from the lz77 compression function
     fn print_output(input: &[LDPair]) {
         let mut output = vec![];
-        let mut blocks = 0;
         for l in input {
             match *l {
                 LDPair::Literal(l) => output.push(l),
                 LDPair::Length(l) => output.extend(format!("<L {}>\n", l).into_bytes()),
                 LDPair::Distance(d) => output.extend(format!("<D {}>\n", d).into_bytes()),
-                LDPair::EndOfBlock => {
-                    output.extend(format!("<End of block {}>\n\n", blocks).into_bytes());
-                    blocks += 1;
-                }
             }
         }
 
@@ -553,7 +533,7 @@ mod test {
         // let data = b" nba nbadg badger nbadger";
         let data = b"nba badger nbadger";
         let compressed = lz77_compress(data).unwrap();
-        let test = compressed[compressed.len() - 3];
+        let test = compressed[compressed.len() - 2];
         if let LDPair::Length(n) = test {
             assert_eq!(n, 6);
         } else {
