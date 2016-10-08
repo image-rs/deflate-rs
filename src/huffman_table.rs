@@ -48,11 +48,11 @@ pub static FIXED_CODE_LENGTHS: [u8; NUM_LITERALS_AND_LENGTHS + 2] =
 
 
 // The number of extra bits for the length codes
-pub static LENGTH_EXTRA_BITS_LENGTH: [u8; NUM_LENGTH_CODES] =
+static LENGTH_EXTRA_BITS_LENGTH: [u8; NUM_LENGTH_CODES] =
     [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
 
 // Table used to get a code from a length value (see get_distance_code_and_extra_bits)
-pub static LENGTH_CODE: [u8; 256] =
+static LENGTH_CODE: [u8; 256] =
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13, 14, 14,
      14, 14, 15, 15, 15, 15, 16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 17, 17, 17, 17, 18,
      18, 18, 18, 18, 18, 18, 18, 19, 19, 19, 19, 19, 19, 19, 19, 20, 20, 20, 20, 20, 20, 20, 20,
@@ -66,35 +66,35 @@ pub static LENGTH_CODE: [u8; 256] =
      27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 28];
 
 // Base values to calculate the value of the bits in length codes
-pub static BASE_LENGTH: [u16; NUM_LENGTH_CODES] = [0,
-                                                   1,
-                                                   2,
-                                                   3,
-                                                   4,
-                                                   5,
-                                                   6,
-                                                   7,
-                                                   8,
-                                                   10,
-                                                   12,
-                                                   14,
-                                                   16,
-                                                   20,
-                                                   24,
-                                                   28,
-                                                   32,
-                                                   40,
-                                                   48,
-                                                   56,
-                                                   64,
-                                                   80,
-                                                   96,
-                                                   112,
-                                                   128,
-                                                   160,
-                                                   192,
-                                                   224,
-                                                   258 - MIN_MATCH];
+static BASE_LENGTH: [u16; NUM_LENGTH_CODES] = [0,
+                                               1,
+                                               2,
+                                               3,
+                                               4,
+                                               5,
+                                               6,
+                                               7,
+                                               8,
+                                               10,
+                                               12,
+                                               14,
+                                               16,
+                                               20,
+                                               24,
+                                               28,
+                                               32,
+                                               40,
+                                               48,
+                                               56,
+                                               64,
+                                               80,
+                                               96,
+                                               112,
+                                               128,
+                                               160,
+                                               192,
+                                               224,
+                                               258 - MIN_MATCH];
 
 // What number in the literal/length table the lengths start at
 const LENGTH_BITS_START: u16 = 257;
@@ -103,7 +103,7 @@ const LENGTH_BITS_START: u16 = 257;
 // (All distance codes are 5 bits long)
 pub static FIXED_CODE_LENGTHS_DISTANCE: [u8; NUM_DISTANCE_CODES + 2] = [5; NUM_DISTANCE_CODES + 2];
 
-pub static DISTANCE_CODES: [u8; 512] =
+static DISTANCE_CODES: [u8; 512] =
     [0, 1, 2, 3, 4, 4, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9,
      9, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11,
      11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
@@ -128,11 +128,11 @@ pub static DISTANCE_CODES: [u8; 512] =
      29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29];
 
 // Number of extra bits following the distance codes
-pub static DISTANCE_EXTRA_BITS: [u8; NUM_DISTANCE_CODES] = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5,
-                                                            5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11,
-                                                            11, 12, 12, 13, 13];
+static DISTANCE_EXTRA_BITS: [u8; NUM_DISTANCE_CODES] = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5,
+                                                        6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11,
+                                                        12, 12, 13, 13];
 
-pub static DISTANCE_BASE: [u16; NUM_DISTANCE_CODES] =
+static DISTANCE_BASE: [u16; NUM_DISTANCE_CODES] =
     [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536,
      2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576];
 
@@ -252,8 +252,9 @@ pub struct LengthAndDistanceBits {
 }
 
 /// Counts the number of values of each length.
-/// Returns a tuple containing the longest length value in the table and a vector of lengths
-/// Returns an error if `table` is empty, or if any of the lenghts exceed 15
+/// Returns a tuple containing the longest length value in the table, it's position,
+/// and a vector of lengths.
+/// Returns an error if `table` is empty, or if any of the lenghts exceed 15.
 fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), HuffmanError> {
     // TODO: Validate the length table properly
     //

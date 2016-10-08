@@ -1,10 +1,9 @@
-//! An implementation an encoder using [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) \
+//! An implementation an encoder using [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html)
 //! compression algorightm in pure rust.
 //!
 //! This library provides functions to compress data (currently only in-memory) using DEFLATE,
 //! both with and without a [zlib](https://tools.ietf.org/html/rfc1950) header/trailer
-//! The current implementation is still pretty slow compared to C-libraries like zlib and miniz,
-//! particularly for large files, and is therefore not recommended for production use.
+//! The current implementation is still a bit lacking speed-wise compared to C-libraries like zlib and miniz.
 
 #[cfg(test)]
 extern crate flate2;
@@ -55,7 +54,9 @@ fn block_type_for_length(length: usize) -> BType {
     }
 }
 
-fn flush_to_bitstream<W: std::io::Write>(buffer: &[lz77::LDPair], state: &mut EncoderState<W>) -> io::Result<()> {
+fn flush_to_bitstream<W: std::io::Write>(buffer: &[lz77::LDPair],
+                                         state: &mut EncoderState<W>)
+                                         -> io::Result<()> {
     for &b in buffer {
         try!(state.write_ldpair(&b))
     }
@@ -362,8 +363,8 @@ mod test {
         let compressed = compress_data_fixed(&input);
         println!("Compressed len: {}", compressed.len());
         let result = decompress_to_end(&compressed);
-        //let out1 = str::from_utf8(&input).unwrap();
-        //let out2 = str::from_utf8(&result).unwrap();
+        // let out1 = str::from_utf8(&input).unwrap();
+        // let out2 = str::from_utf8(&result).unwrap();
         // println!("Orig:\n{}", out1);
         // println!("Compr:\n{}", out2);
         assert_eq!(input.len(), result.len());
@@ -388,7 +389,7 @@ mod test {
     #[test]
     fn test_dynamic_string_file() {
         use std::str;
-        let input = get_test_data();;
+        let input = get_test_data();
         let compressed = deflate_bytes(&input);
 
         println!("Compressed len: {}", compressed.len());

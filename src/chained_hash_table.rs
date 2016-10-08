@@ -63,7 +63,7 @@ impl ChainedHashTable {
         self.prev[bytes & WINDOW_MASK]
     }
 
-    #[inline(always)]
+    #[inline]
     fn slide_value(b: u16, bytes: u16) -> u16 {
         // Using b.saturating_sub(bytes) here would be cleaner, but it makes vectorisation fail
         if b > bytes { b - bytes } else { 0 }
