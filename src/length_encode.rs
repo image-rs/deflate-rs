@@ -1,6 +1,9 @@
+use std::iter::Iterator;
+use std::clone::Clone;
+
 /// An enum representing the different types in the run-length encoded data used to encode
 /// huffman table lenghts
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum EncodedLength {
     // An actual length value
     Length(u8),
@@ -10,6 +13,22 @@ pub enum EncodedLength {
     RepeatZero3Bits(u8),
     // Repeat zero n times (with n represented by 7 bits)
     RepeatZero7Bits(u8),
+}
+
+impl EncodedLength {
+    fn from_prev_and_repeat(prev: u8, repeat: u8) -> EncodedLength {
+        match prev {
+            0 => {
+                if repeat <= 10 {
+                    EncodedLength::RepeatZero3Bits(repeat)
+                } else {
+                    EncodedLength::RepeatZero7Bits(repeat)
+                }
+            }
+            1...15 => EncodedLength::CopyPrevious(repeat),
+            _ => panic!(),
+        }
+    }
 }
 
 pub const COPY_PREVIOUS: usize = 16;
@@ -43,58 +62,74 @@ fn not_max_repetitions(length_value: u8, repeats: u8) -> bool {
 /// the deflate stream.
 /// Returns a tuple containing a vec of the encoded lengths, and an array describing the frequencies
 /// of the different length codes
-pub fn encode_lengths(lengths: &[u8]) -> Option<(Vec<EncodedLength>, [u16; 19])> {
-    let mut out = Vec::with_capacity(lengths.len() / 2);
+pub fn encode_lengths<I>(lengths: I) -> Option<(Vec<EncodedLength>, [u16; 19])>
+    where I: Iterator<Item = u8> + Clone
+{
+    let lengths = lengths;
+    let mut out = Vec::with_capacity(lengths.size_hint().0 / 2);
     let mut frequencies = [0u16; 19];
-    // Previous value
-    // Set to 0 initially as this lets us start with emitting `repeat zero` of we start with 0
-    // TODO: Do this on subsequent zeros let mut prev = 0;
-    let mut prev = 0;
     // Number of repetitions of the current value
     let mut repeat = 0;
-    let mut iter = lengths.iter().enumerate().peekable();
-    while let Some((n, &l)) = iter.next() {
-        if l == prev && not_max_repetitions(l, repeat) && iter.peek().is_some() {
+    let mut iter = lengths.clone().enumerate().peekable();
+    // Previous value
+    let mut prev = if let Some(&(_, b)) = iter.peek() {
+        // Make sure it's different from the first value to not confuse the
+        // algorithm
+        !b
+    } else {
+        return None;
+    };
+
+    while let Some((n, l)) = iter.next() {
+        if l == prev && not_max_repetitions(l, repeat) {
             repeat += 1;
-        } else if repeat >= MIN_REPEAT {
-            // The previous value has been repeated enough times to write out a repeat code
-            match prev {
-                0 => {
-                    if repeat <= 10 {
-                        update_out_and_freq(EncodedLength::RepeatZero3Bits(repeat),
-                                            &mut out,
-                                            &mut frequencies);
+        }
+        if l != prev || iter.peek().is_none() || !not_max_repetitions(l, repeat) {
+            if repeat >= MIN_REPEAT {
+                // The previous value has been repeated enough times to write out a repeat code.
+
+                let val = EncodedLength::from_prev_and_repeat(prev, repeat);
+                update_out_and_freq(val, &mut out, &mut frequencies);
+                repeat = 0;
+                // If we have a new length value, output l unless the last value is 0.
+                if l != prev {
+                    if l != 0 {
+                        update_out_and_freq(EncodedLength::Length(l), &mut out, &mut frequencies);
+                        repeat = 0;
                     } else {
-                        update_out_and_freq(EncodedLength::RepeatZero7Bits(repeat),
-                                            &mut out,
-                                            &mut frequencies);
+                        // If we have a zero, we start repeat at one instead of outputting, as
+                        // there are separate codes for repeats of zero so we don't need a literal
+                        // to define what byte to repeat.
+                        repeat = 1;
                     }
                 }
-                1...15 => {
-                    update_out_and_freq(EncodedLength::CopyPrevious(repeat),
-                                        &mut out,
-                                        &mut frequencies)
-                }
-                _ => return None,
-            };
-            repeat = 1;
-            // If we have a new length value, or are at the end, output l
-            if l != prev || iter.peek().is_none() {
-                update_out_and_freq(EncodedLength::Length(l), &mut out, &mut frequencies);
-                repeat = 0;
-            }
-        } else {
-            // There haven't been enough repetitions of the previous value,
-            // so just we output the lengths directly
-            let mut i = repeat as i32;
-            while i >= 0 {
-                update_out_and_freq(EncodedLength::Length(lengths[usize::from(n) - i as usize]),
-                                    &mut out,
-                                    &mut frequencies);
-                i -= 1;
-            }
-            repeat = 0;
+            } else {
+                // There haven't been enough repetitions of the previous value,
+                // so just we output the lengths directly.
 
+                // If we are at the end, and we have a value that is repeated, we need to
+                // skip a byte and output the last one.
+                let extra_skip = if iter.peek().is_none() && l == prev {
+                    1
+                } else {
+                    0
+                };
+
+                // Get to the position of the next byte to output by starting at zero and skipping.
+                let b_iter = lengths.clone().skip(n + extra_skip - repeat as usize);
+
+                // As repeats of zeroes have separate codes, we don't need to output a literal here
+                // if we have a zero.
+                let extra = if l != 0 { 1 } else { 0 };
+
+                for i in b_iter.take(repeat as usize + extra) {
+                    update_out_and_freq(EncodedLength::Length(i), &mut out, &mut frequencies);
+                }
+
+                // If the current byte is zero we start repeat at 1 as we didn't output the literal
+                // directly.
+                repeat = 1 - extra as u8;
+            }
         }
         prev = l;
     }
@@ -290,17 +325,91 @@ mod test {
     use std::u16;
     use huffman_table::NUM_LITERALS_AND_LENGTHS;
 
+    fn lit(value: u8) -> EncodedLength {
+        EncodedLength::Length(value)
+    }
+
+    fn zero(repeats: u8) -> EncodedLength {
+        match repeats {
+            0...10 => EncodedLength::RepeatZero3Bits(repeats),
+            _ => EncodedLength::RepeatZero7Bits(repeats),
+        }
+    }
+
+    fn copy(copies: u8) -> EncodedLength {
+        EncodedLength::CopyPrevious(copies)
+    }
+
     #[test]
     fn test_encode_lengths() {
-        // TODO: Write a proper test for this
         use huffman_table::FIXED_CODE_LENGTHS;
-        let enc = encode_lengths(&FIXED_CODE_LENGTHS).unwrap();
+        let enc = encode_lengths(FIXED_CODE_LENGTHS.iter().cloned()).unwrap();
         // There are no lengths lower than 6 in the fixed table
         assert_eq!(enc.1[0..7], [0, 0, 0, 0, 0, 0, 0]);
         // Neither are there any lengths above 9
         assert_eq!(enc.1[10..16], [0, 0, 0, 0, 0, 0]);
         // Also there are no zero-length codes so there shouldn't be any repetitions of zero
         assert_eq!(enc.1[17..19], [0, 0]);
+
+        let test_lengths = [0, 0, 5, 0, 15, 1, 0, 0, 0, 2, 4, 4, 4, 4, 3, 5, 5, 5, 5];
+        let enc = encode_lengths(test_lengths.iter().cloned()).unwrap().0;
+        assert_eq!(enc,
+                   vec![lit(0), lit(0), lit(5), lit(0), lit(15), lit(1), zero(3), lit(2), lit(4),
+                        copy(3), lit(3), lit(5), copy(3)]);
+        let test_lengths = [0, 0, 0, 5, 2, 3, 0, 0, 0];
+        let enc = encode_lengths(test_lengths.iter().cloned()).unwrap().0;
+        assert_eq!(enc, vec![zero(3), lit(5), lit(2), lit(3), zero(3)]);
+
+        let test_lengths = [0, 0, 0, 3, 3, 3, 5, 4, 4, 4, 4, 0, 0];
+        let enc = encode_lengths(test_lengths.iter().cloned()).unwrap().0;
+        assert_eq!(enc,
+                   vec![zero(3), lit(3), lit(3), lit(3), lit(5), lit(4), copy(3), lit(0), lit(0)]);
+
+
+        let lens = [0, 0, 4, 0, 0, 4, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+                    1];
+
+        let _ = encode_lengths(lens.iter().cloned()).unwrap().0;
+
+        let lens = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 8, 0, 0, 0, 0, 8, 0, 0, 7, 8, 7, 8, 6, 6, 8, 0,
+                    7, 6, 7, 8, 7, 7, 8, 0, 0, 0, 0, 0, 8, 8, 0, 8, 7, 0, 10, 8, 0, 8, 0, 10, 10,
+                    8, 8, 10, 8, 0, 8, 7, 0, 10, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 7, 7, 7, 6,
+                    7, 8, 8, 6, 0, 0, 8, 8, 7, 8, 8, 0, 7, 6, 6, 8, 8, 8, 10, 10, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10,
+                    4, 3, 3, 4, 4, 5, 5, 5, 5, 5, 8, 8, 6, 7, 8, 10, 10, 0, 9 /* litlen */,
+                    0, 0, 0, 0, 0, 0, 0, 8, 8, 8, 8, 6, 6, 5, 5, 5, 5, 6, 5, 5, 4, 4, 4, 4, 4, 4,
+                    3, 4, 3, 4];
+
+        let enc = encode_lengths(lens.iter().cloned()).unwrap().0;
+
+        assert_eq!(&enc[..10],
+                   &[zero(10), lit(9), lit(0), lit(0), lit(9), zero(18), lit(6), zero(3), lit(8),
+                     zero(4)]);
+        assert_eq!(&enc[10..20],
+                   &[lit(8), lit(0), lit(0), lit(7), lit(8), lit(7), lit(8), lit(6), lit(6),
+                     lit(8)]);
+
+        let enc = encode_lengths([1, 1, 1, 2].iter().cloned()).unwrap().0;
+        assert_eq!(enc, vec![lit(1), lit(1), lit(1), lit(2)]);
+        let enc = encode_lengths([0, 0, 3].iter().cloned()).unwrap().0;
+        assert_eq!(enc, vec![lit(0), lit(0), lit(3)]);
+        let enc = encode_lengths([0, 0, 0, 5, 2].iter().cloned()).unwrap().0;
+        assert_eq!(enc, vec![zero(3), lit(5), lit(2)]);
     }
 
     #[test]
