@@ -66,35 +66,9 @@ static LENGTH_CODE: [u8; 256] =
      27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 28];
 
 // Base values to calculate the value of the bits in length codes
-static BASE_LENGTH: [u16; NUM_LENGTH_CODES] = [0,
-                                               1,
-                                               2,
-                                               3,
-                                               4,
-                                               5,
-                                               6,
-                                               7,
-                                               8,
-                                               10,
-                                               12,
-                                               14,
-                                               16,
-                                               20,
-                                               24,
-                                               28,
-                                               32,
-                                               40,
-                                               48,
-                                               56,
-                                               64,
-                                               80,
-                                               96,
-                                               112,
-                                               128,
-                                               160,
-                                               192,
-                                               224,
-                                               258 - MIN_MATCH];
+static BASE_LENGTH: [u8; NUM_LENGTH_CODES] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24,
+                                              28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192,
+                                              224, 255]; // 258 - MIN_MATCh
 
 // What number in the literal/length table the lengths start at
 const LENGTH_BITS_START: u16 = 257;
@@ -172,7 +146,7 @@ fn get_length_code_and_extra_bits(length: u16) -> Option<ExtraBits> {
 
     // We can then get the base length from the base length table,
     // which we use to calculate the value of the extra bits.
-    let base = BASE_LENGTH[n as usize];
+    let base = u16::from(BASE_LENGTH[n as usize]);
     let num_bits = LENGTH_EXTRA_BITS_LENGTH[n as usize];
     Some(ExtraBits {
         code_number: u16::from(n) + LENGTH_BITS_START,

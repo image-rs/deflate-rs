@@ -3,7 +3,6 @@ use std::cmp;
 use huffman_table;
 use chained_hash_table::{WINDOW_SIZE, ChainedHashTable};
 use output_writer::{OutputWriter, FixedWriter};
-use checksum::RollingChecksum;
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
@@ -134,15 +133,11 @@ fn longest_match(data: &[u8],
 
     debug_assert_eq!(position, hash_table.current_head() as usize);
 
-    // If we are at the start, or we already have a match at the maximum length, we stop here.
-    if position == 0 || prev_length >= MAX_MATCH {
+    // If we are at the start, we already have a match at the maximum length,
+    // or we can't grow further, we stop here.
+    if position == 0 || prev_length >= MAX_MATCH || position + prev_length >= data.len() {
         return (2, 0);
     }
-
-    // We can't grow any further
-    if position + prev_length >= data.len() {
-        return (2, 0);
-    };
 
     let limit = if position > WINDOW_SIZE {
         position - WINDOW_SIZE
@@ -158,7 +153,6 @@ fn longest_match(data: &[u8],
     let mut best_distance = 0;
 
     let mut iters = 0;
-
 
     // We limit the chain length to 4096 for now to avoid taking too long
     while current_head >= limit && current_head != 0 && iters < 4096 {
@@ -185,11 +179,13 @@ fn longest_match(data: &[u8],
         iters += 1;
     }
 
-    if best_length > prev_length {
-        (best_length, best_distance)
+    let r = if best_length > prev_length {
+        best_length
     } else {
-        (2, best_distance)
-    }
+        2
+    };
+
+    (r, best_distance)
 }
 
 // Get the longest match from the current position of the hash table
@@ -204,13 +200,12 @@ fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usize, 
 
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
-fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
-                                                       start: usize,
-                                                       end: usize,
-                                                       hash_table: &mut ChainedHashTable,
-                                                       writer: &mut W,
-                                                       _rolling_checksum: &mut RC)
-                                                       -> usize {
+fn process_chunk<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
+                                                              start: usize,
+                                                              end: usize,
+                                                              hash_table: &mut ChainedHashTable,
+                                                              writer: &mut W /* , _rolling_checksum: &mut RC */)
+                                                              -> usize {
     let end = cmp::min(data.len(), end);
     let current_chunk = &data[start..end];
 
@@ -298,12 +293,11 @@ fn process_chunk<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
 
 /// Compress a slice
 /// Will return err on failure eventually, but for now allways succeeds or panics
-pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
-                                                                 state: &mut LZ77State,
-                                                                 buffer: &mut [u8],
-                                                                 mut writer: &mut W,
-                                                                 mut rolling_checksum: &mut RC)
-                                                                 -> Option<bool> {
+pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
+                                                                        state: &mut LZ77State,
+                                                                        buffer: &mut [u8],
+                                                                        mut writer: &mut W /* , mut rolling_checksum: &mut RC */)
+                                                                        -> Option<bool> {
     // Currently we use window size as block length, in the future we might want to allow
     // differently sized blocks
     let window_size = DEFAULT_WINDOW_SIZE;
@@ -321,12 +315,11 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
         } else {
             cmp::min(window_size, data.len())
         };
-        state.overlap = process_chunk::<W, RC>(buffer,
-                                               0,
-                                               first_chunk_end,
-                                               &mut state.hash_table,
-                                               &mut writer,
-                                               &mut rolling_checksum);
+        state.overlap = process_chunk::<W>(buffer,
+                                           0,
+                                           first_chunk_end,
+                                           &mut state.hash_table,
+                                           &mut writer);
         // We are at the first block so we don't need to slide the hash table
         state.current_start += first_chunk_end;
         if first_chunk_end >= data.len() {
@@ -343,12 +336,11 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
             // Limit the length of the input buffer slice so we don't go off the end
             // and read garbage data when checking match lengths.
             let buffer_end = cmp::min(window_size * 2 + MAX_MATCH, slice.len());
-            state.overlap = process_chunk::<W, RC>(&buffer[..buffer_end],
-                                                   window_size + state.overlap,
-                                                   end,
-                                                   &mut state.hash_table,
-                                                   &mut writer,
-                                                   &mut rolling_checksum);
+            state.overlap = process_chunk::<W>(&buffer[..buffer_end],
+                                               window_size + state.overlap,
+                                               end,
+                                               &mut state.hash_table,
+                                               &mut writer);
             if end >= slice.len() {
                 // We stopped before or at the window size, so we are at the end.
                 state.set_last();
@@ -380,13 +372,11 @@ pub fn lz77_compress_block<W: OutputWriter, RC: RollingChecksum>(data: &[u8],
 /// Only used in tests for now
 #[allow(dead_code)]
 pub fn lz77_compress(data: &[u8]) -> Option<Vec<LDPair>> {
-    use checksum::NoChecksum;
     let mut w = FixedWriter::new();
     let mut state = LZ77State::new(data);
-    let mut dummy_checksum = NoChecksum::new();
     let mut buffer = create_buffer(data);
     while !state.is_last_block {
-        lz77_compress_block(data, &mut state, &mut buffer, &mut w, &mut dummy_checksum);
+        lz77_compress_block(data, &mut state, &mut buffer, &mut w);
     }
     Some(w.buffer)
 }

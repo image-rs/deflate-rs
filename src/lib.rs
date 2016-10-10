@@ -87,6 +87,8 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                                                         mut writer: &mut W,
                                                         mut checksum: &mut RC)
                                                         -> io::Result<()> {
+    checksum.update_from_slice(input);
+
     let mut state = EncoderState::new(huffman_table::HuffmanTable::empty(), &mut writer);
 
     let block_type = block_type_for_length(input.len());
@@ -97,17 +99,13 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
             let mut lz77_writer = output_writer::DynamicWriter::new();
             let mut buffer = create_buffer(input);
 
-            checksum.update_from_slice(input);
-
             match block_type {
                 BType::DynamicHuffman => {
                     while !lz77_state.is_last_block() {
-                        lz77::lz77_compress_block::<output_writer::DynamicWriter,
-                                                    RC>(input,
-                                                        &mut lz77_state,
-                                                        &mut buffer,
-                                                        &mut lz77_writer,
-                                                        &mut checksum);
+                        lz77::lz77_compress_block(input,
+                                                  &mut lz77_state,
+                                                  &mut buffer,
+                                                  &mut lz77_writer);
                         try!(state.write_start_of_block(false, lz77_state.is_last_block()));
 
                         let (l_lengths, d_lengths) = {
@@ -141,11 +139,10 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                 }
                 BType::FixedHuffman => {
 
-                    lz77::lz77_compress_block::<output_writer::DynamicWriter, RC>(input,
-                                                                                  &mut lz77_state,
-                                                                                  &mut buffer,
-                                                                                  &mut lz77_writer,
-                                                                                  &mut checksum);
+                    lz77::lz77_compress_block(input,
+                                              &mut lz77_state,
+                                              &mut buffer,
+                                              &mut lz77_writer);
                     state.update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS,
                                               &huffman_table::FIXED_CODE_LENGTHS_DISTANCE)
                         .unwrap();
@@ -166,7 +163,6 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
             compress_block_stored(input, &mut state.writer).unwrap();
             // Update the checksum.
             // We've already added the two first bytes to the checksum earlier.
-            checksum.update_from_slice(input);
         }
     }
 
