@@ -210,10 +210,13 @@ fn process_chunk<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
     let current_chunk = &data[start..end];
 
     let mut insert_it = current_chunk.iter().enumerate();
-    let mut hash_it = if end - start > 2 {
-        (&data[start + 2..]).iter()
-    } else {
-        [].iter()
+    let mut hash_it = {
+        let hash_start = if end - start > 2 {
+            start + 2
+        } else {
+            data.len()
+        };
+        (&data[hash_start..]).iter()
     };
 
     const NO_LENGTH: usize = MIN_MATCH as usize - 1;
