@@ -15,6 +15,7 @@ extern crate byteorder;
 
 mod huffman_table;
 mod lz77;
+mod lzvalue;
 mod chained_hash_table;
 mod length_encode;
 mod output_writer;
@@ -39,6 +40,7 @@ use std::io;
 use encoder_state::{EncoderState, BType};
 use stored_block::compress_block_stored;
 
+#[doc(hidden)]
 pub use lz77::lz77_compress;
 
 /// Determine if the block is long enough for it to be worth using dynamic huffman codes or just
@@ -54,11 +56,11 @@ fn block_type_for_length(length: usize) -> BType {
     }
 }
 
-fn flush_to_bitstream<W: std::io::Write>(buffer: &[lz77::LDPair],
+fn flush_to_bitstream<W: std::io::Write>(buffer: &[lzvalue::LZValue],
                                          state: &mut EncoderState<W>)
                                          -> io::Result<()> {
     for &b in buffer {
-        try!(state.write_ldpair(&b))
+        try!(state.write_ldpair(b.value()))
     }
     try!(state.write_end_of_block());
     Ok(())

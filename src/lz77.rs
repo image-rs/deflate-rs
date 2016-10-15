@@ -1,5 +1,6 @@
 use std::cmp;
 
+use lzvalue::LZValue;
 use huffman_table;
 use chained_hash_table::{WINDOW_SIZE, ChainedHashTable};
 use output_writer::{OutputWriter, FixedWriter};
@@ -57,27 +58,11 @@ fn slide_buffer(buffer: &mut [u8], data: &[u8]) {
 }
 
 /// A structure representing values in a compressed stream of data before being huffman coded
-/// We might want to represent this differently eventually to save on memory usage
-/// (We don't actually need the full 16 bytes to store the length and distance data)
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum LDPair {
     Literal(u8),
     Length(u16),
     Distance(u16),
-}
-
-impl LDPair {
-    pub fn _literal(value: u8) -> LDPair {
-        LDPair::Literal(value)
-    }
-
-    pub fn length(length: u16) -> LDPair {
-        LDPair::Length(length)
-    }
-
-    pub fn distance(distance: u16) -> LDPair {
-        LDPair::Distance(distance)
-    }
 }
 
 /// Get the length of the checked match
@@ -374,7 +359,7 @@ pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[
 /// This is a convenience function for compression with fixed huffman values
 /// Only used in tests for now
 #[allow(dead_code)]
-pub fn lz77_compress(data: &[u8]) -> Option<Vec<LDPair>> {
+pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
     let mut w = FixedWriter::new();
     let mut state = LZ77State::new(data);
     let mut buffer = create_buffer(data);
@@ -387,12 +372,13 @@ pub fn lz77_compress(data: &[u8]) -> Option<Vec<LDPair>> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use lzvalue::LZValue;
 
-    fn decompress_lz77(input: &[LDPair]) -> Vec<u8> {
+    fn decompress_lz77(input: &[LZValue]) -> Vec<u8> {
         let mut output = Vec::new();
         let mut last_length = 0;
         for p in input {
-            match *p {
+            match p.value() {
                 LDPair::Literal(l) => output.push(l),
                 LDPair::Length(l) => last_length = l,
                 LDPair::Distance(d) => {
@@ -447,10 +433,10 @@ mod test {
     }
 
     /// Helper function to print the output from the lz77 compression function
-    fn print_output(input: &[LDPair]) {
+    fn print_output(input: &[LZValue]) {
         let mut output = vec![];
         for l in input {
-            match *l {
+            match l.value() {
                 LDPair::Literal(l) => output.push(l),
                 LDPair::Length(l) => output.extend(format!("<L {}>\n", l).into_bytes()),
                 LDPair::Distance(d) => output.extend(format!("<D {}>\n", d).into_bytes()),
@@ -527,7 +513,7 @@ mod test {
         let data = b"nba badger nbadger";
         let compressed = lz77_compress(data).unwrap();
         let test = compressed[compressed.len() - 2];
-        if let LDPair::Length(n) = test {
+        if let LDPair::Length(n) = test.value() {
             assert_eq!(n, 6);
         } else {
             print_output(&compressed);

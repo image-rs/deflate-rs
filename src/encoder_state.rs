@@ -42,8 +42,9 @@ impl<W: Write> EncoderState<W> {
         self.writer.write_bits(code.code, code.length)
     }
 
-    pub fn write_ldpair(&mut self, value: &LDPair) -> io::Result<()> {
-        match *value {
+    #[inline]
+    pub fn write_ldpair(&mut self, value: LDPair) -> io::Result<()> {
+        match value {
             LDPair::Literal(l) => self.write_literal(l),
             LDPair::Length(l) => {
                 let (code, extra_bits_code) = self.huffman_table.get_length_huffman(l).unwrap();

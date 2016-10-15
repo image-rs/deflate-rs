@@ -1,4 +1,5 @@
-use lz77::LDPair;
+// use lz77::LDPair;
+use lzvalue::LZValue;
 use huffman_table::{NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, END_OF_BLOCK_POSITION,
                     get_distance_code, get_length_code};
 
@@ -13,7 +14,7 @@ pub trait OutputWriter {
 /// `OutputWriter` that doesn't store frequency information
 #[derive(Debug)]
 pub struct FixedWriter {
-    pub buffer: Vec<LDPair>,
+    pub buffer: Vec<LZValue>,
 }
 
 impl FixedWriter {
@@ -28,12 +29,12 @@ impl FixedWriter {
 
 impl OutputWriter for FixedWriter {
     fn write_literal(&mut self, literal: u8) {
-        self.buffer.push(LDPair::Literal(literal));
+        self.buffer.push(LZValue::literal(literal));
     }
 
     fn write_length_distance(&mut self, length: u16, distance: u16) {
-        self.buffer.push(LDPair::length(length));
-        self.buffer.push(LDPair::distance(distance));
+        self.buffer.push(LZValue::length(length));
+        self.buffer.push(LZValue::distance(distance));
     }
 }
 
@@ -95,7 +96,7 @@ impl DynamicWriter {
         self.clear_data();
     }
 
-    pub fn get_buffer(&mut self) -> &[LDPair] {
+    pub fn get_buffer(&mut self) -> &[LZValue] {
         &self.fixed_writer.buffer
     }
 }
