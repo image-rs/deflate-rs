@@ -26,17 +26,20 @@ mod checksum;
 mod bit_reverse;
 mod bitstream;
 mod encoder_state;
+mod matching;
+mod input_buffer;
+
+use std::io::Write;
+use std::io;
 
 use byteorder::BigEndian;
 
 use huffman_table::*;
-use lz77::create_buffer;
+use input_buffer::InputBuffer;
 use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes, MIN_NUM_LITERALS_AND_LENGTHS,
                       MIN_NUM_DISTANCES};
 use length_encode::huffman_lengths_from_frequency;
 use checksum::RollingChecksum;
-use std::io::Write;
-use std::io;
 use encoder_state::{EncoderState, BType};
 use stored_block::compress_block_stored;
 
@@ -99,7 +102,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
         BType::DynamicHuffman | BType::FixedHuffman => {
             let mut lz77_state = lz77::LZ77State::new(input);
             let mut lz77_writer = output_writer::DynamicWriter::new();
-            let mut buffer = create_buffer(input);
+            let mut buffer = InputBuffer::new(input);
 
             match block_type {
                 BType::DynamicHuffman => {
@@ -163,8 +166,6 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
             state.writer.write_bits(stored_block::STORED_FIRST_BYTE_FINAL.into(), 3).unwrap();
             state.flush().unwrap();
             compress_block_stored(input, &mut state.writer).unwrap();
-            // Update the checksum.
-            // We've already added the two first bytes to the checksum earlier.
         }
     }
 
