@@ -1,4 +1,5 @@
 use lz77::LDPair;
+use huffman_table::MAX_DISTANCE;
 
 const LITERAL_MASK: u16 = 0b1100_0000_0000_0000;
 const LENGTH_MASK: u16 = 0b1000_0000_0000_0000;
@@ -18,7 +19,10 @@ impl LZValue {
         LZValue { data: length ^ LENGTH_MASK }
     }
 
-    pub fn distance(distance: u16) -> LZValue {
+    pub fn distance(mut distance: u16) -> LZValue {
+        if distance == MAX_DISTANCE {
+            distance = 0;
+        }
         LZValue { data: distance }
     }
 
@@ -27,7 +31,13 @@ impl LZValue {
         match self.data & LITERAL_MASK {
             LITERAL_MASK => LDPair::Literal(self.data as u8),
             LENGTH_MASK => LDPair::Length(self.data & !LENGTH_MASK),
-            _ => LDPair::Distance(self.data),
+            _ => {
+                if self.data == 0 {
+                    LDPair::Distance(MAX_DISTANCE)
+                } else {
+                    LDPair::Distance(self.data)
+                }
+            }
         }
     }
 }
@@ -36,29 +46,35 @@ impl LZValue {
 mod test {
     use super::*;
     use lz77::LDPair;
+    use huffman_table::{MIN_MATCH, MIN_DISTANCE, MAX_MATCH, MAX_DISTANCE};
     #[test]
     fn test_lzvalue() {
-        use std::mem;
-        println!("Size of lzvalue {}", mem::size_of::<LZValue>());
-        let v = LZValue::literal(2);
-        if let LDPair::Literal(n) = v.value() {
-            assert_eq!(n, 2);
-        } else {
-            panic!();
+        for i in 0..255 as usize + 1 {
+            let v = LZValue::literal(i as u8);
+            if let LDPair::Literal(n) = v.value() {
+                assert_eq!(n as usize, i);
+            } else {
+                panic!();
+            }
         }
 
-        let v = LZValue::length(55);
-        if let LDPair::Length(n) = v.value() {
-            assert_eq!(n, 55);
-        } else {
-            panic!();
+        for i in MIN_MATCH..MAX_MATCH + 1 {
+            let v = LZValue::length(i);
+            if let LDPair::Length(n) = v.value() {
+                assert_eq!(n, i);
+            } else {
+                panic!();
+            }
         }
 
-        let v = LZValue::distance(2555);
-        if let LDPair::Distance(n) = v.value() {
-            assert_eq!(n, 2555);
-        } else {
-            panic!();
+        for i in MIN_DISTANCE..MAX_DISTANCE + 1 {
+            let v = LZValue::distance(i);
+            if let LDPair::Distance(n) = v.value() {
+                assert_eq!(n, i);
+            } else {
+                panic!("Failed to get distance {}", i);
+            }
         }
+
     }
 }

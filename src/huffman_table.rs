@@ -27,6 +27,10 @@ pub const MAX_CODE_LENGTH: usize = 15;
 pub const MIN_MATCH: u16 = 3;
 pub const MAX_MATCH: u16 = 258;
 
+pub const MIN_DISTANCE: u16 = 1;
+pub const MAX_DISTANCE: u16 = 32768;
+
+
 // The position in the literal/length table of the end of block symbol
 pub const END_OF_BLOCK_POSITION: usize = 256;
 
@@ -386,8 +390,6 @@ impl HuffmanTable {
     ///
     /// Returns None if distance is 0 or above 32768
     pub fn get_distance_huffman(&self, distance: u16) -> Option<((HuffmanCode, HuffmanCode))> {
-        const MIN_DISTANCE: u16 = 1;
-        const MAX_DISTANCE: u16 = 32768;
         if distance < MIN_DISTANCE || distance > MAX_DISTANCE {
             return None;
         }

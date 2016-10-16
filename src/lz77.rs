@@ -292,7 +292,7 @@ pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[
 
     // If the next block is very short, we merge it into the current block as the huffman tables
     // for a new block may otherwise waste space.
-    const MIN_BLOCK_LENGTH: usize = 500;
+    const MIN_BLOCK_LENGTH: usize = 10000;
     let next_block_merge = data.len() - state.current_start > window_size &&
                            data.len() - state.current_start - window_size < MIN_BLOCK_LENGTH;
 

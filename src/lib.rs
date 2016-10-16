@@ -135,7 +135,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
 
                         try!(flush_to_bitstream(lz77_writer.get_buffer(), &mut state));
 
-                        // End of block is written in write_ldpair.
+                        // End of block is written in flush_to_bitstream.
                         lz77_writer.clear();
                     }
                 }
