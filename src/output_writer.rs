@@ -11,6 +11,14 @@ pub trait OutputWriter {
     fn write_length_distance(&mut self, length: u16, distance: u16);
 }
 
+pub struct _DummyWriter {
+}
+
+impl OutputWriter for _DummyWriter {
+    fn write_literal(&mut self, _: u8) {}
+    fn write_length_distance(&mut self, _: u16, _: u16) {}
+}
+
 /// `OutputWriter` that doesn't store frequency information
 #[derive(Debug)]
 pub struct FixedWriter {

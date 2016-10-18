@@ -22,6 +22,7 @@ fn get_test_data() -> Vec<u8> {
 fn test_file_zlib_compare_output() {
     use flate2::Compression;
     use std::io::{Write, Read};
+    use deflate::{CompressionOptions, deflate_bytes_zlib_conf};
     let test_data = get_test_data();
     let flate2_compressed = {
         let mut e = flate2::write::ZlibEncoder::new(Vec::new(), Compression::Best);
@@ -29,7 +30,7 @@ fn test_file_zlib_compare_output() {
         e.finish().unwrap()
     };
 
-    let deflate_compressed = deflate::deflate_bytes_zlib(&test_data);
+    let deflate_compressed = deflate_bytes_zlib_conf(&test_data, CompressionOptions::high());
 
     // {
     //     use std::fs::File;

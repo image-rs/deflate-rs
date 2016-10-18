@@ -79,13 +79,13 @@ impl ChainedHashTable {
         }
     }
 
-    #[cfg(test)]
-    pub fn get_head_arr(&self) -> &[u16] {
+    // #[cfg(test)]
+    pub fn _get_head_arr(&self) -> &[u16] {
         &self.head[..]
     }
 
-    #[cfg(test)]
-    pub fn get_prev_arr(&self) -> &[u16] {
+    // #[cfg(test)]
+    pub fn _get_prev_arr(&self) -> &[u16] {
         &self.prev[..]
     }
 }

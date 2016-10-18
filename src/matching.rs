@@ -50,12 +50,22 @@ fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usi
 }
 
 /// Try finding the position and length of the longest match in the input data.
+/// # Returns
+/// (length, distance from position)
 /// If no match is found that was better than `prev_length` or at all, or we are at the start,
-/// this returns (0, 0)
+/// the length value returned will be 2
+///
+/// # Arguments:
+/// data: The data to search in
+/// hash_tablle: Hash table to use for searching
+/// position: The position in the data to match against
+/// prev_length: The length of the previous longest_match check to compare against
+/// max_hash_checks: The maximum number of matching hash chain positions to check
 pub fn longest_match(data: &[u8],
                      hash_table: &ChainedHashTable,
                      position: usize,
-                     prev_length: usize)
+                     prev_length: usize,
+                     max_hash_checks: u16)
                      -> (usize, usize) {
 
     debug_assert_eq!(position, hash_table.current_head() as usize);
@@ -81,11 +91,10 @@ pub fn longest_match(data: &[u8],
 
     let mut iters = 0;
 
-    // We limit the chain length to 4096 for now to avoid taking too long
-    while current_head >= limit && current_head != 0 && iters < 4096 {
+    while current_head >= limit && current_head != 0 && iters < max_hash_checks {
         // We only check further if the match length can actually increase
-        if data[position + best_length] == data[current_head + best_length] &&
-           data[position + best_length - 1] == data[current_head + best_length - 1] {
+        if data[position + best_length - 1..position + best_length + 1] ==
+           data[current_head + best_length - 1..current_head + best_length + 1] {
             let length = get_match_length(data, position, current_head);
             if length > best_length {
                 best_length = length;
@@ -119,10 +128,12 @@ pub fn longest_match(data: &[u8],
 #[inline]
 #[cfg(test)]
 pub fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usize, usize) {
+    use compression_options::MAX_HASH_CHECKS;
     longest_match(data,
                   hash_table,
                   hash_table.current_position(),
-                  MIN_MATCH as usize - 1)
+                  MIN_MATCH as usize - 1,
+                  MAX_HASH_CHECKS)
 }
 
 #[cfg(test)]

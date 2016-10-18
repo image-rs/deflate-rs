@@ -30,6 +30,8 @@ lto = true
 
 [profile.test]
 debug = true
+opt-level = 3
+lto = true
 
 [features]
 default = []

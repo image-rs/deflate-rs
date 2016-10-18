@@ -5,6 +5,7 @@ extern crate test;
 extern crate flate2;
 use test::Bencher;
 use flate2::Compression;
+use deflate::{CompressionOptions, deflate_bytes_zlib_conf, deflate_bytes_zlib, lz77_compress};
 
 fn load_from_file(name: &str) -> Vec<u8> {
     use std::fs::File;
@@ -25,14 +26,21 @@ fn get_test_data() -> Vec<u8> {
 #[bench]
 fn test_file_zlib_lz77_only(b: &mut Bencher) {
     let test_data = get_test_data();
-    b.iter(|| deflate::lz77_compress(&test_data));
+    b.iter(|| lz77_compress(&test_data));
 }
 
 #[bench]
-fn test_file_zlib(b: &mut Bencher) {
+fn test_file_zlib_def(b: &mut Bencher) {
     let test_data = get_test_data();
 
-    b.iter(|| deflate::deflate_bytes_zlib(&test_data));
+    b.iter(|| deflate_bytes_zlib(&test_data));
+}
+
+#[bench]
+fn test_file_zlib_high(b: &mut Bencher) {
+    let test_data = get_test_data();
+
+    b.iter(|| deflate_bytes_zlib_conf(&test_data, CompressionOptions::high()));
 }
 
 fn deflate_bytes_flate2_zlib(level: Compression, input: &[u8]) -> Vec<u8> {

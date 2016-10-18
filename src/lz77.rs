@@ -5,6 +5,7 @@ use matching::longest_match;
 use lzvalue::LZValue;
 use huffman_table;
 use chained_hash_table::ChainedHashTable;
+use compression_options::HIGH_MAX_HASH_CHECKS;
 use output_writer::{OutputWriter, FixedWriter};
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
@@ -21,22 +22,25 @@ pub struct LZ77State {
     is_last_block: bool,
     // How many bytes the last match in the previous window extended into the current one
     overlap: usize,
+    // The maximum number of hash entries to search
+    max_hash_checks: u16,
 }
 
 impl LZ77State {
-    fn from_starting_values(b0: u8, b1: u8) -> LZ77State {
+    fn from_starting_values(b0: u8, b1: u8, max_hash_checks: u16) -> LZ77State {
         LZ77State {
             hash_table: ChainedHashTable::from_starting_values(b0, b1),
             current_start: 0,
             is_first_window: true,
             is_last_block: false,
             overlap: 0,
+            max_hash_checks: max_hash_checks,
         }
     }
 
     /// Creates a new LZ77 state, adding the first to bytes to the hash table
-    pub fn new(data: &[u8]) -> LZ77State {
-        LZ77State::from_starting_values(data[0], data[1])
+    pub fn new(data: &[u8], max_hash_checks: u16) -> LZ77State {
+        LZ77State::from_starting_values(data[0], data[1], max_hash_checks)
     }
 
     pub fn set_last(&mut self) {
@@ -62,7 +66,8 @@ fn process_chunk<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
                                                               start: usize,
                                                               end: usize,
                                                               hash_table: &mut ChainedHashTable,
-                                                              writer: &mut W /* , _rolling_checksum: &mut RC */)
+                                                              writer: &mut W /* , _rolling_checksum: &mut RC */,
+                                                              max_hash_checks: u16)
                                                               -> usize {
     let end = cmp::min(data.len(), end);
     let current_chunk = &data[start..end];
@@ -92,7 +97,7 @@ fn process_chunk<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
             hash_table.add_hash_value(position, hash_byte);
             // rolling_checksum.update(hash_byte);
 
-            let (match_len, match_dist) = longest_match(data, hash_table, position, prev_length);
+            let (match_len, match_dist) = longest_match(data, hash_table, position, prev_length, max_hash_checks);
 
             if prev_length >= match_len && prev_length >= MIN_MATCH as usize {
                 // The previous match was better so we add it
@@ -157,7 +162,7 @@ fn process_chunk<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
 pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
                                                                         state: &mut LZ77State,
                                                                         buffer: &mut InputBuffer,
-                                                                        mut writer: &mut W /* , mut rolling_checksum: &mut RC */)
+                                                                        mut writer: &mut W, /* , mut rolling_checksum: &mut RC */)
                                                                         -> Option<bool> {
     // Currently we use window size as block length, in the future we might want to allow
     // differently sized blocks
@@ -180,7 +185,9 @@ pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[
                                            0,
                                            first_chunk_end,
                                            &mut state.hash_table,
-                                           &mut writer);
+                                           &mut writer,
+                                           state.max_hash_checks
+        );
         // We are at the first block so we don't need to slide the hash table
         state.current_start += first_chunk_end;
         if first_chunk_end >= data.len() {
@@ -201,7 +208,8 @@ pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[
                                                window_size + state.overlap,
                                                end,
                                                &mut state.hash_table,
-                                               &mut writer);
+                                               &mut writer,
+                                               state.max_hash_checks);
             if end >= slice.len() {
                 // We stopped before or at the window size, so we are at the end.
                 state.set_last();
@@ -228,19 +236,32 @@ pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[
     Some(true)
 }
 
+#[allow(dead_code)]
+pub struct TestStruct {
+    state: LZ77State,
+    buffer: InputBuffer,
+    writer: FixedWriter,
+}
+
 /// Compress a slice, not storing frequency information
 ///
 /// This is a convenience function for compression with fixed huffman values
 /// Only used in tests for now
 #[allow(dead_code)]
 pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
-    let mut w = FixedWriter::new();
-    let mut state = LZ77State::new(data);
-    let mut buffer = InputBuffer::new(data);//create_buffer(data);
-    while !state.is_last_block {
-        lz77_compress_block(data, &mut state, &mut buffer, &mut w);
+    let mut test_boxed = Box::new(TestStruct{
+        state: LZ77State::new(data, HIGH_MAX_HASH_CHECKS),
+        buffer: InputBuffer::new(data),
+        writer: FixedWriter::new(),
+    });
+    {
+        let mut test = test_boxed.as_mut();
+
+        while !test.state.is_last_block {
+            lz77_compress_block(data, &mut test.state, &mut test.buffer, &mut test.writer);
+        }
     }
-    Some(w.buffer)
+    Some(test_boxed.writer.buffer)
 }
 
 #[cfg(test)]
