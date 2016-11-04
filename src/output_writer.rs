@@ -9,14 +9,30 @@ use huffman_table::{NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, END_OF_BLOCK_P
 pub trait OutputWriter {
     fn write_literal(&mut self, literal: u8);
     fn write_length_distance(&mut self, length: u16, distance: u16);
+    fn buffer_length(&self) -> usize;
+    fn clear_buffer(&mut self);
+    fn get_buffer(&self) -> &[LZValue];
 }
 
 pub struct _DummyWriter {
+    written: usize,
 }
 
 impl OutputWriter for _DummyWriter {
-    fn write_literal(&mut self, _: u8) {}
-    fn write_length_distance(&mut self, _: u16, _: u16) {}
+    fn write_literal(&mut self, _: u8) {
+        self.written += 1;
+    }
+    fn write_length_distance(&mut self, _: u16, _: u16) {
+        self.written += 2;
+    }
+    fn buffer_length(&self) -> usize {
+        self.written
+    }
+    fn clear_buffer(&mut self) {}
+
+    fn get_buffer(&self) -> &[LZValue] {
+        &[]
+    }
 }
 
 /// `OutputWriter` that doesn't store frequency information
@@ -29,10 +45,6 @@ impl FixedWriter {
     pub fn new() -> FixedWriter {
         FixedWriter { buffer: Vec::with_capacity(10000) }
     }
-
-    pub fn clear_buffer(&mut self) {
-        self.buffer.clear();
-    }
 }
 
 impl OutputWriter for FixedWriter {
@@ -43,6 +55,18 @@ impl OutputWriter for FixedWriter {
     fn write_length_distance(&mut self, length: u16, distance: u16) {
         self.buffer.push(LZValue::length(length));
         self.buffer.push(LZValue::distance(distance));
+    }
+
+    fn buffer_length(&self) -> usize {
+        self.buffer.len()
+    }
+
+    fn clear_buffer(&mut self) {
+        self.buffer.clear();
+    }
+
+    fn get_buffer(&self) -> &[LZValue] {
+        &self.buffer
     }
 }
 
@@ -69,6 +93,19 @@ impl OutputWriter for DynamicWriter {
         self.frequencies[l_code_num as usize] += 1;
         let d_code_num = get_distance_code(distance).expect("Error, distance is out of range!");
         self.distance_frequencies[usize::from(d_code_num)] += 1;
+    }
+
+    fn buffer_length(&self) -> usize {
+        self.fixed_writer.buffer_length()
+    }
+
+    fn clear_buffer(&mut self) {
+        self.clear_data();
+        self.clear();
+    }
+
+    fn get_buffer(&self) -> &[LZValue] {
+        &self.fixed_writer.get_buffer()
     }
 }
 
@@ -102,9 +139,5 @@ impl DynamicWriter {
     pub fn clear(&mut self) {
         self.clear_frequencies();
         self.clear_data();
-    }
-
-    pub fn get_buffer(&mut self) -> &[LZValue] {
-        &self.fixed_writer.buffer
     }
 }

@@ -119,8 +119,12 @@ pub fn encode_lengths<I>(lengths: I) -> Option<(Vec<EncodedLength>, [u16; 19])>
                 let b_iter = lengths.clone().skip(n + extra_skip - repeat as usize);
 
                 // As repeats of zeroes have separate codes, we don't need to output a literal here
-                // if we have a zero.
-                let extra = if l != 0 { 1 } else { 0 };
+                // if we have a zero (unless we are at the end).
+                let extra = if l != 0 || iter.peek().is_none() {
+                    1
+                } else {
+                    0
+                };
 
                 for i in b_iter.take(repeat as usize + extra) {
                     update_out_and_freq(EncodedLength::Length(i), &mut out, &mut frequencies);
@@ -410,6 +414,9 @@ mod test {
         assert_eq!(enc, vec![lit(0), lit(0), lit(3)]);
         let enc = encode_lengths([0, 0, 0, 5, 2].iter().cloned()).unwrap().0;
         assert_eq!(enc, vec![zero(3), lit(5), lit(2)]);
+
+        let enc = encode_lengths([0, 0, 0, 5, 0].iter().cloned()).unwrap().0;
+        assert!(*enc.last().unwrap() != lit(5));
     }
 
     #[test]

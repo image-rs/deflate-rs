@@ -39,6 +39,7 @@ impl LZ77State {
     }
 
     /// Creates a new LZ77 state, adding the first to bytes to the hash table
+    /// to warm it up
     pub fn new(data: &[u8], max_hash_checks: u16) -> LZ77State {
         LZ77State::from_starting_values(data[0], data[1], max_hash_checks)
     }
@@ -52,7 +53,7 @@ impl LZ77State {
     }
 }
 
-/// A structure representing values in a compressed stream of data before being huffman coded
+/// A structure representing either a literal, length or distance value
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum LDPair {
     Literal(u8),
@@ -62,13 +63,13 @@ pub enum LDPair {
 
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
-fn process_chunk<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
-                                                              start: usize,
-                                                              end: usize,
-                                                              hash_table: &mut ChainedHashTable,
-                                                              writer: &mut W /* , _rolling_checksum: &mut RC */,
-                                                              max_hash_checks: u16)
-                                                              -> usize {
+fn process_chunk<W: OutputWriter>(data: &[u8],
+                                  start: usize,
+                                  end: usize,
+                                  hash_table: &mut ChainedHashTable,
+                                  writer: &mut W,
+                                  max_hash_checks: u16)
+                                  -> usize {
     let end = cmp::min(data.len(), end);
     let current_chunk = &data[start..end];
 
@@ -97,7 +98,8 @@ fn process_chunk<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
             hash_table.add_hash_value(position, hash_byte);
             // rolling_checksum.update(hash_byte);
 
-            let (match_len, match_dist) = longest_match(data, hash_table, position, prev_length, max_hash_checks);
+            let (match_len, match_dist) =
+                longest_match(data, hash_table, position, prev_length, max_hash_checks);
 
             if prev_length >= match_len && prev_length >= MIN_MATCH as usize {
                 // The previous match was better so we add it
@@ -157,45 +159,62 @@ fn process_chunk<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
     overlap
 }
 
+#[derive(Eq, PartialEq, Clone, Copy, Debug)]
+pub enum LZ77Status {
+    NoInput,
+    EndBlock,
+}
+
 /// Compress a slice
 /// Will return err on failure eventually, but for now allways succeeds or panics
-pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[u8],
-                                                                        state: &mut LZ77State,
-                                                                        buffer: &mut InputBuffer,
-                                                                        mut writer: &mut W, /* , mut rolling_checksum: &mut RC */)
-                                                                        -> Option<bool> {
+pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
+                                            state: &mut LZ77State,
+                                            buffer: &mut InputBuffer,
+                                            mut writer: &mut W)
+                                            -> LZ77Status {
     // Currently we use window size as block length, in the future we might want to allow
     // differently sized blocks
     let window_size = DEFAULT_WINDOW_SIZE;
 
     // If the next block is very short, we merge it into the current block as the huffman tables
     // for a new block may otherwise waste space.
-    const MIN_BLOCK_LENGTH: usize = 10000;
-    let next_block_merge = data.len() - state.current_start > window_size &&
-                           data.len() - state.current_start - window_size < MIN_BLOCK_LENGTH;
+    //    const MIN_BLOCK_LENGTH: usize = 10000;
+    // let next_block_merge = data.len() - state.current_start > window_size &&
+    // data.len() - state.current_start - window_size < MIN_BLOCK_LENGTH;
+    //
 
-    if state.is_first_window {
+    let mut status = LZ77Status::EndBlock;
 
-        let first_chunk_end = if next_block_merge {
-            data.len()
+    while writer.buffer_length() < (window_size * 2) && status != LZ77Status::NoInput {
+
+        if state.is_first_window {
+
+            //        let first_chunk_end = if next_block_merge {
+            // data.len()
+            // } else {
+            // cmp::min(window_size, data.len())
+            // };
+
+            let first_chunk_end = cmp::min(window_size, data.len());
+
+            state.overlap = process_chunk::<W>(buffer.get_buffer(),
+                                               0,
+                                               first_chunk_end,
+                                               &mut state.hash_table,
+                                               &mut writer,
+                                               state.max_hash_checks);
+            // We are at the first block so we don't need to slide the hash table
+            state.current_start += first_chunk_end;
+            if first_chunk_end >= data.len() {
+                state.set_last();
+                status = LZ77Status::NoInput;
+            } else {
+                status = LZ77Status::EndBlock;
+            }
+            state.is_first_window = false;
+            return status;
         } else {
-            cmp::min(window_size, data.len())
-        };
-        state.overlap = process_chunk::<W>(buffer.get_buffer(),
-                                           0,
-                                           first_chunk_end,
-                                           &mut state.hash_table,
-                                           &mut writer,
-                                           state.max_hash_checks
-        );
-        // We are at the first block so we don't need to slide the hash table
-        state.current_start += first_chunk_end;
-        if first_chunk_end >= data.len() {
-            state.set_last();
-        }
-        state.is_first_window = false;
-    } else {
-        for _ in 0..1 {
+            //        for _ in 0..1 {
             let start = state.current_start;
             let slice = &data[start - window_size..];
             // Where we have to stop iterating to slide the buffer and hash,
@@ -204,6 +223,7 @@ pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[
             // Limit the length of the input buffer slice so we don't go off the end
             // and read garbage data when checking match lengths.
             let buffer_end = cmp::min(window_size * 2 + MAX_MATCH, slice.len());
+
             state.overlap = process_chunk::<W>(&buffer.get_buffer()[..buffer_end],
                                                window_size + state.overlap,
                                                end,
@@ -213,6 +233,7 @@ pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[
             if end >= slice.len() {
                 // We stopped before or at the window size, so we are at the end.
                 state.set_last();
+                status = LZ77Status::NoInput;
             } else {
                 // We are not at the end, so slide and continue
                 state.current_start += window_size;
@@ -223,17 +244,19 @@ pub fn lz77_compress_block<W: OutputWriter /* , RC: RollingChecksum */>(data: &[
                 state.hash_table.slide(window_size);
                 let end = cmp::min(start + window_size + MAX_MATCH, data.len());
                 //                rolling_checksum.update_from_slice(&data[start + 2..end]);
-                //slide_buffer(buffer, &data[start..end]);
+                // slide_buffer(buffer, &data[start..end]);
                 buffer.slide(&data[start..end]);
+                status = LZ77Status::EndBlock;
             }
 
-            if !next_block_merge {
-                break;
-            }
+            //            if !next_block_merge {
+            // break;
+            // }
+            // }
         }
     }
 
-    Some(true)
+    status
 }
 
 #[allow(dead_code)]
@@ -249,19 +272,24 @@ pub struct TestStruct {
 /// Only used in tests for now
 #[allow(dead_code)]
 pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
-    let mut test_boxed = Box::new(TestStruct{
+    let mut test_boxed = Box::new(TestStruct {
         state: LZ77State::new(data, HIGH_MAX_HASH_CHECKS),
-        buffer: InputBuffer::new(data),
+        buffer: InputBuffer::new(data).0,
         writer: FixedWriter::new(),
     });
+    let mut out = Vec::<LZValue>::with_capacity(data.len() / 3);
     {
         let mut test = test_boxed.as_mut();
 
         while !test.state.is_last_block {
             lz77_compress_block(data, &mut test.state, &mut test.buffer, &mut test.writer);
+            out.extend(test.writer.get_buffer());
+            test.writer.clear_buffer();
         }
+
     }
-    Some(test_boxed.writer.buffer)
+
+    Some(out)
 }
 
 #[cfg(test)]
