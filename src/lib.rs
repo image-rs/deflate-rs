@@ -102,7 +102,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
     checksum.update_from_slice(input);
 
     let mut deflate_state = DeflateState {
-        input_buffer: InputBuffer::new(input).0,
+        input_buffer: InputBuffer::empty(),
         lz77_state: lz77::LZ77State::new(input, compression_options.max_hash_checks),
         encoder_state: EncoderState::new(huffman_table::HuffmanTable::empty(), &mut writer),
         lz77_writer: DynamicWriter::new(),
@@ -115,11 +115,15 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
         BType::DynamicHuffman | BType::FixedHuffman => {
             match block_type {
                 BType::DynamicHuffman => {
+                    let mut slice = input;
                     while !deflate_state.lz77_state.is_last_block() {
-                        lz77::lz77_compress_block(input,
+                        let (bytes_written, _) = lz77::lz77_compress_block(&slice,
                                                   &mut deflate_state.lz77_state,
                                                   &mut deflate_state.input_buffer,
-                                                  &mut deflate_state.lz77_writer);
+                                                  &mut deflate_state.lz77_writer,
+                                                                           true);
+                        // Increment start of input data
+                        slice = &slice[bytes_written..];
                         try!(deflate_state.encoder_state
                             .write_start_of_block(false, deflate_state.lz77_state.is_last_block()));
 
@@ -161,7 +165,8 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                     lz77::lz77_compress_block(input,
                                               &mut deflate_state.lz77_state,
                                               &mut deflate_state.input_buffer,
-                                              &mut deflate_state.lz77_writer);
+                                              &mut deflate_state.lz77_writer,
+                                              true);
                     deflate_state.encoder_state
                         .update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS,
                                               &huffman_table::FIXED_CODE_LENGTHS_DISTANCE)

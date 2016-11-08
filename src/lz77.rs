@@ -15,7 +15,7 @@ const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 pub struct LZ77State {
     hash_table: ChainedHashTable,
     // The current position in the input slice
-    current_start: usize,
+    pub current_start: usize,
     // True if this is the first window
     is_first_window: bool,
     // True if the last block has been output
@@ -161,8 +161,9 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum LZ77Status {
-    NoInput,
+    NeedInput,
     EndBlock,
+    Finished,
 }
 
 /// Compress a slice
@@ -170,93 +171,99 @@ pub enum LZ77Status {
 pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                                             state: &mut LZ77State,
                                             buffer: &mut InputBuffer,
-                                            mut writer: &mut W)
-                                            -> LZ77Status {
+                                            mut writer: &mut W,
+                                            finish: bool)
+                                            -> (usize, LZ77Status) {
     // Currently we use window size as block length, in the future we might want to allow
     // differently sized blocks
     let window_size = DEFAULT_WINDOW_SIZE;
 
-    // If the next block is very short, we merge it into the current block as the huffman tables
-    // for a new block may otherwise waste space.
-    //    const MIN_BLOCK_LENGTH: usize = 10000;
-    // let next_block_merge = data.len() - state.current_start > window_size &&
-    // data.len() - state.current_start - window_size < MIN_BLOCK_LENGTH;
-    //
-
     let mut status = LZ77Status::EndBlock;
+    let mut remaining_data = buffer.add_data(data);
 
-    while writer.buffer_length() < (window_size * 2) && status != LZ77Status::NoInput {
-
+    while writer.buffer_length() < (window_size * 2) {
         if state.is_first_window {
+            if buffer.current_end() >= window_size + MAX_MATCH || finish {
 
-            //        let first_chunk_end = if next_block_merge {
-            // data.len()
-            // } else {
-            // cmp::min(window_size, data.len())
-            // };
 
-            let first_chunk_end = cmp::min(window_size, data.len());
+                let first_chunk_end = if finish && remaining_data.is_none() {
+                    // If we are finishing, make sure we include data in the lookahead area
+                    buffer.current_end()
+                } else {
+                    cmp::min(window_size, buffer.current_end())
+                };
 
-            state.overlap = process_chunk::<W>(buffer.get_buffer(),
-                                               0,
-                                               first_chunk_end,
-                                               &mut state.hash_table,
-                                               &mut writer,
-                                               state.max_hash_checks);
-            // We are at the first block so we don't need to slide the hash table
-            state.current_start += first_chunk_end;
-            if first_chunk_end >= data.len() {
-                state.set_last();
-                status = LZ77Status::NoInput;
+                state.overlap = process_chunk::<W>(buffer.get_buffer(),
+                                                   0,
+                                                   first_chunk_end,
+                                                   &mut state.hash_table,
+                                                   &mut writer,
+                                                   state.max_hash_checks);
+
+                // We are at the first block so we don't need to slide the hash table
+                state.current_start += first_chunk_end;
+
+                if first_chunk_end >= data.len() {
+                    state.set_last();
+                    status = LZ77Status::Finished;
+                } else {
+                    status = LZ77Status::EndBlock;
+                }
+                state.is_first_window = false;
+                break;
             } else {
-                status = LZ77Status::EndBlock;
+                status = LZ77Status::NeedInput;
+                break;
             }
-            state.is_first_window = false;
-            return status;
         } else {
-            //        for _ in 0..1 {
-            let start = state.current_start;
-            let slice = &data[start - window_size..];
-            // Where we have to stop iterating to slide the buffer and hash,
-            // or stop because we are at the end of the input data.
-            let end = cmp::min(window_size * 2, slice.len());
-            // Limit the length of the input buffer slice so we don't go off the end
-            // and read garbage data when checking match lengths.
-            let buffer_end = cmp::min(window_size * 2 + MAX_MATCH, slice.len());
+            if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
+                let start = window_size + state.overlap;
 
-            state.overlap = process_chunk::<W>(&buffer.get_buffer()[..buffer_end],
-                                               window_size + state.overlap,
-                                               end,
-                                               &mut state.hash_table,
-                                               &mut writer,
-                                               state.max_hash_checks);
-            if end >= slice.len() {
-                // We stopped before or at the window size, so we are at the end.
-                state.set_last();
-                status = LZ77Status::NoInput;
+                // Determine where we have to stop iterating to slide the buffer and hash,
+                // or stop because we are at the end of the input data.
+                let end = if remaining_data.is_none() && finish {
+                    // If we are finishing, make sure we include the lookahead data
+                    buffer.current_end()
+                } else {
+                    cmp::min(window_size * 2, buffer.current_end())
+                };
+                // Limit the length of the input buffer slice so we don't go off the end
+                // and read garbage data when checking match lengths.
+                // let buffer_end = cmp::min(window_size * 2 + MAX_MATCH, slice.len());
+
+                state.overlap = process_chunk::<W>(&buffer.get_buffer(), // [..buffer_end]
+                                                   start,
+                                                   end,
+                                                   &mut state.hash_table,
+                                                   &mut writer,
+                                                   state.max_hash_checks);
+                if remaining_data.is_none() {
+                    // We stopped before or at the window size, so we are at the end.
+                    state.set_last();
+                    status = LZ77Status::Finished;
+                    break;
+                } else {
+                    // We are not at the end, so slide and continue
+                    state.current_start += end - start + state.overlap;
+                    // let start = state.current_start;
+                    // We slide the hash table back to make space for new hash values
+                    // We only need to remember 32k bytes back (the maximum distance allowed by the
+                    // deflate spec)
+                    state.hash_table.slide(window_size);
+                    // let end = cmp::min(start + window_size + MAX_MATCH, data.len());
+                    remaining_data = buffer.slide(// &data[start..end]
+                                                  remaining_data.unwrap());
+
+                    status = LZ77Status::EndBlock;
+                }
             } else {
-                // We are not at the end, so slide and continue
-                state.current_start += window_size;
-                let start = state.current_start;
-                // We slide the hash table back to make space for new hash values
-                // We only need to remember 32k bytes back (the maximum distance allowed by the
-                // deflate spec)
-                state.hash_table.slide(window_size);
-                let end = cmp::min(start + window_size + MAX_MATCH, data.len());
-                //                rolling_checksum.update_from_slice(&data[start + 2..end]);
-                // slide_buffer(buffer, &data[start..end]);
-                buffer.slide(&data[start..end]);
-                status = LZ77Status::EndBlock;
+                status = LZ77Status::NeedInput;
+                break;
             }
-
-            //            if !next_block_merge {
-            // break;
-            // }
-            // }
         }
     }
 
-    status
+    (data.len() - remaining_data.unwrap_or(&[]).len(), status)
 }
 
 #[allow(dead_code)]
@@ -274,15 +281,22 @@ pub struct TestStruct {
 pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
     let mut test_boxed = Box::new(TestStruct {
         state: LZ77State::new(data, HIGH_MAX_HASH_CHECKS),
-        buffer: InputBuffer::new(data).0,
+        buffer: InputBuffer::empty(),
         writer: FixedWriter::new(),
     });
     let mut out = Vec::<LZValue>::with_capacity(data.len() / 3);
     {
         let mut test = test_boxed.as_mut();
+        let mut slice = data;
 
         while !test.state.is_last_block {
-            lz77_compress_block(data, &mut test.state, &mut test.buffer, &mut test.writer);
+            let bytes_written = lz77_compress_block(&slice,
+                                                    &mut test.state,
+                                                    &mut test.buffer,
+                                                    &mut test.writer,
+                                                    true)
+                .0;
+            slice = &slice[bytes_written..];
             out.extend(test.writer.get_buffer());
             test.writer.clear_buffer();
         }
@@ -296,6 +310,7 @@ pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
 mod test {
     use super::*;
     use lzvalue::LZValue;
+    use chained_hash_table::WINDOW_SIZE;
 
     fn decompress_lz77(input: &[LZValue]) -> Vec<u8> {
         let mut output = Vec::new();
@@ -325,8 +340,8 @@ mod test {
         for l in input {
             match l.value() {
                 LDPair::Literal(l) => output.push(l),
-                LDPair::Length(l) => output.extend(format!("<L {}>\n", l).into_bytes()),
-                LDPair::Distance(d) => output.extend(format!("<D {}>\n", d).into_bytes()),
+                LDPair::Length(l) => output.extend(format!("<L {}>", l).into_bytes()),
+                LDPair::Distance(d) => output.extend(format!("<D {}>", d).into_bytes()),
             }
         }
 
@@ -335,7 +350,7 @@ mod test {
 
     /// Test that a short string from an example on SO compresses correctly
     #[test]
-    fn test_lz77_short() {
+    fn compress_short() {
         use std::str;
 
         let test_bytes = String::from("Deflate late").into_bytes();
@@ -373,7 +388,7 @@ mod test {
 
     /// Test that compression is working for a longer file
     #[test]
-    fn test_lz77_long() {
+    fn compress_long() {
         use std::str;
         let input = get_test_data();
         let compressed = lz77_compress(&input).unwrap();
@@ -394,7 +409,7 @@ mod test {
 
     /// Check that lazy matching is working as intended
     #[test]
-    fn test_lazy() {
+    fn lazy() {
         // We want to match on `badger` rather than `nba` as it is longer
         // let data = b" nba nbadg badger nbadger";
         let data = b"nba badger nbadger";
@@ -417,8 +432,7 @@ mod test {
     // Check that data with the exact window size is working properly
     #[test]
     #[allow(unused)]
-    fn test_exact_window_size() {
-        use chained_hash_table::WINDOW_SIZE;
+    fn exact_window_size() {
         use std::io::Write;
         let mut data = vec![0; WINDOW_SIZE];
         roundtrip(&data);
@@ -434,17 +448,20 @@ mod test {
 
     /// Test that matches at the window border are working correctly
     #[test]
-    fn test_lz77_border() {
+    fn border() {
         use chained_hash_table::WINDOW_SIZE;
-        let data = vec![0; WINDOW_SIZE + 50];
+        let mut data = vec![35; WINDOW_SIZE];
+        data.extend(b"Test");
         let compressed = super::lz77_compress(&data).unwrap();
         assert!(compressed.len() < data.len());
         let decompressed = decompress_lz77(&compressed);
+        // print_output(&compressed);
+        assert_eq!(decompressed.len(), data.len());
         assert!(decompressed == data);
     }
 
     #[test]
-    fn test_lz77_border_multiple_blocks() {
+    fn border_multiple_blocks() {
         use chained_hash_table::WINDOW_SIZE;
         let mut data = vec![0; (WINDOW_SIZE * 2) + 50];
         data.push(1);
@@ -452,5 +469,50 @@ mod test {
         assert!(compressed.len() < data.len());
         let decompressed = decompress_lz77(&compressed);
         assert!(decompressed == data);
+    }
+
+    #[test]
+    fn compress_block_status() {
+        use input_buffer::InputBuffer;
+        use output_writer::FixedWriter;
+
+        let data = b"Test data data";
+        let mut writer = FixedWriter::new();
+
+        let mut buffer = InputBuffer::empty();
+        let mut state = LZ77State::new(data, 4096);
+        let status = lz77_compress_block(data, &mut state, &mut buffer, &mut writer, true);
+        assert_eq!(status.1, LZ77Status::Finished);
+        assert!(&buffer.get_buffer()[..data.len()] == data);
+        assert_eq!(buffer.current_end(), data.len());
+    }
+
+    #[test]
+    fn compress_block_multiple_windows() {
+        use input_buffer::InputBuffer;
+        use output_writer::{OutputWriter, FixedWriter};
+
+        let data = get_test_data();
+        assert!(data.len() > (WINDOW_SIZE * 2) + super::MAX_MATCH);
+        let mut writer = FixedWriter::new();
+
+        let mut buffer = InputBuffer::empty();
+        let mut state = LZ77State::new(&data, 0);
+        let (bytes_consumed, status) =
+            lz77_compress_block(&data, &mut state, &mut buffer, &mut writer, true);
+        assert_eq!(buffer.get_buffer().len(),
+                   (WINDOW_SIZE * 2) + super::MAX_MATCH);
+        assert_eq!(status, LZ77Status::EndBlock);
+        let buf_len = buffer.get_buffer().len();
+        assert!(buffer.get_buffer()[..] == data[..buf_len]);
+        // print_output(writer.get_buffer());
+        writer.clear_buffer();
+        let (_, status) = lz77_compress_block(&data[bytes_consumed..],
+                                              &mut state,
+                                              &mut buffer,
+                                              &mut writer,
+                                              true);
+        assert_eq!(status, LZ77Status::EndBlock);
+        // print_output(writer.get_buffer());
     }
 }
