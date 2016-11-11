@@ -262,7 +262,7 @@ fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), Hu
 
 pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanError> {
     let mut codes = vec![HuffmanCode::default(); length_table.len()];
-    try!(create_codes_in_place(codes.as_mut_slice(), length_table));
+    create_codes_in_place(codes.as_mut_slice(), length_table)?;
     Ok(codes)
 }
 
@@ -273,7 +273,7 @@ pub fn create_codes_in_place(code_table: &mut [HuffmanCode],
                              -> Result<(), HuffmanError> {
 
 
-    let (max_length, max_length_pos, lengths) = try!(build_length_count_table(length_table));
+    let (max_length, max_length_pos, lengths) = build_length_count_table(length_table)?;
 
     let mut code = 0u16;
     let mut next_code = vec![0u16];
@@ -288,8 +288,8 @@ pub fn create_codes_in_place(code_table: &mut [HuffmanCode],
         if length != 0 {
             // The algorithm generates the code in the reverse bit order, so we need to reverse them
             // to get the correct codes.
-            code_table[n] = try!(HuffmanCode::from_reversed_bits(next_code[length], length as u8)
-                .ok_or(HuffmanError::CodeTooLong));
+            code_table[n] = HuffmanCode::from_reversed_bits(next_code[length], length as u8)
+                .ok_or(HuffmanError::CodeTooLong)?;
             // We use wrapping here as we would otherwise overflow on the last code
             // This should be okay as we exit the loop after this so the value is ignored
             next_code[length] = next_code[length].wrapping_add(1);
@@ -329,8 +329,8 @@ impl HuffmanTable {
             distance_codes: [HuffmanCode::default(); 32],
         };
 
-        try!(create_codes_in_place(table.codes.as_mut(), literals_and_lengths));
-        try!(create_codes_in_place(table.distance_codes.as_mut(), distances));
+        create_codes_in_place(table.codes.as_mut(), literals_and_lengths)?;
+        create_codes_in_place(table.distance_codes.as_mut(), distances)?;
         Ok(table)
     }
 
@@ -341,7 +341,7 @@ impl HuffmanTable {
                                      literals_and_lengths: &[u8],
                                      distances: &[u8])
                                      -> Result<(), HuffmanError> {
-        try!(create_codes_in_place(self.codes.as_mut(), literals_and_lengths));
+        create_codes_in_place(self.codes.as_mut(), literals_and_lengths)?;
         create_codes_in_place(self.distance_codes.as_mut(), distances)
     }
 

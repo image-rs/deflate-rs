@@ -23,7 +23,7 @@ pub fn compress_block_stored<W: Write>(input: &[u8], writer: &mut W) -> Result<u
     let (len_0, len_1) = put16(input.len() as u16);
     // the next two after the length is the ones complement of the length
     let (not_len_0, not_len_1) = put16(!input.len() as u16);
-    try!(writer.write(&[len_0, len_1, not_len_0, not_len_1]));
+    writer.write(&[len_0, len_1, not_len_0, not_len_1])?;
     writer.write(input)
 }
 

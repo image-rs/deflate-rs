@@ -45,10 +45,10 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
 
     // Number of length codes - 257
     let hlit = (literal_len_lengths.len() - MIN_NUM_LITERALS_AND_LENGTHS) as u16;
-    try!(writer.write_bits(hlit, HLIT_BITS));
+    writer.write_bits(hlit, HLIT_BITS)?;
     // Number of distance codes - 1
     let hdist = (distance_lengths.len() - MIN_NUM_DISTANCES) as u16;
-    try!(writer.write_bits(hdist, HDIST_BITS));
+    writer.write_bits(hdist, HDIST_BITS)?;
 
     // Encode length values
     let (encoded, freqs) =
@@ -66,12 +66,12 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
     // Number of huffman table lengths - 4
     let hclen = used_hclens - 4;
 
-    try!(writer.write_bits(hclen as u16, HCLEN_BITS));
+    writer.write_bits(hclen as u16, HCLEN_BITS)?;
 
     // Write the lengths for the huffman table describing the huffman table
     // Each length is 3 bits
     for n in &HUFFMAN_LENGTH_ORDER[..used_hclens] {
-        try!(writer.write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3));
+        writer.write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3)?;
     }
 
     // Generate codes for the main huffman table using the lengths we just wrote
@@ -82,27 +82,27 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
         match v {
             EncodedLength::Length(n) => {
                 let code = codes[usize::from(n)];
-                try!(writer.write_bits(code.code, code.length));
+                writer.write_bits(code.code, code.length)?;
             }
             EncodedLength::CopyPrevious(n) => {
                 let code = codes[COPY_PREVIOUS];
-                try!(writer.write_bits(code.code, code.length));
+                writer.write_bits(code.code, code.length)?;
                 assert!(n >= 3);
                 assert!(n <= 6);
-                try!(writer.write_bits((n - 3).into(), 2));
+                writer.write_bits((n - 3).into(), 2)?;
             }
             EncodedLength::RepeatZero3Bits(n) => {
                 let code = codes[REPEAT_ZERO_3_BITS];
-                try!(writer.write_bits(code.code, code.length));
+                writer.write_bits(code.code, code.length)?;
                 assert!(n >= 3);
-                try!(writer.write_bits((n - 3).into(), 3));
+                writer.write_bits((n - 3).into(), 3)?;
             }
             EncodedLength::RepeatZero7Bits(n) => {
                 let code = codes[REPEAT_ZERO_7_BITS];
-                try!(writer.write_bits(code.code, code.length));
+                writer.write_bits(code.code, code.length)?;
                 assert!(n >= 11);
                 assert!(n <= 138);
-                try!(writer.write_bits((n - 11).into(), 7));
+                writer.write_bits((n - 11).into(), 7)?;
             }
         }
     }

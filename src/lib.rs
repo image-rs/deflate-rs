@@ -69,9 +69,9 @@ fn flush_to_bitstream<W: std::io::Write>(buffer: &[lzvalue::LZValue],
                                          state: &mut EncoderState<W>)
                                          -> io::Result<()> {
     for &b in buffer {
-        try!(state.write_ldpair(b.value()))
+        state.write_ldpair(b.value())?
     }
-    try!(state.write_end_of_block());
+    state.write_end_of_block()?;
     Ok(())
 }
 
@@ -117,15 +117,16 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                 BType::DynamicHuffman => {
                     let mut slice = input;
                     while !deflate_state.lz77_state.is_last_block() {
-                        let (bytes_written, _) = lz77::lz77_compress_block(&slice,
-                                                  &mut deflate_state.lz77_state,
-                                                  &mut deflate_state.input_buffer,
-                                                  &mut deflate_state.lz77_writer,
-                                                                           true);
+                        let (bytes_written, _) =
+                            lz77::lz77_compress_block(&slice,
+                                                      &mut deflate_state.lz77_state,
+                                                      &mut deflate_state.input_buffer,
+                                                      &mut deflate_state.lz77_writer,
+                                                      true);
                         // Increment start of input data
                         slice = &slice[bytes_written..];
-                        try!(deflate_state.encoder_state
-                            .write_start_of_block(false, deflate_state.lz77_state.is_last_block()));
+                        deflate_state.encoder_state
+                            .write_start_of_block(false, deflate_state.lz77_state.is_last_block())?;
 
                         let (l_lengths, d_lengths) = {
                             let (l_freqs, d_freqs) = deflate_state.lz77_writer.get_frequencies();
@@ -145,16 +146,16 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                                     MAX_CODE_LENGTH)
                             )
                         };
-                        try!(write_huffman_lengths(&l_lengths,
-                                                   &d_lengths,
-                                                   &mut deflate_state.encoder_state.writer));
+                        write_huffman_lengths(&l_lengths,
+                                              &d_lengths,
+                                              &mut deflate_state.encoder_state.writer)?;
 
                         deflate_state.encoder_state
                             .update_huffman_table(&l_lengths, &d_lengths)
                             .expect("Fatal error!: Failed to create huffman table!");
 
-                        try!(flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
-                                                &mut deflate_state.encoder_state));
+                        flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
+                                           &mut deflate_state.encoder_state)?;
 
                         // End of block is written in flush_to_bitstream.
                         deflate_state.lz77_writer.clear();
@@ -171,9 +172,9 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                         .update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS,
                                               &huffman_table::FIXED_CODE_LENGTHS_DISTANCE)
                         .unwrap();
-                    try!(deflate_state.encoder_state.write_start_of_block(true, true));
-                    try!(flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
-                                            &mut deflate_state.encoder_state));
+                    deflate_state.encoder_state.write_start_of_block(true, true)?;
+                    flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
+                                       &mut deflate_state.encoder_state)?;
                     deflate_state.lz77_writer.clear();
                 }
                 BType::NoCompression => {
@@ -190,7 +191,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                 .write_bits(stored_block::STORED_FIRST_BYTE_FINAL.into(), 3)
                 .unwrap();
             deflate_state.encoder_state.flush().unwrap();
-            try!(compress_block_stored(input, &mut deflate_state.encoder_state.writer));
+            compress_block_stored(input, &mut deflate_state.encoder_state.writer)?;
         }
     }
 

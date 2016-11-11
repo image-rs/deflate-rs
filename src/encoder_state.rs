@@ -48,8 +48,8 @@ impl<W: Write> EncoderState<W> {
             LDPair::Literal(l) => self.write_literal(l),
             LDPair::Length(l) => {
                 let (code, extra_bits_code) = self.huffman_table.get_length_huffman(l).unwrap();
-                try!(self.writer
-                    .write_bits(code.code, code.length));
+                self.writer
+                    .write_bits(code.code, code.length)?;
                 self.writer.write_bits(extra_bits_code.code, extra_bits_code.length)
             }
             LDPair::Distance(d) => {
@@ -57,8 +57,8 @@ impl<W: Write> EncoderState<W> {
                     .get_distance_huffman(d)
                     .unwrap();
 
-                try!(self.writer
-                    .write_bits(code.code, code.length));
+                self.writer
+                    .write_bits(code.code, code.length)?;
                 self.writer.write_bits(extra_bits_code.code, extra_bits_code.length)
             }
         }
