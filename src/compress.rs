@@ -1,8 +1,10 @@
 use std::io::Write;
 use std::io;
 
+use byteorder::{BigEndian, WriteBytesExt};
+
 use deflate_state::DeflateState;
-use checksum::{RollingChecksum, NoChecksum, Adler32Checksum};
+use checksum::{RollingChecksum, Adler32Checksum};
 use compression_options::CompressionOptions;
 use encoder_state::{EncoderState, BType};
 use lzvalue::LZValue;
@@ -14,6 +16,7 @@ use huffman_table::{MAX_CODE_LENGTH, FIXED_CODE_LENGTHS, FIXED_CODE_LENGTHS_DIST
 use output_writer::OutputWriter;
 use stored_block;
 use stored_block::compress_block_stored;
+use zlib::{CompressionLevel, write_zlib_header};
 
 pub fn flush_to_bitstream<W: Write>(buffer: &[LZValue],
                                     state: &mut EncoderState<W>)
@@ -23,7 +26,6 @@ pub fn flush_to_bitstream<W: Write>(buffer: &[LZValue],
     }
     state.write_end_of_block()
 }
-
 
 /// Determine if the block is long enough for it to be worth using dynamic huffman codes or just
 /// Write the data directly
@@ -38,6 +40,24 @@ fn block_type_for_length(length: usize) -> BType {
     }
 }
 
+#[cfg(test)]
+pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
+    use lz77::lz77_compress;
+
+    let mut writer = Vec::new();
+    {
+        let mut state = EncoderState::fixed(&mut writer);
+        let compressed = lz77_compress(input).unwrap();
+
+        // We currently don't split blocks here(this function is just used for tests anyhow)
+        state.write_start_of_block(true, true).expect("Write error!");
+        flush_to_bitstream(&compressed, &mut state).expect("Write error!");
+
+        state.flush().expect("Write error!");
+
+    }
+    writer
+}
 
 pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                                          deflate_state: &mut DeflateState<W>,
@@ -150,17 +170,17 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
 }
 
 
-pub struct Compress<W: Write> {
+pub struct DeflateEncoder<W: Write> {
     deflate_state: DeflateState<W>,
 }
 
-impl<W: Write> Compress<W> {
-    fn new(input: &[u8], options: CompressionOptions, writer: W) -> Compress<W> {
-        Compress { deflate_state: DeflateState::new(input, options, writer) }
+impl<W: Write> DeflateEncoder<W> {
+    pub fn new(input: &[u8], options: CompressionOptions, writer: W) -> DeflateEncoder<W> {
+        DeflateEncoder { deflate_state: DeflateState::new(input, options, writer) }
     }
 }
 
-impl<W: Write> io::Write for Compress<W> {
+impl<W: Write> io::Write for DeflateEncoder<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         compress_data_dynamic_n(buf, &mut self.deflate_state, false)
     }
@@ -170,67 +190,64 @@ impl<W: Write> io::Write for Compress<W> {
     }
 }
 
+pub struct ZlibEncoder<W: Write> {
+    deflate_state: DeflateState<W>,
+    checksum: Adler32Checksum,
+    header_written: bool,
+}
+
+impl<W: Write> ZlibEncoder<W> {
+    pub fn new(input: &[u8], options: CompressionOptions, writer: W) -> ZlibEncoder<W> {
+        ZlibEncoder {
+            deflate_state: DeflateState::new(input, options, writer),
+            checksum: Adler32Checksum::new(),
+            header_written: false,
+        }
+    }
+
+    fn check_write_header(&mut self) -> io::Result<()> {
+        if !self.header_written {
+            write_zlib_header(&mut self.deflate_state.encoder_state.writer,
+                              CompressionLevel::Default)?;
+            self.header_written = true;
+        }
+        Ok(())
+    }
+
+    fn write_trailer(&mut self) -> io::Result<()> {
+        let hash = self.checksum.current_hash();
+
+        println!("Adler32: {}", hash);
+
+        self.deflate_state
+            .encoder_state
+            .writer
+            .write_u32::<BigEndian>(hash)
+    }
+}
+
+impl<W: Write> io::Write for ZlibEncoder<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.check_write_header()?;
+        self.checksum.update_from_slice(buf);
+        compress_data_dynamic_n(buf, &mut self.deflate_state, false)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.check_write_header()?;
+        compress_data_dynamic_n(&[], &mut self.deflate_state, true)?;
+        self.write_trailer()
+    }
+}
+
+
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use test_utils::{get_test_data, decompress_to_end, decompress_zlib};
     use compression_options::CompressionOptions;
-    fn get_test_file_data(name: &str) -> Vec<u8> {
-        use std::fs::File;
-        use std::io::Read;
-        let mut input = Vec::new();
-        let mut f = File::open(name).unwrap();
 
-        f.read_to_end(&mut input).unwrap();
-        input
-    }
-
-    fn get_test_data() -> Vec<u8> {
-        use std::env;
-        let path = env::var("TEST_FILE").unwrap_or("tests/pg11.txt".to_string());
-        get_test_file_data(&path)
-    }
-
-
-
-    /// Helper function to decompress into a `Vec<u8>`
-    fn decompress_to_end(input: &[u8]) -> Vec<u8> {
-        // use std::str;
-        // let mut inflater = super::inflate::InflateStream::new();
-        // let mut out = Vec::new();
-        // let mut n = 0;
-        // println!("input len {}", input.len());
-        // while n < input.len() {
-        // let res = inflater.update(&input[n..]) ;
-        // if let Ok((num_bytes_read, result)) = res {
-        // println!("result len {}, bytes_read {}", result.len(), num_bytes_read);
-        // n += num_bytes_read;
-        // out.extend(result);
-        // } else {
-        // println!("Output: `{}`", str::from_utf8(&out).unwrap());
-        // println!("Output decompressed: {}", out.len());
-        // res.unwrap();
-        // }
-        //
-        // }
-        // out
-
-        use std::io::Read;
-        use flate2::read::DeflateDecoder;
-
-        let mut result = Vec::new();
-        let i = &input[..];
-        let mut e = DeflateDecoder::new(i);
-
-        let res = e.read_to_end(&mut result);
-        if let Ok(n) = res {
-            println!("{} bytes read successfully", n);
-        } else {
-            println!("result size: {}", result.len());
-            res.unwrap();
-        }
-        result
-    }
 
     #[test]
     fn deflate_writer() {
@@ -239,14 +256,94 @@ mod test {
         let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
         {
-            let mut compressor =
-                Compress::new(&data, CompressionOptions::default(), &mut compressed);
-            compressor.write(&data[0..37000]);
-            compressor.write(&data[37000..]);
-            compressor.flush();
+            let mut compressor = DeflateEncoder::new(&data, CompressionOptions::high(), &mut compressed);
+            compressor.write(&data[0..37000]).unwrap();
+            compressor.write(&data[37000..]).unwrap();
+            compressor.flush().unwrap();
         }
         println!("writer compressed len:{}", compressed.len());
         let res = decompress_to_end(&compressed);
         assert!(res == data);
+    }
+
+
+
+    #[test]
+    fn zlib_writer() {
+        use std::io::Write;
+
+        let mut compressed = Vec::with_capacity(32000);
+        let data = get_test_data();
+        {
+            let mut compressor =
+                ZlibEncoder::new(&data, CompressionOptions::high(), &mut compressed);
+            compressor.write(&data[0..37000]).unwrap();
+            compressor.write(&data[37000..]).unwrap();
+            compressor.flush().unwrap();
+        }
+        println!("writer compressed len:{}", compressed.len());
+
+        let res = decompress_zlib(&compressed);
+        assert!(res == data);
+    }
+
+
+    #[test]
+    fn fixed_string_mem() {
+        use std::str;
+
+        let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
+        let compressed = compress_data_fixed(&test_data);
+
+        let result = decompress_to_end(&compressed);
+        println!("Output: `{}`", str::from_utf8(&result).unwrap());
+        assert_eq!(test_data, result);
+    }
+
+    #[test]
+    fn fixed_data() {
+        let data = vec![190u8; 400];
+        let compressed = compress_data_fixed(&data);
+        let result = decompress_to_end(&compressed);
+
+        println!("data len: {}, result len: {}", data.len(), result.len());
+        for n in compressed {
+            println!("{:#b}", n)
+        }
+        assert_eq!(data, result);
+    }
+
+    /// Test deflate example.
+    ///
+    /// Check if the encoder produces the same code as the example given by Mark Adler here:
+    /// https://stackoverflow.com/questions/17398931/deflate-encoding-with-static-huffman-codes/17415203
+    #[test]
+    fn fixed_example() {
+        let test_data = b"Deflate late";
+        // let check =
+        // [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0];
+        let check = [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0x00, 0x11, 0x00];
+        let compressed = compress_data_fixed(test_data);
+        assert_eq!(&compressed, &check);
+        let decompressed = decompress_to_end(&compressed);
+        assert_eq!(&decompressed, test_data)
+    }
+
+    #[test]
+    fn fixed_string_file() {
+        use std::str;
+
+        let input = get_test_data();
+
+        let compressed = compress_data_fixed(&input);
+        println!("Compressed len: {}", compressed.len());
+        let result = decompress_to_end(&compressed);
+        // let out1 = str::from_utf8(&input).unwrap();
+        // let out2 = str::from_utf8(&result).unwrap();
+        // println!("Orig:\n{}", out1);
+        // println!("Compr:\n{}", out2);
+        assert_eq!(input.len(), result.len());
+        // Not using assert_eq here deliberately to avoid massive amounts of output spam
+        assert!(input == result);
     }
 }

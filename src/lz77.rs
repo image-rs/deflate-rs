@@ -326,6 +326,7 @@ mod test {
     use super::*;
     use lzvalue::LZValue;
     use chained_hash_table::WINDOW_SIZE;
+    use test_utils::get_test_data;
 
     fn decompress_lz77(input: &[LZValue]) -> Vec<u8> {
         let mut output = Vec::new();
@@ -383,23 +384,6 @@ mod test {
         // length: 4,
         // });
     }
-
-    fn get_test_file_data(name: &str) -> Vec<u8> {
-        use std::fs::File;
-        use std::io::Read;
-        let mut input = Vec::new();
-        let mut f = File::open(name).unwrap();
-
-        f.read_to_end(&mut input).unwrap();
-        input
-    }
-
-    fn get_test_data() -> Vec<u8> {
-        use std::env;
-        let path = env::var("TEST_FILE").unwrap_or("tests/pg11.txt".to_string());
-        get_test_file_data(&path)
-    }
-
 
     /// Test that compression is working for a longer file
     #[test]
