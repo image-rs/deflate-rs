@@ -48,7 +48,7 @@ mod test {
     use lz77::LDPair;
     use huffman_table::{MIN_MATCH, MIN_DISTANCE, MAX_MATCH, MAX_DISTANCE};
     #[test]
-    fn test_lzvalue() {
+    fn lzvalue() {
         for i in 0..255 as usize + 1 {
             let v = LZValue::literal(i as u8);
             if let LDPair::Literal(n) = v.value() {

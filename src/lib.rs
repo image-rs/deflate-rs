@@ -30,50 +30,22 @@ mod encoder_state;
 mod matching;
 mod input_buffer;
 mod deflate_state;
+mod compress;
 
 use std::io::Write;
 use std::io;
 
 use byteorder::BigEndian;
 
-use huffman_table::*;
-use input_buffer::InputBuffer;
-use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes, MIN_NUM_LITERALS_AND_LENGTHS,
-                      MIN_NUM_DISTANCES};
-use length_encode::huffman_lengths_from_frequency;
 use checksum::RollingChecksum;
-use encoder_state::{EncoderState, BType};
-use stored_block::compress_block_stored;
-use output_writer::{OutputWriter, DynamicWriter};
+use encoder_state::EncoderState;
 use deflate_state::DeflateState;
+use compress::{flush_to_bitstream, compress_data_dynamic_n};
 
 #[doc(hidden)]
 pub use lz77::lz77_compress;
 
 pub use compression_options::CompressionOptions;
-
-/// Determine if the block is long enough for it to be worth using dynamic huffman codes or just
-/// Write the data directly
-fn block_type_for_length(length: usize) -> BType {
-    // TODO: Do proper testing to determine what values make sense here
-    if length < 20 {
-        BType::NoCompression
-    } else if length < 70 {
-        BType::FixedHuffman
-    } else {
-        BType::DynamicHuffman
-    }
-}
-
-fn flush_to_bitstream<W: std::io::Write>(buffer: &[lzvalue::LZValue],
-                                         state: &mut EncoderState<W>)
-                                         -> io::Result<()> {
-    for &b in buffer {
-        state.write_ldpair(b.value())?
-    }
-    state.write_end_of_block()?;
-    Ok(())
-}
 
 #[cfg(test)]
 fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
@@ -95,107 +67,17 @@ fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
 }
 
 fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
-                                                        mut writer: &mut W,
-                                                        mut checksum: &mut RC,
+                                                        writer: &mut W,
+                                                        mut checksum: RC,
                                                         compression_options: CompressionOptions)
-                                                        -> io::Result<()> {
-    checksum.update_from_slice(input);
-
-    let mut deflate_state = DeflateState {
-        input_buffer: InputBuffer::empty(),
-        lz77_state: lz77::LZ77State::new(input, compression_options.max_hash_checks),
-        encoder_state: EncoderState::new(huffman_table::HuffmanTable::empty(), &mut writer),
-        lz77_writer: DynamicWriter::new(),
-        compression_options: compression_options, //                writer: writer,
-    };
-
-    let block_type = block_type_for_length(input.len());
-
-    match block_type {
-        BType::DynamicHuffman | BType::FixedHuffman => {
-            match block_type {
-                BType::DynamicHuffman => {
-                    let mut slice = input;
-                    while !deflate_state.lz77_state.is_last_block() {
-                        let (bytes_written, _) =
-                            lz77::lz77_compress_block(&slice,
-                                                      &mut deflate_state.lz77_state,
-                                                      &mut deflate_state.input_buffer,
-                                                      &mut deflate_state.lz77_writer,
-                                                      true);
-                        // Increment start of input data
-                        slice = &slice[bytes_written..];
-                        deflate_state.encoder_state
-                            .write_start_of_block(false, deflate_state.lz77_state.is_last_block())?;
-
-                        let (l_lengths, d_lengths) = {
-                            let (l_freqs, d_freqs) = deflate_state.lz77_writer.get_frequencies();
-                            // The huffman spec allows us to exclude zeroes at the end of the table
-                            // of huffman lengths. Since a frequency of 0 will give an huffman
-                            // length of 0. We strip off the trailing zeroes before even generating
-                            // the lengths to save some work.
-                            // There is however a minimum number of values we have to keep according
-                            // to the deflate spec.
-                            (
-                                huffman_lengths_from_frequency(
-                                    remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS),
-                                    MAX_CODE_LENGTH
-                            ),
-                                huffman_lengths_from_frequency(
-                                    remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES),
-                                    MAX_CODE_LENGTH)
-                            )
-                        };
-                        write_huffman_lengths(&l_lengths,
-                                              &d_lengths,
-                                              &mut deflate_state.encoder_state.writer)?;
-
-                        deflate_state.encoder_state
-                            .update_huffman_table(&l_lengths, &d_lengths)
-                            .expect("Fatal error!: Failed to create huffman table!");
-
-                        flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
-                                           &mut deflate_state.encoder_state)?;
-
-                        // End of block is written in flush_to_bitstream.
-                        deflate_state.lz77_writer.clear();
-                    }
-                }
-                BType::FixedHuffman => {
-
-                    lz77::lz77_compress_block(input,
-                                              &mut deflate_state.lz77_state,
-                                              &mut deflate_state.input_buffer,
-                                              &mut deflate_state.lz77_writer,
-                                              true);
-                    deflate_state.encoder_state
-                        .update_huffman_table(&huffman_table::FIXED_CODE_LENGTHS,
-                                              &huffman_table::FIXED_CODE_LENGTHS_DISTANCE)
-                        .unwrap();
-                    deflate_state.encoder_state.write_start_of_block(true, true)?;
-                    flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
-                                       &mut deflate_state.encoder_state)?;
-                    deflate_state.lz77_writer.clear();
-                }
-                BType::NoCompression => {
-                    unreachable!();
-                }
-            }
-
-        }
-        BType::NoCompression => {
-            use bitstream::BitWriter;
-
-            deflate_state.encoder_state
-                .writer
-                .write_bits(stored_block::STORED_FIRST_BYTE_FINAL.into(), 3)
-                .unwrap();
-            deflate_state.encoder_state.flush().unwrap();
-            compress_block_stored(input, &mut deflate_state.encoder_state.writer)?;
-        }
+                                                        -> io::Result<usize> {
+    if input.len() < 2 {
+        Err(io::Error::new(io::ErrorKind::Other, "Init from empty input not implemented yet!"))
+    } else {
+        checksum.update_from_slice(input);
+        let mut deflate_state = DeflateState::new(input, compression_options, writer);
+        compress_data_dynamic_n(input, &mut deflate_state, true)
     }
-
-    deflate_state.encoder_state.flush()
 }
 
 /// Compress the given slice of bytes with DEFLATE compression.
@@ -215,7 +97,7 @@ pub fn deflate_bytes_conf(input: &[u8], options: CompressionOptions) -> Vec<u8> 
     let mut writer = Vec::with_capacity(input.len() / 3);
     compress_data_dynamic(input,
                           &mut writer,
-                          &mut checksum::NoChecksum::new(),
+                          checksum::NoChecksum::new(),
                           options)
         .expect("Write error!");
     writer
@@ -352,7 +234,7 @@ mod test {
     }
 
     #[test]
-    fn test_no_compression_one_chunk() {
+    fn no_compression_one_chunk() {
         let test_data = vec![1u8, 2, 3, 4, 5, 6, 7, 8];
         let compressed = compress_data_stored(&test_data);
         let result = decompress_to_end(&compressed);
@@ -360,7 +242,7 @@ mod test {
     }
 
     #[test]
-    fn test_no_compression_multiple_chunks() {
+    fn no_compression_multiple_chunks() {
         let test_data = vec![32u8; 40000];
         let compressed = compress_data_stored(&test_data);
         let result = decompress_to_end(&compressed);
@@ -368,7 +250,7 @@ mod test {
     }
 
     #[test]
-    fn test_no_compression_string() {
+    fn no_compression_string() {
         let test_data = String::from("This is some text, this is some more text, this is even \
                                       more text, lots of text here.")
             .into_bytes();
@@ -378,7 +260,7 @@ mod test {
     }
 
     #[test]
-    fn test_fixed_string_mem() {
+    fn fixed_string_mem() {
         use std::str;
 
         let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
@@ -390,7 +272,7 @@ mod test {
     }
 
     #[test]
-    fn test_fixed_data() {
+    fn fixed_data() {
         let data = vec![190u8; 400];
         let compressed = compress_data_fixed(&data);
         let result = decompress_to_end(&compressed);
@@ -407,7 +289,7 @@ mod test {
     /// Check if the encoder produces the same code as the example given by Mark Adler here:
     /// https://stackoverflow.com/questions/17398931/deflate-encoding-with-static-huffman-codes/17415203
     #[test]
-    fn test_fixed_example() {
+    fn fixed_example() {
         let test_data = b"Deflate late";
         // let check =
         // [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0];
@@ -419,7 +301,7 @@ mod test {
     }
 
     #[test]
-    fn test_fixed_string_file() {
+    fn fixed_string_file() {
         use std::str;
 
         let input = get_test_data();
@@ -439,7 +321,7 @@ mod test {
 
 
     #[test]
-    fn test_dynamic_string_mem() {
+    fn dynamic_string_mem() {
         use std::str;
         let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
         let compressed = deflate_bytes(&test_data);
@@ -451,7 +333,7 @@ mod test {
     }
 
     #[test]
-    fn test_dynamic_string_file() {
+    fn dynamic_string_file() {
         use std::str;
         let input = get_test_data();
         let compressed = deflate_bytes(&input);
@@ -476,7 +358,7 @@ mod test {
     }
 
     #[test]
-    fn test_file_zlib() {
+    fn file_zlib() {
         let test_data = get_test_data();
 
         let compressed = deflate_bytes_zlib(&test_data);
@@ -497,7 +379,7 @@ mod test {
     }
 
     #[test]
-    fn test_zlib_short() {
+    fn zlib_short() {
         let test_data = [10, 20, 30, 40, 55];
         let compressed = deflate_bytes_zlib(&test_data);
 
@@ -508,7 +390,7 @@ mod test {
     }
 
     #[test]
-    fn test_zlib_last_block() {
+    fn zlib_last_block() {
         let mut test_data = vec![22; 32768];
         test_data.extend(&[5, 2, 55, 11, 12]);
         let compressed = deflate_bytes_zlib(&test_data);

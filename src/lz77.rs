@@ -273,17 +273,32 @@ pub struct TestStruct {
     writer: FixedWriter,
 }
 
+#[allow(dead_code)]
+impl TestStruct {
+    fn new(data: &[u8]) -> TestStruct {
+        TestStruct {
+            state: LZ77State::new(data, HIGH_MAX_HASH_CHECKS),
+            buffer: InputBuffer::empty(),
+            writer: FixedWriter::new(),
+        }
+    }
+
+    fn compress_block(&mut self, data: &[u8], flush: bool) -> (usize, LZ77Status) {
+        lz77_compress_block(data,
+                            &mut self.state,
+                            &mut self.buffer,
+                            &mut self.writer,
+                            flush)
+    }
+}
+
 /// Compress a slice, not storing frequency information
 ///
 /// This is a convenience function for compression with fixed huffman values
 /// Only used in tests for now
 #[allow(dead_code)]
 pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
-    let mut test_boxed = Box::new(TestStruct {
-        state: LZ77State::new(data, HIGH_MAX_HASH_CHECKS),
-        buffer: InputBuffer::empty(),
-        writer: FixedWriter::new(),
-    });
+    let mut test_boxed = Box::new(TestStruct::new(data));
     let mut out = Vec::<LZValue>::with_capacity(data.len() / 3);
     {
         let mut test = test_boxed.as_mut();
@@ -514,5 +529,26 @@ mod test {
                                               true);
         assert_eq!(status, LZ77Status::EndBlock);
         // print_output(writer.get_buffer());
+    }
+
+    #[test]
+    fn multiple_inputs() {
+        use output_writer::OutputWriter;
+        let data = b"Badger badger bababa test data 25 asfgestghresjkgh";
+        let comp1 = lz77_compress(data).unwrap();
+        let comp2 = {
+            const SPLIT: usize = 25;
+            let first_part = &data[..SPLIT];
+            let second_part = &data[SPLIT..];
+            let mut state = TestStruct::new(first_part);
+            let (bytes_written, status) = state.compress_block(first_part, false);
+            assert_eq!(bytes_written, first_part.len());
+            assert_eq!(status, LZ77Status::NeedInput);
+            let (bytes_written, status) = state.compress_block(second_part, true);
+            assert_eq!(bytes_written, second_part.len());
+            assert_eq!(status, LZ77Status::Finished);
+            Vec::from(state.writer.get_buffer())
+        };
+        assert!(comp1 == comp2);
     }
 }
