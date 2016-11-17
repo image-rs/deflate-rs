@@ -54,13 +54,9 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                                                         mut checksum: RC,
                                                         compression_options: CompressionOptions)
                                                         -> io::Result<usize> {
-    if input.len() < 2 {
-        Err(io::Error::new(io::ErrorKind::Other, "Init from empty input not implemented yet!"))
-    } else {
-        checksum.update_from_slice(input);
-        let mut deflate_state = DeflateState::new(input, compression_options, writer);
-        compress_data_dynamic_n(input, &mut deflate_state, true)
-    }
+    checksum.update_from_slice(input);
+    let mut deflate_state = DeflateState::new(compression_options, writer);
+    compress_data_dynamic_n(input, &mut deflate_state, true)
 }
 
 /// Compress the given slice of bytes with DEFLATE compression.
@@ -130,8 +126,6 @@ pub fn deflate_bytes_zlib_conf(input: &[u8], options: CompressionOptions) -> Vec
         .expect("Write error when writing compressed data!");
 
     let hash = checksum.current_hash();
-
-    println!("Adler32 correct: {}", hash);
 
     writer.write_u32::<BigEndian>(hash).expect("Write error when writing checksum!");
     writer

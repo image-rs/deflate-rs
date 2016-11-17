@@ -175,8 +175,8 @@ pub struct DeflateEncoder<W: Write> {
 }
 
 impl<W: Write> DeflateEncoder<W> {
-    pub fn new(input: &[u8], options: CompressionOptions, writer: W) -> DeflateEncoder<W> {
-        DeflateEncoder { deflate_state: DeflateState::new(input, options, writer) }
+    pub fn new(options: CompressionOptions, writer: W) -> DeflateEncoder<W> {
+        DeflateEncoder { deflate_state: DeflateState::new(options, writer) }
     }
 }
 
@@ -197,9 +197,9 @@ pub struct ZlibEncoder<W: Write> {
 }
 
 impl<W: Write> ZlibEncoder<W> {
-    pub fn new(input: &[u8], options: CompressionOptions, writer: W) -> ZlibEncoder<W> {
+    pub fn new(options: CompressionOptions, writer: W) -> ZlibEncoder<W> {
         ZlibEncoder {
-            deflate_state: DeflateState::new(input, options, writer),
+            deflate_state: DeflateState::new(options, writer),
             checksum: Adler32Checksum::new(),
             header_written: false,
         }
@@ -256,7 +256,7 @@ mod test {
         let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
         {
-            let mut compressor = DeflateEncoder::new(&data, CompressionOptions::high(), &mut compressed);
+            let mut compressor = DeflateEncoder::new(CompressionOptions::high(), &mut compressed);
             compressor.write(&data[0..37000]).unwrap();
             compressor.write(&data[37000..]).unwrap();
             compressor.flush().unwrap();
@@ -276,7 +276,7 @@ mod test {
         let data = get_test_data();
         {
             let mut compressor =
-                ZlibEncoder::new(&data, CompressionOptions::high(), &mut compressed);
+                ZlibEncoder::new(CompressionOptions::high(), &mut compressed);
             compressor.write(&data[0..37000]).unwrap();
             compressor.write(&data[37000..]).unwrap();
             compressor.flush().unwrap();

@@ -46,7 +46,8 @@ impl ChainedHashTable {
         self.head[self.current_hash as usize] = position as u16;
     }
 
-    // Get the head of the hash chain of the current hash value
+    // Get the head of the hash chain for the current hash value
+    #[cfg(test)]
     #[inline]
     pub fn current_head(&self) -> u16 {
         self.head[self.current_hash as usize]

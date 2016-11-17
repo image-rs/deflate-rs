@@ -68,7 +68,7 @@ pub fn longest_match(data: &[u8],
                      max_hash_checks: u16)
                      -> (usize, usize) {
 
-    debug_assert_eq!(position, hash_table.current_head() as usize);
+    // debug_assert_eq!(position, hash_table.current_head() as usize);
 
     // If we are at the start, we already have a match at the maximum length,
     // or we can't grow further, we stop here.
