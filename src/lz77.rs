@@ -5,7 +5,7 @@ use matching::longest_match;
 use lzvalue::LZValue;
 use huffman_table;
 use chained_hash_table::ChainedHashTable;
-use compression_options::{HIGH_MAX_HASH_CHECKS, DEFAULT_LAZY_IF_LESS_THAN};
+use compression_options::{HIGH_MAX_HASH_CHECKS, HIGH_LAZY_IF_LESS_THAN};
 use output_writer::{OutputWriter, FixedWriter};
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
@@ -64,6 +64,10 @@ impl LZ77State {
 
     pub fn is_last_block(&self) -> bool {
         self.is_last_block
+    }
+
+    pub fn is_first_window(&self) -> bool {
+        self.is_first_window
     }
 }
 
@@ -215,7 +219,7 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
 
     while writer.buffer_length() < (window_size * 2) {
         if state.is_first_window {
-            if buffer.current_end() >= window_size + MAX_MATCH || finish {
+            if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
 
 
                 let first_chunk_end = if finish && remaining_data.is_none() {
@@ -308,7 +312,7 @@ pub struct TestStruct {
 impl TestStruct {
     fn new() -> TestStruct {
         TestStruct {
-            state: LZ77State::new(HIGH_MAX_HASH_CHECKS, DEFAULT_LAZY_IF_LESS_THAN),
+            state: LZ77State::new(HIGH_MAX_HASH_CHECKS, HIGH_LAZY_IF_LESS_THAN),
             buffer: InputBuffer::empty(),
             writer: FixedWriter::new(),
         }

@@ -64,7 +64,10 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                                          flush: bool)
                                          -> io::Result<usize> {
 
-    let block_type = if flush {
+    // If we are flushing and have not yet written anything to the output stream (which is the case
+    // if is_first_window is true), we check if it will be shorter to used fixed huffman codes
+    // or just a stored block instead of full compression.
+    let block_type = if flush && deflate_state.lz77_state.is_first_window() {
         block_type_for_length(deflate_state.bytes_written + input.len())
     } else {
         BType::DynamicHuffman
@@ -90,8 +93,10 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                         deflate_state.bytes_written += bytes_written;
 
                         if status == LZ77Status::NeedInput {
+                            println!("Consumed {} bytes, waiting for more input...", bytes_written);
                             return Ok(bytes_written);
                         }
+
                         // Increment start of input data
                         slice = &slice[written..];
                         deflate_state.encoder_state
@@ -156,12 +161,21 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
         BType::NoCompression => {
             use bitstream::BitWriter;
 
+            assert!(flush);
+
             deflate_state.encoder_state
                 .writer
                 .write_bits(stored_block::STORED_FIRST_BYTE_FINAL.into(), 3)
                 .unwrap();
             deflate_state.encoder_state.flush().unwrap();
-            let written = compress_block_stored(input, &mut deflate_state.encoder_state.writer)?;
+            let rem = deflate_state.input_buffer.add_data(input);
+            // There shouldn't be any leftover data here.
+            assert!(rem.is_none());
+            // Write the pending bytes
+            let _ = compress_block_stored(deflate_state.input_buffer.get_buffer(), &mut deflate_state.encoder_state.writer)?;
+
+            // Keep track of how many extra bytes we consumed in this call.
+            let written = input.len();
             bytes_written += written;
             deflate_state.bytes_written += written;
         }
@@ -187,6 +201,7 @@ impl<W: Write> DeflateEncoder<W> {
 
 impl<W: Write> io::Write for DeflateEncoder<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        println!("Writing: {:?}", &buf);
         compress_data_dynamic_n(buf, &mut self.deflate_state, false)
     }
 
@@ -259,13 +274,12 @@ mod test {
 
     #[test]
     fn deflate_writer() {
-
-        let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
+        let mut compressed = Vec::with_capacity(data.len() / 3);
         {
             let mut compressor = DeflateEncoder::new(&mut compressed, CompressionOptions::high());
-            compressor.write(&data[0..37000]).unwrap();
-            compressor.write(&data[37000..]).unwrap();
+            compressor.write(&data[0..data.len() / 2]).unwrap();
+            compressor.write(&data[data.len() / 2..]).unwrap();
             compressor.flush().unwrap();
         }
         println!("writer compressed len:{}", compressed.len());
@@ -275,16 +289,15 @@ mod test {
 
     #[test]
     fn zlib_writer() {
-        let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
+        let mut compressed = Vec::with_capacity(data.len() / 3);
         {
             let mut compressor = ZlibEncoder::new(&mut compressed, CompressionOptions::high());
-            compressor.write(&data[0..37000]).unwrap();
-            compressor.write(&data[37000..]).unwrap();
+            compressor.write(&data[0..data.len() / 2]).unwrap();
+            compressor.write(&data[data.len() / 2..]).unwrap();
             compressor.flush().unwrap();
         }
         println!("writer compressed len:{}", compressed.len());
-
         let res = decompress_zlib(&compressed);
         assert!(res == data);
     }

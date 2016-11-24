@@ -1,4 +1,5 @@
 pub const HIGH_MAX_HASH_CHECKS: u16 = 1024;
+pub const HIGH_LAZY_IF_LESS_THAN: u16 = 128;
 #[allow(unused)]
 pub const MAX_HASH_CHECKS: u16 = 32 * 1024;
 pub const DEFAULT_MAX_HASH_CHECKS: u16 = 128;
@@ -55,7 +56,7 @@ impl CompressionOptions {
     pub fn high() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: HIGH_MAX_HASH_CHECKS,
-            lazy_if_less_than: 128,
+            lazy_if_less_than: HIGH_LAZY_IF_LESS_THAN,
             special: SpecialOptions::Normal,
         }
     }

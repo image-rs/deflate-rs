@@ -212,10 +212,10 @@ mod test {
         println!("Compressed len: {}", compressed.len());
 
         let result = decompress_to_end(&compressed);
-        // Check that we actually managed to compress the input
-        assert!(compressed.len() < input.len());
         // Not using assert_eq here deliberately to avoid massive amounts of output spam
         assert!(input == result);
+        // Check that we actually managed to compress the input
+        assert!(compressed.len() < input.len());
     }
 
     #[test]
@@ -224,19 +224,18 @@ mod test {
 
         let compressed = deflate_bytes_zlib(&test_data);
         // {
-        // use std::fs::File;
-        // use std::io::Write;
-        // let mut f = File::create("out.zlib").unwrap();
-        // f.write_all(&compressed).unwrap();
+        //     use std::fs::File;
+        //     use std::io::Write;
+        //     let mut f = File::create("out.zlib").unwrap();
+        //     f.write_all(&compressed).unwrap();
         // }
 
         println!("compressed length: {}", compressed.len());
 
-        assert!(compressed.len() < test_data.len());
-
         let result = decompress_zlib(&compressed);
 
         assert!(&test_data == &result);
+        assert!(compressed.len() < test_data.len());
     }
 
     #[test]
@@ -274,7 +273,6 @@ mod test {
             chunked_write(&mut compressor, &data, chunk_size);
         }
         let compressed2 = deflate_bytes_zlib_conf(&data, CompressionOptions::high());
-
         let res = decompress_zlib(&compressed);
         assert!(res == data);
         assert_eq!(compressed.len(), compressed2.len());
@@ -282,7 +280,7 @@ mod test {
     }
 
     #[test]
-    /// Test the writer by writing data in one chunk at the time.
+    /// Test the writer by inputing data in one chunk at the time.
     fn zlib_writer_chunks() {
         use input_buffer::BUFFER_SIZE;
         chunk_test(1);
