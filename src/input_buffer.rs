@@ -4,7 +4,7 @@ use chained_hash_table::WINDOW_SIZE;
 use huffman_table;
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
-const BUFFER_SIZE: usize = (WINDOW_SIZE * 2) + MAX_MATCH;
+pub const BUFFER_SIZE: usize = (WINDOW_SIZE * 2) + MAX_MATCH;
 
 pub struct InputBuffer {
     buffer: [u8; BUFFER_SIZE],
@@ -26,8 +26,9 @@ impl InputBuffer {
         }
     }
 
-    /// Add data to the buffer
-    /// Returns a slice of the data that was not added (including the lookahead if any)
+    /// Add data to the buffer.
+    ///
+    /// Returns a slice of the data that was not added (including the lookahead if any).
     pub fn add_data<'a>(&mut self, data: &'a [u8]) -> Option<&'a [u8]> {
         if self.current_end + data.len() > self.buffer.len() {
             let len = {
@@ -49,7 +50,9 @@ impl InputBuffer {
         self.current_end
     }
 
-    // Slide the input window, add new data and return a slice containing the data that did not fit, if any
+    /// Slide the input window and add new data.
+    ///
+    /// Returns a slice containing the data that did not fit, or None if all data was consumed.
     pub fn slide<'a>(&mut self, data: &'a [u8]) -> Option<&'a [u8]> {
         // This should only be used when the buffer is full
         assert!(self.current_end == BUFFER_SIZE);
@@ -84,7 +87,6 @@ impl InputBuffer {
 
 #[cfg(test)]
 mod test {
-    use super::BUFFER_SIZE;
     use super::MAX_MATCH;
     use chained_hash_table::WINDOW_SIZE;
     use super::*;

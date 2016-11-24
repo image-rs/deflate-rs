@@ -74,10 +74,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
 /// ```
 pub fn deflate_bytes_conf(input: &[u8], options: CompressionOptions) -> Vec<u8> {
     let mut writer = Vec::with_capacity(input.len() / 3);
-    compress_data_dynamic(input,
-                          &mut writer,
-                          checksum::NoChecksum::new(),
-                          options)
+    compress_data_dynamic(input, &mut writer, checksum::NoChecksum::new(), options)
         .expect("Write error!");
     writer
 }
@@ -154,8 +151,18 @@ pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
 mod test {
     use stored_block::compress_data_stored;
     use super::*;
+    use std::io::Write;
 
     use test_utils::{get_test_data, decompress_to_end, decompress_zlib};
+
+    /// Write data to the writer in chunks of chunk_size.
+    fn chunked_write<W: Write>(mut writer: W, data: &[u8], chunk_size: usize) {
+        for chunk in data.chunks(chunk_size) {
+            let bytes_written = writer.write(&chunk).unwrap();
+            assert_eq!(bytes_written, chunk.len());
+        }
+        writer.flush().unwrap();
+    }
 
     #[test]
     fn no_compression_one_chunk() {
@@ -257,5 +264,33 @@ mod test {
 
         let result = decompress_zlib(&compressed);
         assert!(test_data == result);
+    }
+
+    fn chunk_test(chunk_size: usize) {
+        let mut compressed = Vec::with_capacity(32000);
+        let data = get_test_data();
+        {
+            let mut compressor = ZlibEncoder::new(&mut compressed, CompressionOptions::high());
+            chunked_write(&mut compressor, &data, chunk_size);
+        }
+        let compressed2 = deflate_bytes_zlib_conf(&data, CompressionOptions::high());
+
+        let res = decompress_zlib(&compressed);
+        assert!(res == data);
+        assert_eq!(compressed.len(), compressed2.len());
+        assert!(compressed == compressed2);
+    }
+
+    #[test]
+    /// Test the writer by writing data in one chunk at the time.
+    fn zlib_writer_chunks() {
+        use input_buffer::BUFFER_SIZE;
+        chunk_test(1);
+        chunk_test(50);
+        chunk_test(400);
+        chunk_test(32768);
+        chunk_test(BUFFER_SIZE);
+        chunk_test(50000);
+        chunk_test((32768 * 2) + 258);
     }
 }

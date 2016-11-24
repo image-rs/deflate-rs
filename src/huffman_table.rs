@@ -515,16 +515,6 @@ mod test {
 
         let ld = table.get_length_distance_code(4, 5).unwrap();
 
-        println!("257: {:?}, 258: {:?}, 259: {:?}",
-                 table.codes[257],
-                 table.codes[258],
-                 table.codes[259]);
-        println!("Length code: {:b}, code length: {}",
-                 ld.length_code.code,
-                 ld.length_code.length);
-
-        println!("Distance code {:?}", table.distance_codes[4]);
-
         assert_eq!(ld.length_code.code, 0b00100000);
         assert_eq!(ld.distance_code.code, 0b00100);
         assert_eq!(ld.distance_extra_bits.length, 1);

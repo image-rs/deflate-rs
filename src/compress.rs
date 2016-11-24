@@ -79,7 +79,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                     let mut slice = input;
                     while !deflate_state.lz77_state.is_last_block() {
                         let (written, status) =
-                            lz77_compress_block(&slice,
+                            lz77_compress_block(slice,
                                                 &mut deflate_state.lz77_state,
                                                 &mut deflate_state.input_buffer,
                                                 &mut deflate_state.lz77_writer,
@@ -88,6 +88,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                         bytes_written += written;
                         // Total bytes written since the compression process started
                         deflate_state.bytes_written += bytes_written;
+
                         if status == LZ77Status::NeedInput {
                             return Ok(bytes_written);
                         }
@@ -169,13 +170,17 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
     deflate_state.encoder_state.flush().map(|()| bytes_written)
 }
 
-
+/// A DEFLATE encoder/compressor.
+///
+/// A struct implementing a `Write` interface that takes unencoded data and compresses it to
+/// the provided writer using DEFLATE compression.
 pub struct DeflateEncoder<W: Write> {
     deflate_state: DeflateState<W>,
 }
 
 impl<W: Write> DeflateEncoder<W> {
-    pub fn new(options: CompressionOptions, writer: W) -> DeflateEncoder<W> {
+    /// Creates a new encoder using the provided `CompressionOptions`
+    pub fn new(writer: W, options: CompressionOptions) -> DeflateEncoder<W> {
         DeflateEncoder { deflate_state: DeflateState::new(options, writer) }
     }
 }
@@ -190,6 +195,10 @@ impl<W: Write> io::Write for DeflateEncoder<W> {
     }
 }
 
+/// A Zlib encoder/compressor.
+///
+/// A struct implementing a `Write` interface that takes unencoded data and compresses it to
+/// the provided writer using DEFLATE compression with Zlib headers and trailers.
 pub struct ZlibEncoder<W: Write> {
     deflate_state: DeflateState<W>,
     checksum: Adler32Checksum,
@@ -197,7 +206,8 @@ pub struct ZlibEncoder<W: Write> {
 }
 
 impl<W: Write> ZlibEncoder<W> {
-    pub fn new(options: CompressionOptions, writer: W) -> ZlibEncoder<W> {
+    /// Create a new `ZlibEncoder` using the provided `CompressionOptions`
+    pub fn new(writer: W, options: CompressionOptions) -> ZlibEncoder<W> {
         ZlibEncoder {
             deflate_state: DeflateState::new(options, writer),
             checksum: Adler32Checksum::new(),
@@ -216,8 +226,6 @@ impl<W: Write> ZlibEncoder<W> {
 
     fn write_trailer(&mut self) -> io::Result<()> {
         let hash = self.checksum.current_hash();
-
-        println!("Adler32: {}", hash);
 
         self.deflate_state
             .encoder_state
@@ -247,16 +255,15 @@ mod test {
     use super::*;
     use test_utils::{get_test_data, decompress_to_end, decompress_zlib};
     use compression_options::CompressionOptions;
-
+    use std::io::Write;
 
     #[test]
     fn deflate_writer() {
-        use std::io::Write;
 
         let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
         {
-            let mut compressor = DeflateEncoder::new(CompressionOptions::high(), &mut compressed);
+            let mut compressor = DeflateEncoder::new(&mut compressed, CompressionOptions::high());
             compressor.write(&data[0..37000]).unwrap();
             compressor.write(&data[37000..]).unwrap();
             compressor.flush().unwrap();
@@ -266,17 +273,12 @@ mod test {
         assert!(res == data);
     }
 
-
-
     #[test]
     fn zlib_writer() {
-        use std::io::Write;
-
         let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
         {
-            let mut compressor =
-                ZlibEncoder::new(CompressionOptions::high(), &mut compressed);
+            let mut compressor = ZlibEncoder::new(&mut compressed, CompressionOptions::high());
             compressor.write(&data[0..37000]).unwrap();
             compressor.write(&data[37000..]).unwrap();
             compressor.flush().unwrap();
@@ -286,7 +288,6 @@ mod test {
         let res = decompress_zlib(&compressed);
         assert!(res == data);
     }
-
 
     #[test]
     fn fixed_string_mem() {

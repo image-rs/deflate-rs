@@ -46,7 +46,7 @@ pub fn decompress_to_end(input: &[u8]) -> Vec<u8> {
 
     let res = e.read_to_end(&mut result);
     if let Ok(n) = res {
-        println!("{} bytes read successfully", n);
+        println!("{} bytes decompressed successfully", n);
     } else {
         println!("result size: {}", result.len());
         res.unwrap();

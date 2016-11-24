@@ -105,7 +105,7 @@ impl OutputWriter for DynamicWriter {
     }
 
     fn get_buffer(&self) -> &[LZValue] {
-        &self.fixed_writer.get_buffer()
+        self.fixed_writer.get_buffer()
     }
 }
 

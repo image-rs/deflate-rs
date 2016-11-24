@@ -53,14 +53,14 @@ fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usi
 /// # Returns
 /// (length, distance from position)
 /// If no match is found that was better than `prev_length` or at all, or we are at the start,
-/// the length value returned will be 2
+/// the length value returned will be 2.
 ///
 /// # Arguments:
-/// data: The data to search in
-/// hash_tablle: Hash table to use for searching
-/// position: The position in the data to match against
-/// prev_length: The length of the previous longest_match check to compare against
-/// max_hash_checks: The maximum number of matching hash chain positions to check
+/// `data`: The data to search in.
+/// `hash_table`: Hash table to use for searching.
+/// `position`: The position in the data to match against.
+/// `prev_length`: The length of the previous `longest_match` check to compare against.
+/// `max_hash_checks`: The maximum number of matching hash chain positions to check.
 pub fn longest_match(data: &[u8],
                      hash_table: &ChainedHashTable,
                      position: usize,
@@ -124,7 +124,7 @@ pub fn longest_match(data: &[u8],
     (r, best_distance)
 }
 
-// Get the longest match from the current position of the hash table
+// Get the longest match from the current position of the hash table.
 #[inline]
 #[cfg(test)]
 pub fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usize, usize) {
