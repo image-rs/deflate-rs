@@ -5,6 +5,7 @@ use encoder_state::EncoderState;
 use input_buffer::InputBuffer;
 use compression_options::CompressionOptions;
 use huffman_table::HuffmanTable;
+use std::io;
 pub use huffman_table::MAX_MATCH;
 
 pub struct DeflateState<W: Write> {
@@ -43,5 +44,19 @@ impl<W: Write> DeflateState<W> {
             compression_options: compression_options,
             bytes_written: 0,
         }
+    }
+
+    /// Resets the status of the decoder, leaving the compression options intact
+    ///
+    /// If flushing the current writer succeeds, it is replaced with the provided one,
+    /// buffers and status (except compression options) is reset and the old writer
+    /// is returned.
+    pub fn reset(&mut self, writer: W) -> io::Result<W> {
+        let ret = self.encoder_state.reset(writer)?;
+        self.input_buffer = InputBuffer::empty();
+        self.lz77_writer.clear();
+        self.lz77_state.reset();
+        self.bytes_written = 0;
+        Ok(ret)
     }
 }

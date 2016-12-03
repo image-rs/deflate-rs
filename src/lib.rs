@@ -46,7 +46,7 @@ use compress::compress_data_dynamic_n;
 #[doc(hidden)]
 pub use lz77::lz77_compress;
 
-pub use compression_options::CompressionOptions;
+pub use compression_options::{CompressionOptions, SpecialOptions};
 pub use compress::{DeflateEncoder, ZlibEncoder};
 
 fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
@@ -149,7 +149,6 @@ pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod test {
-    use stored_block::compress_data_stored;
     use super::*;
     use std::io::Write;
 
@@ -163,33 +162,6 @@ mod test {
         }
         writer.flush().unwrap();
     }
-
-    #[test]
-    fn no_compression_one_chunk() {
-        let test_data = vec![1u8, 2, 3, 4, 5, 6, 7, 8];
-        let compressed = compress_data_stored(&test_data);
-        let result = decompress_to_end(&compressed);
-        assert_eq!(test_data, result);
-    }
-
-    #[test]
-    fn no_compression_multiple_chunks() {
-        let test_data = vec![32u8; 40000];
-        let compressed = compress_data_stored(&test_data);
-        let result = decompress_to_end(&compressed);
-        assert_eq!(test_data, result);
-    }
-
-    #[test]
-    fn no_compression_string() {
-        let test_data = String::from("This is some text, this is some more text, this is even \
-                                      more text, lots of text here.")
-            .into_bytes();
-        let compressed = compress_data_stored(&test_data);
-        let result = decompress_to_end(&compressed);
-        assert_eq!(test_data, result);
-    }
-
 
     #[test]
     fn dynamic_string_mem() {

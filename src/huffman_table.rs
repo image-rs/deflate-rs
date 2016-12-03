@@ -381,9 +381,9 @@ impl HuffmanTable {
         let length_huffman_code = self.codes[length_data.code_number as usize];
         Some((length_huffman_code,
               HuffmanCode {
-            code: length_data.value,
-            length: length_data.num_bits,
-        }))
+                  code: length_data.value,
+                  length: length_data.num_bits,
+              }))
     }
 
     /// Get the huffman code and extra bits for the specified distance
@@ -403,9 +403,9 @@ impl HuffmanTable {
 
         Some((distance_huffman_code,
               HuffmanCode {
-            code: distance_data.value,
-            length: distance_data.num_bits,
-        }))
+                  code: distance_data.value,
+                  length: distance_data.num_bits,
+              }))
     }
 
     #[cfg(test)]

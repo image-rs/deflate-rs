@@ -39,6 +39,22 @@ impl ChainedHashTable {
         t
     }
 
+    /// Resets the hash value and hash chains
+    pub fn reset(&mut self) {
+        // Not sure if warming up the hash is actually needed.
+        self.current_hash = 0;
+        self.current_hash = update_hash(self.current_hash, 55);
+        self.current_hash = update_hash(self.current_hash, 77);
+
+        for elem in self.head.iter_mut() {
+            *elem = 0;
+        }
+
+        for elem in self.prev.iter_mut() {
+            *elem = 0;
+        }
+    }
+
     // Insert a byte into the hash table
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
         self.current_hash = update_hash(self.current_hash, value);

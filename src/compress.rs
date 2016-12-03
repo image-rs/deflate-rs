@@ -28,10 +28,14 @@ pub fn flush_to_bitstream<W: Write>(buffer: &[LZValue],
 }
 
 /// Determine if the block is long enough for it to be worth using dynamic huffman codes or just
-/// Write the data directly
+/// Write the data directly.
 fn block_type_for_length(length: usize) -> BType {
     // TODO: Do proper testing to determine what values make sense here
-    if length < 20 {
+    if length < 5 {
+        // For very short lengths, using fixed codes will be shorter as we don't need to
+        // use two bytes to specify the length.
+        BType::FixedHuffman
+    } else if length < 20 {
         BType::NoCompression
     } else if length < 70 {
         BType::FixedHuffman
@@ -41,6 +45,9 @@ fn block_type_for_length(length: usize) -> BType {
 }
 
 #[cfg(test)]
+/// Compress the input data using only fixed huffman codes.
+///
+/// Currently only used in tests.
 pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     use lz77::lz77_compress;
 
@@ -59,6 +66,7 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     writer
 }
 
+/// Inner compression function used by both writers and simple compression functions.
 pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                                          deflate_state: &mut DeflateState<W>,
                                          flush: bool)
@@ -93,7 +101,8 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                         deflate_state.bytes_written += bytes_written;
 
                         if status == LZ77Status::NeedInput {
-                            println!("Consumed {} bytes, waiting for more input...", bytes_written);
+                            println!("Consumed {} bytes, waiting for more input...",
+                                     bytes_written);
                             return Ok(bytes_written);
                         }
 
@@ -172,7 +181,8 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
             // There shouldn't be any leftover data here.
             assert!(rem.is_none());
             // Write the pending bytes
-            let _ = compress_block_stored(deflate_state.input_buffer.get_buffer(), &mut deflate_state.encoder_state.writer)?;
+            let _ = compress_block_stored(deflate_state.input_buffer.get_buffer(),
+                                          &mut deflate_state.encoder_state.writer)?;
 
             // Keep track of how many extra bytes we consumed in this call.
             let written = input.len();
@@ -196,6 +206,19 @@ impl<W: Write> DeflateEncoder<W> {
     /// Creates a new encoder using the provided `CompressionOptions`
     pub fn new(writer: W, options: CompressionOptions) -> DeflateEncoder<W> {
         DeflateEncoder { deflate_state: DeflateState::new(options, writer) }
+    }
+
+    /// Flush the encoder, consume it, and return the contained writer if writing succeeds.
+    pub fn finish(mut self) -> io::Result<W> {
+        self.flush()?;
+        Ok(self.deflate_state.encoder_state.writer.w)
+    }
+
+    /// Resets the encoder (except the compression options), replacing the current writer
+    /// with a new one, returning the old one.
+    pub fn reset(&mut self, w: W) -> io::Result<W> {
+        self.flush()?;
+        self.deflate_state.reset(w)
     }
 }
 
@@ -230,6 +253,22 @@ impl<W: Write> ZlibEncoder<W> {
         }
     }
 
+    /// Flush the encoder, consume it, and return the contained writer if writing succeeds.
+    pub fn finish(mut self) -> io::Result<W> {
+        self.flush()?;
+        Ok(self.deflate_state.encoder_state.writer.w)
+    }
+
+    /// Resets the encoder (except the compression options), replacing the current writer
+    /// with a new one, returning the old one.
+    pub fn reset(&mut self, writer: W) -> io::Result<W> {
+        self.flush()?;
+        self.header_written = false;
+        self.checksum = Adler32Checksum::new();
+        self.deflate_state.reset(writer)
+    }
+
+    /// Check if a zlib header should be written.
     fn check_write_header(&mut self) -> io::Result<()> {
         if !self.header_written {
             write_zlib_header(&mut self.deflate_state.encoder_state.writer,
@@ -239,7 +278,9 @@ impl<W: Write> ZlibEncoder<W> {
         Ok(())
     }
 
+    /// Write the trailer, which for zlib is the Adler32 checksum.
     fn write_trailer(&mut self) -> io::Result<()> {
+
         let hash = self.checksum.current_hash();
 
         self.deflate_state
@@ -275,13 +316,14 @@ mod test {
     #[test]
     fn deflate_writer() {
         let data = get_test_data();
-        let mut compressed = Vec::with_capacity(data.len() / 3);
-        {
-            let mut compressor = DeflateEncoder::new(&mut compressed, CompressionOptions::high());
+        let compressed = {
+            let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
+                                                     CompressionOptions::high());
+            // Write in multiple steps to see if this works as it's supposed to.
             compressor.write(&data[0..data.len() / 2]).unwrap();
             compressor.write(&data[data.len() / 2..]).unwrap();
-            compressor.flush().unwrap();
-        }
+            compressor.finish().unwrap()
+        };
         println!("writer compressed len:{}", compressed.len());
         let res = decompress_to_end(&compressed);
         assert!(res == data);
@@ -290,19 +332,47 @@ mod test {
     #[test]
     fn zlib_writer() {
         let data = get_test_data();
-        let mut compressed = Vec::with_capacity(data.len() / 3);
-        {
-            let mut compressor = ZlibEncoder::new(&mut compressed, CompressionOptions::high());
+        let compressed = {
+            let mut compressor = ZlibEncoder::new(Vec::with_capacity(data.len() / 3),
+                                                  CompressionOptions::high());
             compressor.write(&data[0..data.len() / 2]).unwrap();
             compressor.write(&data[data.len() / 2..]).unwrap();
-            compressor.flush().unwrap();
-        }
+            compressor.finish().unwrap()
+        };
         println!("writer compressed len:{}", compressed.len());
         let res = decompress_zlib(&compressed);
         assert!(res == data);
     }
 
+
+
     #[test]
+    /// Check if the the result of compressing after resetting is the same as before.
+    fn writer_reset() {
+        let data = get_test_data();
+        let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
+                                                 CompressionOptions::default());
+        compressor.write(&data).unwrap();
+        let res1 = compressor.reset(Vec::with_capacity(data.len() / 3)).unwrap();
+        compressor.write(&data).unwrap();
+        let res2 = compressor.finish().unwrap();
+        assert!(res1 == res2);
+    }
+
+    #[test]
+    fn writer_reset_zlib() {
+        let data = get_test_data();
+        let mut compressor = ZlibEncoder::new(Vec::with_capacity(data.len() / 3),
+                                              CompressionOptions::default());
+        compressor.write(&data).unwrap();
+        let res1 = compressor.reset(Vec::with_capacity(data.len() / 3)).unwrap();
+        compressor.write(&data).unwrap();
+        let res2 = compressor.finish().unwrap();
+        assert!(res1 == res2);
+    }
+
+    #[test]
+    /// Test compressing a short string using fixed encoding.
     fn fixed_string_mem() {
         use std::str;
 
@@ -344,6 +414,7 @@ mod test {
     }
 
     #[test]
+    /// Test compression from a file.
     fn fixed_string_file() {
         use std::str;
 
@@ -357,7 +428,7 @@ mod test {
         // println!("Orig:\n{}", out1);
         // println!("Compr:\n{}", out2);
         assert_eq!(input.len(), result.len());
-        // Not using assert_eq here deliberately to avoid massive amounts of output spam
+        // Not using assert_eq here deliberately to avoid massive amounts of output spam.
         assert!(input == result);
     }
 }

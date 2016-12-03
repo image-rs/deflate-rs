@@ -58,6 +58,15 @@ impl LZ77State {
         LZ77State::from_starting_values(55, 23, max_hash_checks, lazy_if_less_than)
     }
 
+    /// Resets the state excluding max_hash_checks and lazy_if_less_than
+    pub fn reset(&mut self) {
+        self.hash_table.reset();
+        self.current_start = 0;
+        self.is_first_window = true;
+        self.is_last_block = false;
+        self.overlap = 0;
+    }
+
     pub fn set_last(&mut self) {
         self.is_last_block = true;
     }
@@ -128,8 +137,17 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
             // Only lazy match if we have a match shorter than a set value
             // TODO: This should be cleaned up a bit
             let (match_len, match_dist) = if !ignore_next {
-                let (match_len, match_dist) =
-                    longest_match(data, hash_table, position, prev_length, max_hash_checks);
+                let (match_len, match_dist) = {
+                    // If there already was a decent match at the previous byte and we are lazy matching,
+                    // do less match checks in this step.
+                    let max_hash_checks = if prev_length >= 32 {
+                        max_hash_checks >> 2
+                    } else {
+                        max_hash_checks
+                    };
+
+                    longest_match(data, hash_table, position, prev_length, max_hash_checks)
+                };
                 if match_len > lazy_if_less_than {
                     ignore_next = true;
                 }
@@ -159,6 +177,9 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
                     }
                 }
 
+                // If the match is longer than the current window, we have note how many
+                // bytes we overlap, since we don't need to do any matching on these bytes
+                // in the next call of this function.
                 if position + prev_length > end {
                     // We need to subtract 1 since the byte at pos is also included
                     overlap = position + prev_length - end - 1;

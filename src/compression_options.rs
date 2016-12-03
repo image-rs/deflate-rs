@@ -1,4 +1,4 @@
-pub const HIGH_MAX_HASH_CHECKS: u16 = 1024;
+pub const HIGH_MAX_HASH_CHECKS: u16 = 768;
 pub const HIGH_LAZY_IF_LESS_THAN: u16 = 128;
 #[allow(unused)]
 pub const MAX_HASH_CHECKS: u16 = 32 * 1024;
@@ -7,11 +7,11 @@ pub const DEFAULT_LAZY_IF_LESS_THAN: u16 = 32;
 
 /// Enum allowing some special options (not implemented yet!)
 pub enum SpecialOptions {
-    // Compress normally.
+    /// Compress normally.
     Normal,
-    // Force fixed huffman tables. (Unimplemented!)
+    /// Force fixed huffman tables. (Unimplemented!).
     _ForceFixed,
-    // Force stored (uncompressed) blocks only. (Unimplemented!)
+    /// Force stored (uncompressed) blocks only. (Unimplemented!).
     _ForceStored,
 }
 
@@ -39,14 +39,14 @@ pub const _HUFFMAN_ONLY: CompressionOptions = CompressionOptions {
 ///
 /// These values are not stable and still subject to change!
 pub struct CompressionOptions {
-    // The maximum number of checks to make in the hash table for matches
+    /// The maximum number of checks to make in the hash table for matches.
     pub max_hash_checks: u16,
     // pub _lazy_matching: bool,
     // pub _window_size: u16,
-    // Only lazy match if we have a length less than this value
+    /// Only lazy match if we have a length less than this value.
     pub lazy_if_less_than: u16,
     // pub _decent_match: u16,
-    // Force fixed/stored (Not implemented yet)
+    /// Force fixed/stored (Not implemented yet).
     pub special: SpecialOptions,
 }
 
