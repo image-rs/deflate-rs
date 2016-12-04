@@ -31,6 +31,7 @@ mod matching;
 mod input_buffer;
 mod deflate_state;
 mod compress;
+mod writer;
 #[cfg(test)]
 mod test_utils;
 
@@ -47,7 +48,8 @@ use compress::compress_data_dynamic_n;
 pub use lz77::lz77_compress;
 
 pub use compression_options::{CompressionOptions, SpecialOptions};
-pub use compress::{DeflateEncoder, ZlibEncoder};
+pub use writer::{DeflateEncoder, ZlibEncoder};
+pub use compress::Flush;
 
 fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                                                         writer: &mut W,
@@ -59,7 +61,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
     // It's done here rather than in the structs themselves for now to
     // keep the data close in memory.
     let mut deflate_state = Box::new(DeflateState::new(compression_options, writer));
-    compress_data_dynamic_n(input, &mut deflate_state, true)
+    compress_data_dynamic_n(input, &mut deflate_state, Flush::Finish)
 }
 
 /// Compress the given slice of bytes with DEFLATE compression.
@@ -163,7 +165,6 @@ mod test {
             let bytes_written = writer.write(&chunk).unwrap();
             assert_eq!(bytes_written, chunk.len());
         }
-        writer.flush().unwrap();
     }
 
     #[test]
@@ -246,6 +247,7 @@ mod test {
         {
             let mut compressor = ZlibEncoder::new(&mut compressed, CompressionOptions::high());
             chunked_write(&mut compressor, &data, chunk_size);
+            compressor.finish().unwrap();
         }
         let compressed2 = deflate_bytes_zlib_conf(&data, CompressionOptions::high());
         let res = decompress_zlib(&compressed);

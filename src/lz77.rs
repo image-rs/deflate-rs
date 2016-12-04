@@ -302,7 +302,6 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
             } else {
                 // We are not at the end, so slide and continue
                 state.current_start += end - start + state.overlap;
-                // let start = state.current_start;
                 // We slide the hash table back to make space for new hash values
                 // We only need to remember 32k bytes back (the maximum distance allowed by the
                 // deflate spec)

@@ -1,11 +1,7 @@
 use std::io::Write;
 use std::io;
 
-use byteorder::{BigEndian, WriteBytesExt};
-
 use deflate_state::DeflateState;
-use checksum::{RollingChecksum, Adler32Checksum};
-use compression_options::CompressionOptions;
 use encoder_state::{EncoderState, BType};
 use lzvalue::LZValue;
 use lz77::{lz77_compress_block, LZ77Status};
@@ -16,7 +12,16 @@ use huffman_table::{MAX_CODE_LENGTH, FIXED_CODE_LENGTHS, FIXED_CODE_LENGTHS_DIST
 use output_writer::OutputWriter;
 use stored_block;
 use stored_block::compress_block_stored;
-use zlib::{CompressionLevel, write_zlib_header};
+
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub enum Flush {
+    None,
+    Sync,
+    Partial,
+    Block,
+    Full,
+    Finish,
+}
 
 pub fn flush_to_bitstream<W: Write>(buffer: &[LZValue],
                                     state: &mut EncoderState<W>)
@@ -69,16 +74,19 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
 /// Inner compression function used by both writers and simple compression functions.
 pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                                          deflate_state: &mut DeflateState<W>,
-                                         flush: bool)
+                                         flush: Flush)
                                          -> io::Result<usize> {
 
     // If we are flushing and have not yet written anything to the output stream (which is the case
     // if is_first_window is true), we check if it will be shorter to used fixed huffman codes
     // or just a stored block instead of full compression.
-    let block_type = if flush && deflate_state.lz77_state.is_first_window() {
+    let block_type = if flush == Flush::Finish && deflate_state.lz77_state.is_first_window() {
         block_type_for_length(deflate_state.bytes_written + input.len())
-    } else {
+    } else if flush == Flush::None || flush == Flush::Finish {
         BType::DynamicHuffman
+    } else {
+        println!("compress called with {:?}", flush);
+        unimplemented!();
     };
 
     let mut bytes_written = 0;
@@ -94,15 +102,13 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                                                 &mut deflate_state.lz77_state,
                                                 &mut deflate_state.input_buffer,
                                                 &mut deflate_state.lz77_writer,
-                                                flush);
+                                                flush == Flush::Finish);
                         // Bytes written in this call
                         bytes_written += written;
                         // Total bytes written since the compression process started
                         deflate_state.bytes_written += bytes_written;
 
                         if status == LZ77Status::NeedInput {
-                            println!("Consumed {} bytes, waiting for more input...",
-                                     bytes_written);
                             return Ok(bytes_written);
                         }
 
@@ -170,7 +176,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
         BType::NoCompression => {
             use bitstream::BitWriter;
 
-            assert!(flush);
+            assert!(flush != Flush::None);
 
             deflate_state.encoder_state
                 .writer
@@ -194,188 +200,10 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
     deflate_state.encoder_state.flush().map(|()| bytes_written)
 }
 
-/// A DEFLATE encoder/compressor.
-///
-/// A struct implementing a `Write` interface that takes unencoded data and compresses it to
-/// the provided writer using DEFLATE compression.
-pub struct DeflateEncoder<W: Write> {
-    // We use a box here to avoid putting the buffers on the stack
-    // It's done here rather than in the structs themselves for now to
-    // keep the data close in memory.
-    deflate_state: Box<DeflateState<W>>,
-}
-
-impl<W: Write> DeflateEncoder<W> {
-    /// Creates a new encoder using the provided `CompressionOptions`
-    pub fn new(writer: W, options: CompressionOptions) -> DeflateEncoder<W> {
-        DeflateEncoder { deflate_state: Box::new(DeflateState::new(options, writer)) }
-    }
-
-    /// Flush the encoder, consume it, and return the contained writer if writing succeeds.
-    pub fn finish(mut self) -> io::Result<W> {
-        self.flush()?;
-        Ok(self.deflate_state.encoder_state.writer.w)
-    }
-
-    /// Resets the encoder (except the compression options), replacing the current writer
-    /// with a new one, returning the old one.
-    pub fn reset(&mut self, w: W) -> io::Result<W> {
-        self.flush()?;
-        self.deflate_state.reset(w)
-    }
-}
-
-impl<W: Write> io::Write for DeflateEncoder<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        println!("Writing: {:?}", &buf);
-        compress_data_dynamic_n(buf, &mut self.deflate_state, false)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        compress_data_dynamic_n(&[], &mut self.deflate_state, true).map(|_| ())
-    }
-}
-
-/// A Zlib encoder/compressor.
-///
-/// A struct implementing a `Write` interface that takes unencoded data and compresses it to
-/// the provided writer using DEFLATE compression with Zlib headers and trailers.
-pub struct ZlibEncoder<W: Write> {
-    // We use a box here to avoid putting the buffers on the stack
-    // It's done here rather than in the structs themselves for now to
-    // keep the data close in memory.
-    deflate_state: Box<DeflateState<W>>,
-    checksum: Adler32Checksum,
-    header_written: bool,
-}
-
-impl<W: Write> ZlibEncoder<W> {
-    /// Create a new `ZlibEncoder` using the provided `CompressionOptions`
-    pub fn new(writer: W, options: CompressionOptions) -> ZlibEncoder<W> {
-        ZlibEncoder {
-            deflate_state: Box::new(DeflateState::new(options, writer)),
-            checksum: Adler32Checksum::new(),
-            header_written: false,
-        }
-    }
-
-    /// Flush the encoder, consume it, and return the contained writer if writing succeeds.
-    pub fn finish(mut self) -> io::Result<W> {
-        self.flush()?;
-        Ok(self.deflate_state.encoder_state.writer.w)
-    }
-
-    /// Resets the encoder (except the compression options), replacing the current writer
-    /// with a new one, returning the old one.
-    pub fn reset(&mut self, writer: W) -> io::Result<W> {
-        self.flush()?;
-        self.header_written = false;
-        self.checksum = Adler32Checksum::new();
-        self.deflate_state.reset(writer)
-    }
-
-    /// Check if a zlib header should be written.
-    fn check_write_header(&mut self) -> io::Result<()> {
-        if !self.header_written {
-            write_zlib_header(&mut self.deflate_state.encoder_state.writer,
-                              CompressionLevel::Default)?;
-            self.header_written = true;
-        }
-        Ok(())
-    }
-
-    /// Write the trailer, which for zlib is the Adler32 checksum.
-    fn write_trailer(&mut self) -> io::Result<()> {
-
-        let hash = self.checksum.current_hash();
-
-        self.deflate_state
-            .encoder_state
-            .writer
-            .write_u32::<BigEndian>(hash)
-    }
-}
-
-impl<W: Write> io::Write for ZlibEncoder<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.check_write_header()?;
-        self.checksum.update_from_slice(buf);
-        compress_data_dynamic_n(buf, &mut self.deflate_state, false)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.check_write_header()?;
-        compress_data_dynamic_n(&[], &mut self.deflate_state, true)?;
-        self.write_trailer()
-    }
-}
-
-
-
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_utils::{get_test_data, decompress_to_end, decompress_zlib};
-    use compression_options::CompressionOptions;
-    use std::io::Write;
-
-    #[test]
-    fn deflate_writer() {
-        let data = get_test_data();
-        let compressed = {
-            let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                     CompressionOptions::high());
-            // Write in multiple steps to see if this works as it's supposed to.
-            compressor.write(&data[0..data.len() / 2]).unwrap();
-            compressor.write(&data[data.len() / 2..]).unwrap();
-            compressor.finish().unwrap()
-        };
-        println!("writer compressed len:{}", compressed.len());
-        let res = decompress_to_end(&compressed);
-        assert!(res == data);
-    }
-
-    #[test]
-    fn zlib_writer() {
-        let data = get_test_data();
-        let compressed = {
-            let mut compressor = ZlibEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                  CompressionOptions::high());
-            compressor.write(&data[0..data.len() / 2]).unwrap();
-            compressor.write(&data[data.len() / 2..]).unwrap();
-            compressor.finish().unwrap()
-        };
-        println!("writer compressed len:{}", compressed.len());
-        let res = decompress_zlib(&compressed);
-        assert!(res == data);
-    }
-
-
-
-    #[test]
-    /// Check if the the result of compressing after resetting is the same as before.
-    fn writer_reset() {
-        let data = get_test_data();
-        let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                 CompressionOptions::default());
-        compressor.write(&data).unwrap();
-        let res1 = compressor.reset(Vec::with_capacity(data.len() / 3)).unwrap();
-        compressor.write(&data).unwrap();
-        let res2 = compressor.finish().unwrap();
-        assert!(res1 == res2);
-    }
-
-    #[test]
-    fn writer_reset_zlib() {
-        let data = get_test_data();
-        let mut compressor = ZlibEncoder::new(Vec::with_capacity(data.len() / 3),
-                                              CompressionOptions::default());
-        compressor.write(&data).unwrap();
-        let res1 = compressor.reset(Vec::with_capacity(data.len() / 3)).unwrap();
-        compressor.write(&data).unwrap();
-        let res2 = compressor.finish().unwrap();
-        assert!(res1 == res2);
-    }
+    use test_utils::{get_test_data, decompress_to_end};
 
     #[test]
     /// Test compressing a short string using fixed encoding.
