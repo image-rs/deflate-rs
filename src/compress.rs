@@ -199,13 +199,16 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
 /// A struct implementing a `Write` interface that takes unencoded data and compresses it to
 /// the provided writer using DEFLATE compression.
 pub struct DeflateEncoder<W: Write> {
-    deflate_state: DeflateState<W>,
+    // We use a box here to avoid putting the buffers on the stack
+    // It's done here rather than in the structs themselves for now to
+    // keep the data close in memory.
+    deflate_state: Box<DeflateState<W>>,
 }
 
 impl<W: Write> DeflateEncoder<W> {
     /// Creates a new encoder using the provided `CompressionOptions`
     pub fn new(writer: W, options: CompressionOptions) -> DeflateEncoder<W> {
-        DeflateEncoder { deflate_state: DeflateState::new(options, writer) }
+        DeflateEncoder { deflate_state: Box::new(DeflateState::new(options, writer)) }
     }
 
     /// Flush the encoder, consume it, and return the contained writer if writing succeeds.
@@ -238,7 +241,10 @@ impl<W: Write> io::Write for DeflateEncoder<W> {
 /// A struct implementing a `Write` interface that takes unencoded data and compresses it to
 /// the provided writer using DEFLATE compression with Zlib headers and trailers.
 pub struct ZlibEncoder<W: Write> {
-    deflate_state: DeflateState<W>,
+    // We use a box here to avoid putting the buffers on the stack
+    // It's done here rather than in the structs themselves for now to
+    // keep the data close in memory.
+    deflate_state: Box<DeflateState<W>>,
     checksum: Adler32Checksum,
     header_written: bool,
 }
@@ -247,7 +253,7 @@ impl<W: Write> ZlibEncoder<W> {
     /// Create a new `ZlibEncoder` using the provided `CompressionOptions`
     pub fn new(writer: W, options: CompressionOptions) -> ZlibEncoder<W> {
         ZlibEncoder {
-            deflate_state: DeflateState::new(options, writer),
+            deflate_state: Box::new(DeflateState::new(options, writer)),
             checksum: Adler32Checksum::new(),
             header_written: false,
         }

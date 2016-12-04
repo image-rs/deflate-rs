@@ -55,7 +55,10 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                                                         compression_options: CompressionOptions)
                                                         -> io::Result<usize> {
     checksum.update_from_slice(input);
-    let mut deflate_state = DeflateState::new(compression_options, writer);
+    // We use a box here to avoid putting the buffers on the stack
+    // It's done here rather than in the structs themselves for now to
+    // keep the data close in memory.
+    let mut deflate_state = Box::new(DeflateState::new(compression_options, writer));
     compress_data_dynamic_n(input, &mut deflate_state, true)
 }
 
