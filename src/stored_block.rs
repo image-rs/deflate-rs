@@ -1,14 +1,26 @@
 use std::io::Write;
 use std::io;
+use bitstream::BitWriter;
 
 use byteorder::{LittleEndian, WriteBytesExt};
 
 #[cfg(test)]
 const BLOCK_SIZE: u16 = 32000;
 
-#[cfg(test)]
 const STORED_FIRST_BYTE: u8 = 0b0000_0000;
 pub const STORED_FIRST_BYTE_FINAL: u8 = 0b0000_0001;
+
+pub fn write_stored_header<W: BitWriter>(writer: &mut W, final_block: bool) -> io::Result<()> {
+    let header = if final_block {
+        STORED_FIRST_BYTE_FINAL
+    } else {
+        STORED_FIRST_BYTE
+    };
+    // Write the block header
+    writer.write_bits(header.into(), 3)?;
+    // Output some extra zeroes if needed to align with the byte boundary.
+    writer.flush()
+}
 
 // Compress one stored block (excluding the header)
 pub fn compress_block_stored<W: Write>(input: &[u8], writer: &mut W) -> io::Result<usize> {

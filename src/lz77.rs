@@ -7,6 +7,7 @@ use huffman_table;
 use chained_hash_table::ChainedHashTable;
 use compression_options::{HIGH_MAX_HASH_CHECKS, HIGH_LAZY_IF_LESS_THAN};
 use output_writer::{OutputWriter, FixedWriter};
+use compress::Flush;
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
@@ -156,7 +157,7 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
                 (NO_LENGTH, 0)
             };
 
-            if prev_length >= match_len && prev_length >= MIN_MATCH as usize {
+            if prev_length >= match_len && prev_length >= MIN_MATCH as usize && prev_distance > 0 {
                 // The previous match was better so we add it
                 // Casting note: length and distance is already bounded by the longest match
                 // function. Usize is just used for convenience
@@ -224,16 +225,27 @@ pub enum LZ77Status {
     Finished,
 }
 
+pub fn lz77_compress_block_finish<W: OutputWriter>(data: &[u8],
+                                                state: &mut LZ77State,
+                                                buffer: &mut InputBuffer,
+                                                mut writer: &mut W)
+                                                   -> (usize, LZ77Status) {
+    lz77_compress_block::<W>(data, state, buffer, &mut writer, Flush::Finish)
+}
+
 /// Compress a slice
 /// Will return err on failure eventually, but for now allways succeeds or panics
 pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                                             state: &mut LZ77State,
                                             buffer: &mut InputBuffer,
                                             mut writer: &mut W,
-                                            finish: bool)
+                                            flush: Flush)
                                             -> (usize, LZ77Status) {
     // Currently we only support the maximum window size
     let window_size = DEFAULT_WINDOW_SIZE;
+
+    let finish = flush == Flush::Finish || flush == Flush::Sync;
+    let sync = flush == Flush::Sync;
 
     let mut status = LZ77Status::EndBlock;
     let mut remaining_data = buffer.add_data(data);
@@ -262,7 +274,9 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 state.current_start += first_chunk_end;
 
                 if first_chunk_end >= data.len() && finish {
-                    state.set_last();
+                    if !sync {
+                        state.set_last();
+                    }
                     status = LZ77Status::Finished;
                 } else {
                     status = LZ77Status::EndBlock;
@@ -296,7 +310,14 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                                                state.lazy_if_less_than as usize);
             if remaining_data.is_none() && finish {
                 // We stopped before or at the window size, so we are at the end.
-                state.set_last();
+                if !sync {
+                    state.set_last();
+                } else {
+                    state.current_start += end - start + state.overlap;
+                    state.overlap += end - start;
+                    let n = buffer.move_down();
+                    state.hash_table.slide(n);
+                }
                 status = LZ77Status::Finished;
                 break;
             } else {
@@ -343,7 +364,11 @@ impl TestStruct {
                             &mut self.state,
                             &mut self.buffer,
                             &mut self.writer,
-                            flush)
+                            if flush {
+                                Flush::Finish
+                            } else {
+                                Flush::None
+                            })
     }
 }
 
@@ -360,11 +385,10 @@ pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
         let mut slice = data;
 
         while !test.state.is_last_block {
-            let bytes_written = lz77_compress_block(slice,
+            let bytes_written = lz77_compress_block_finish(slice,
                                                     &mut test.state,
                                                     &mut test.buffer,
-                                                    &mut test.writer,
-                                                    true)
+                                                    &mut test.writer)
                 .0;
             slice = &slice[bytes_written..];
             out.extend(test.writer.get_buffer());
@@ -536,7 +560,7 @@ mod test {
 
         let mut buffer = InputBuffer::empty();
         let mut state = LZ77State::new(4096, DEFAULT_LAZY_IF_LESS_THAN);
-        let status = lz77_compress_block(data, &mut state, &mut buffer, &mut writer, true);
+        let status = lz77_compress_block_finish(data, &mut state, &mut buffer, &mut writer);
         assert_eq!(status.1, LZ77Status::Finished);
         assert!(&buffer.get_buffer()[..data.len()] == data);
         assert_eq!(buffer.current_end(), data.len());
@@ -554,7 +578,7 @@ mod test {
         let mut buffer = InputBuffer::empty();
         let mut state = LZ77State::new(0, DEFAULT_LAZY_IF_LESS_THAN);
         let (bytes_consumed, status) =
-            lz77_compress_block(&data, &mut state, &mut buffer, &mut writer, true);
+            lz77_compress_block_finish(&data, &mut state, &mut buffer, &mut writer);
         assert_eq!(buffer.get_buffer().len(),
                    (WINDOW_SIZE * 2) + super::MAX_MATCH);
         assert_eq!(status, LZ77Status::EndBlock);
@@ -562,11 +586,10 @@ mod test {
         assert!(buffer.get_buffer()[..] == data[..buf_len]);
         // print_output(writer.get_buffer());
         writer.clear_buffer();
-        let (_, status) = lz77_compress_block(&data[bytes_consumed..],
+        let (_, status) = lz77_compress_block_finish(&data[bytes_consumed..],
                                               &mut state,
                                               &mut buffer,
-                                              &mut writer,
-                                              true);
+                                              &mut writer);
         assert_eq!(status, LZ77Status::EndBlock);
         // print_output(writer.get_buffer());
     }

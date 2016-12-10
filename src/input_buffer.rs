@@ -80,6 +80,16 @@ impl InputBuffer {
         }
     }
 
+
+    pub fn move_down(&mut self) -> usize {
+        assert!(self.current_end >= WINDOW_SIZE);
+        // This isn't really an optimal implementation of this.
+        for i in 0..WINDOW_SIZE {
+            self.buffer[i] = self.buffer[self.current_end - WINDOW_SIZE + i];
+        }
+        self.current_end - WINDOW_SIZE
+    }
+
     pub fn get_buffer(&mut self) -> &mut [u8] {
         &mut self.buffer[..self.current_end]
     }

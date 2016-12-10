@@ -91,7 +91,8 @@ impl OutputWriter for DynamicWriter {
         self.fixed_writer.write_length_distance(length, distance);
         let l_code_num = get_length_code(length).expect("Invalid length!");
         self.frequencies[l_code_num as usize] += 1;
-        let d_code_num = get_distance_code(distance).expect("Error, distance is out of range!");
+        let d_code_num = get_distance_code(distance)
+            .expect("Tried to get a distance code which was out of range!");
         self.distance_frequencies[usize::from(d_code_num)] += 1;
     }
 
