@@ -106,11 +106,6 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                                          flush: Flush)
                                          -> io::Result<usize> {
 
-    if flush == Flush::Sync {
-        println!("Sync not done yet!");
-        unimplemented!();
-    }
-
     // If we are flushing and have not yet written anything to the output stream (which is the case
     // if is_first_window is true), we check if it will be shorter to used fixed huffman codes
     // or just a stored block instead of full compression.

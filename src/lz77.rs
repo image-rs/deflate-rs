@@ -14,18 +14,17 @@ const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 
 /// A struct that contains the hash table, and keeps track of where we are in the input data
 pub struct LZ77State {
+    /// Struct containing hash chains that will be used to find matches.
     hash_table: ChainedHashTable,
-    // The current position in the input slice
-    pub current_start: usize,
-    // True if this is the first window
+    /// True if this is the first window that is being processed.
     is_first_window: bool,
-    // True if the last block has been output
+    /// Set to true when the last block has been processed.
     is_last_block: bool,
-    // How many bytes the last match in the previous window extended into the current one
+    /// How many bytes the last match in the previous window extended into the current one.
     overlap: usize,
-    // The maximum number of hash entries to search
+    /// The maximum number of hash entries to search.
     max_hash_checks: u16,
-    // Only lazy match if we have a match length less than this
+    /// Only lazy match if we have a match length less than this.
     lazy_if_less_than: u16,
 }
 
@@ -37,7 +36,6 @@ impl LZ77State {
                             -> LZ77State {
         LZ77State {
             hash_table: ChainedHashTable::from_starting_values(b0, b1),
-            current_start: 0,
             is_first_window: true,
             is_last_block: false,
             overlap: 0,
@@ -62,7 +60,6 @@ impl LZ77State {
     /// Resets the state excluding max_hash_checks and lazy_if_less_than
     pub fn reset(&mut self) {
         self.hash_table.reset();
-        self.current_start = 0;
         self.is_first_window = true;
         self.is_last_block = false;
         self.overlap = 0;
@@ -147,13 +144,16 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
                         max_hash_checks
                     };
 
+                    // Check if we can find a better match here than the one we had at the previous byte.
                     longest_match(data, hash_table, position, prev_length, max_hash_checks)
                 };
                 if match_len > lazy_if_less_than {
+                    // We found a decent match, so we won't check for a better one at the next byte.
                     ignore_next = true;
                 }
                 (match_len, match_dist)
             } else {
+                // We already had a decent match, so we don't bother checking for another one.
                 (NO_LENGTH, 0)
             };
 
@@ -233,8 +233,13 @@ pub fn lz77_compress_block_finish<W: OutputWriter>(data: &[u8],
     lz77_compress_block::<W>(data, state, buffer, &mut writer, Flush::Finish)
 }
 
-/// Compress a slice
-/// Will return err on failure eventually, but for now allways succeeds or panics
+/// Compress a slice with lz77 compression.
+///
+/// This function processes one window at a time, and returns when there is no input left,
+/// or it determines it's time to end a block.
+///
+/// Returns the number of bytes of the input that were not processed, and a status describing
+/// whether there is no input, it's time to finish, or it's time to end the block.
 pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                                             state: &mut LZ77State,
                                             buffer: &mut InputBuffer,
@@ -252,6 +257,8 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
 
     while writer.buffer_length() < (window_size * 2) {
         if state.is_first_window {
+            // Don't do anything until we are either flushing, or we have at least one window of
+            // data.
             if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
 
 
@@ -270,8 +277,7 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                                                    state.max_hash_checks,
                                                    state.lazy_if_less_than as usize);
 
-                // We are at the first block so we don't need to slide the hash table
-                state.current_start += first_chunk_end;
+                // We are at the first window so we don't need to slide the hash table yet,
 
                 if first_chunk_end >= data.len() && finish {
                     if !sync {
@@ -288,6 +294,8 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 break;
             }
         } else if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
+            // This isn't the first chunk, so we start reading at one window in in them
+            // buffer plus any additional overlap from earlier.
             let start = window_size + state.overlap;
 
             // Determine where we have to stop iterating to slide the buffer and hash,
@@ -296,10 +304,9 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 // If we are finishing, make sure we include the lookahead data
                 buffer.current_end()
             } else {
+                // Otherwise we process one window size of data.
                 cmp::min(window_size * 2, buffer.current_end())
             };
-            // Limit the length of the input buffer slice so we don't go off the end
-            // and read garbage data when checking match lengths.
 
             state.overlap = process_chunk::<W>(buffer.get_buffer(),
                                                start,
@@ -313,8 +320,9 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 if !sync {
                     state.set_last();
                 } else {
-                    state.current_start += end - start + state.overlap;
-                    state.overlap += end - start;
+                    // For sync flushing we need to slide the buffer and the has chains so that the
+                    // next call to this function starts at the right place.
+                    state.overlap = 0;
                     let n = buffer.move_down();
                     state.hash_table.slide(n);
                 }
@@ -322,12 +330,12 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 break;
             } else {
                 // We are not at the end, so slide and continue
-                state.current_start += end - start + state.overlap;
                 // We slide the hash table back to make space for new hash values
                 // We only need to remember 32k bytes back (the maximum distance allowed by the
                 // deflate spec)
                 state.hash_table.slide(window_size);
 
+                // Slide the buffer
                 remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
 
                 status = LZ77Status::EndBlock;

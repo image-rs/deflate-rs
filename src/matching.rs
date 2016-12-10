@@ -86,6 +86,10 @@ pub fn longest_match(data: &[u8],
 
     let mut current_head = hash_table.get_prev(position) as usize;
 
+    if current_head >= position {
+        return (2, 0);
+    }
+
     let mut best_length = prev_length;
     let mut best_distance = 0;
 

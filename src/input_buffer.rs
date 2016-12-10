@@ -81,13 +81,22 @@ impl InputBuffer {
     }
 
 
+    /// Slide the buffer such that the current end of the buffer (including lookahead) is moved to
+    /// the position of WINDOW_SIZE, and return the number of bytes slid.
     pub fn move_down(&mut self) -> usize {
         assert!(self.current_end >= WINDOW_SIZE);
-        // This isn't really an optimal implementation of this.
+        // Avoid doing anything if the end is already at WINDOW_SIZE.
+        if self.current_end == WINDOW_SIZE {
+            return 0;
+        }
+        // We use a naive sliding implementation for now. This may be suboptimal due to using
+        // indexing.
         for i in 0..WINDOW_SIZE {
             self.buffer[i] = self.buffer[self.current_end - WINDOW_SIZE + i];
         }
-        self.current_end - WINDOW_SIZE
+        let ret = self.current_end - WINDOW_SIZE;
+        self.current_end = WINDOW_SIZE;
+        ret
     }
 
     pub fn get_buffer(&mut self) -> &mut [u8] {
@@ -140,5 +149,15 @@ mod test {
                        to_add);
         }
         assert_eq!(buf.current_end(), WINDOW_SIZE + MAX_MATCH + to_add.len());
+    }
+
+    #[test]
+    fn move_down() {
+        let mut data = [10u8; BUFFER_SIZE - 300];
+        *(data.last_mut().unwrap()) = 5;
+        let (mut buf, extra) = InputBuffer::new(&data[..]);
+        assert_eq!(extra, None);
+        buf.move_down();
+        assert_eq!(*buf.get_buffer().last().unwrap(), 5);
     }
 }
