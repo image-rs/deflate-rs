@@ -24,9 +24,9 @@ pub struct DeflateEncoder<W: Write> {
 }
 
 impl<W: Write> DeflateEncoder<W> {
-    /// Creates a new encoder using the provided `CompressionOptions`
-    pub fn new(writer: W, options: CompressionOptions) -> DeflateEncoder<W> {
-        DeflateEncoder { deflate_state: Some(Box::new(DeflateState::new(options, writer))) }
+    /// Creates a new encoder using the provided compression options.
+    pub fn new<O: Into<CompressionOptions>>(writer: W, options: O) -> DeflateEncoder<W> {
+        DeflateEncoder { deflate_state: Some(Box::new(DeflateState::new(options.into(), writer))) }
     }
 
     /// Flush the encoder, consume it, and return the contained writer if writing succeeds.
@@ -94,10 +94,10 @@ pub struct ZlibEncoder<W: Write> {
 }
 
 impl<W: Write> ZlibEncoder<W> {
-    /// Create a new `ZlibEncoder` using the provided `CompressionOptions`
-    pub fn new(writer: W, options: CompressionOptions) -> ZlibEncoder<W> {
+    /// Create a new `ZlibEncoder` using the provided compression options.
+    pub fn new<O: Into<CompressionOptions>>(writer: W, options: O) -> ZlibEncoder<W> {
         ZlibEncoder {
-            deflate_state: Some(Box::new(DeflateState::new(options, writer))),
+            deflate_state: Some(Box::new(DeflateState::new(options.into(), writer))),
             checksum: Adler32Checksum::new(),
             header_written: false,
         }
@@ -249,38 +249,19 @@ mod test {
 
     #[test]
     fn writer_sync() {
-        println!("TESTING!!!11!!");
         let data = get_test_data();
         let compressed = {
             let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
                                                      CompressionOptions::default());
             let split = data.len() / 2;
             compressor.write(&data[..split]).unwrap();
-            println!("Trying to flush");
             compressor.flush().unwrap();
-            println!("Trying to write 2");
             compressor.write(&data[split..]).unwrap();
-            println!("Trying to finish");
             compressor.finish().unwrap()
         };
 
-        {
-            use std::fs::File;
-            use std::io::Write;
-            let mut f = File::create("out_block.zlib").unwrap();
-            f.write_all(&compressed).unwrap();
-        }
 
-
-        println!("Trying to decompress");
         let res = decompress_to_end(&compressed);
-        {
-            use std::fs::File;
-            use std::io::Write;
-            let mut f = File::create("test.txt").unwrap();
-            f.write_all(&res).unwrap();
-        }
-
         assert!(res == data);
     }
 }

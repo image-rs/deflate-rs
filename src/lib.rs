@@ -47,9 +47,12 @@ use compress::compress_data_dynamic_n;
 #[doc(hidden)]
 pub use lz77::lz77_compress;
 
-pub use compression_options::{CompressionOptions, SpecialOptions};
-pub use writer::{DeflateEncoder, ZlibEncoder};
-pub use compress::Flush;
+pub use compression_options::{CompressionOptions, SpecialOptions, Compression};
+use compress::Flush;
+pub use lz77::MatchingType;
+pub mod write {
+    pub use writer::{DeflateEncoder, ZlibEncoder};
+}
 
 fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                                                         writer: &mut W,
@@ -77,9 +80,12 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
 /// let compressed_data = deflate_bytes_conf(data, options);
 /// # let _ = compressed_data;
 /// ```
-pub fn deflate_bytes_conf(input: &[u8], options: CompressionOptions) -> Vec<u8> {
+pub fn deflate_bytes_conf<O: Into<CompressionOptions>>(input: &[u8], options: O) -> Vec<u8> {
     let mut writer = Vec::with_capacity(input.len() / 3);
-    compress_data_dynamic(input, &mut writer, checksum::NoChecksum::new(), options)
+    compress_data_dynamic(input,
+                          &mut writer,
+                          checksum::NoChecksum::new(),
+                          options.into())
         .expect("Write error!");
     writer
 }
@@ -98,7 +104,7 @@ pub fn deflate_bytes_conf(input: &[u8], options: CompressionOptions) -> Vec<u8> 
 /// # let _ = compressed_data;
 /// ```
 pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
-    deflate_bytes_conf(input, CompressionOptions::default())
+    deflate_bytes_conf(input, Compression::Default)
 }
 
 /// Compress the given slice of bytes with DEFLATE compression, including a zlib header and trailer.
@@ -116,7 +122,7 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 /// let compressed_data = deflate_bytes_zlib_conf(data, options);
 /// # let _ = compressed_data;
 /// ```
-pub fn deflate_bytes_zlib_conf(input: &[u8], options: CompressionOptions) -> Vec<u8> {
+pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], options: O) -> Vec<u8> {
     use byteorder::WriteBytesExt;
     let mut writer = Vec::with_capacity(input.len() / 3);
     // Write header
@@ -124,7 +130,7 @@ pub fn deflate_bytes_zlib_conf(input: &[u8], options: CompressionOptions) -> Vec
         .expect("Write error when writing zlib header!");
 
     let mut checksum = checksum::Adler32Checksum::new();
-    compress_data_dynamic(input, &mut writer, &mut checksum, options)
+    compress_data_dynamic(input, &mut writer, &mut checksum, options.into())
         .expect("Write error when writing compressed data!");
 
     let hash = checksum.current_hash();
@@ -149,7 +155,7 @@ pub fn deflate_bytes_zlib_conf(input: &[u8], options: CompressionOptions) -> Vec
 /// # let _ = compressed_data;
 /// ```
 pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
-    deflate_bytes_zlib_conf(input, CompressionOptions::default())
+    deflate_bytes_zlib_conf(input, Compression::Default)
 }
 
 #[cfg(test)]
@@ -245,7 +251,8 @@ mod test {
         let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
         {
-            let mut compressor = ZlibEncoder::new(&mut compressed, CompressionOptions::high());
+            let mut compressor = write::ZlibEncoder::new(&mut compressed,
+                                                         CompressionOptions::high());
             chunked_write(&mut compressor, &data, chunk_size);
             compressor.finish().unwrap();
         }

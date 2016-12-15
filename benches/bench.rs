@@ -43,6 +43,14 @@ fn test_file_zlib_high(b: &mut Bencher) {
     b.iter(|| deflate_bytes_zlib_conf(&test_data, CompressionOptions::high()));
 }
 
+#[bench]
+fn test_file_zlib_fast(b: &mut Bencher) {
+    let test_data = get_test_data();
+
+    b.iter(|| deflate_bytes_zlib_conf(&test_data, CompressionOptions::fast()));
+}
+
+
 fn deflate_bytes_flate2_zlib(level: Compression, input: &[u8]) -> Vec<u8> {
     use flate2::write::ZlibEncoder;
     use std::io::Write;
@@ -59,7 +67,13 @@ fn test_file_zlib_flate2_def(b: &mut Bencher) {
 }
 
 #[bench]
-fn test_file_zlib_flate2_max(b: &mut Bencher) {
+fn test_file_zlib_flate2_best(b: &mut Bencher) {
     let test_data = get_test_data();
     b.iter(|| deflate_bytes_flate2_zlib(Compression::Best, &test_data));
+}
+
+#[bench]
+fn test_file_zlib_flate2_fast(b: &mut Bencher) {
+    let test_data = get_test_data();
+    b.iter(|| deflate_bytes_flate2_zlib(Compression::Fast, &test_data));
 }

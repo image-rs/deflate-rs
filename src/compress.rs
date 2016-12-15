@@ -16,9 +16,9 @@ use stored_block::{compress_block_stored, write_stored_header};
 pub enum Flush {
     None,
     Sync,
-    Partial,
-    Block,
-    Full,
+    _Partial,
+    _Block,
+    _Full,
     Finish,
 }
 
