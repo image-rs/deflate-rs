@@ -15,6 +15,20 @@ use std::thread;
 ///
 /// A struct implementing a `Write` interface that takes unencoded data and compresses it to
 /// the provided writer using DEFLATE compression.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Write;
+///
+/// use deflate::Compression;
+/// use deflate::write::DeflateEncoder;
+///
+/// let data = b"This is some test data";
+/// let mut encoder = DeflateEncoder::new(Vec::new(), Compression::Default);
+/// encoder.write_all(data).unwrap();
+/// let compressed_data = encoder.finish().unwrap();
+/// ```
 pub struct DeflateEncoder<W: Write> {
     // We use a box here to avoid putting the buffers on the stack
     // It's done here rather than in the structs themselves for now to
@@ -29,7 +43,8 @@ impl<W: Write> DeflateEncoder<W> {
         DeflateEncoder { deflate_state: Some(Box::new(DeflateState::new(options.into(), writer))) }
     }
 
-    /// Flush the encoder, consume it, and return the contained writer if writing succeeds.
+    /// Encode all pending data to the contained writer, consume this `ZlibEncoder`,
+    /// and return the contained writer if writing succeeds.
     pub fn finish(mut self) -> io::Result<W> {
         self.output_all().map(|_| ())?;
         // We have to move the inner state out of the encoder, and replace it with `None`
@@ -83,6 +98,20 @@ impl<W: Write> Drop for DeflateEncoder<W> {
 ///
 /// A struct implementing a `Write` interface that takes unencoded data and compresses it to
 /// the provided writer using DEFLATE compression with Zlib headers and trailers.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Write;
+///
+/// use deflate::Compression;
+/// use deflate::write::ZlibEncoder;
+///
+/// let data = b"This is some test data";
+/// let mut encoder = ZlibEncoder::new(Vec::new(), Compression::Default);
+/// encoder.write_all(data).unwrap();
+/// let compressed_data = encoder.finish().unwrap();
+/// ```
 pub struct ZlibEncoder<W: Write> {
     // We use a box here to avoid putting the buffers on the stack
     // It's done here rather than in the structs themselves for now to
@@ -104,7 +133,7 @@ impl<W: Write> ZlibEncoder<W> {
     }
 
     /// Output all pending data ,including the trailer(checksum) as if encoding is done,
-    /// but without resetting anything
+    /// but without resetting anything.
     fn output_all(&mut self) -> io::Result<usize> {
         self.check_write_header()?;
         let n = compress_data_dynamic_n(&[],
@@ -114,7 +143,8 @@ impl<W: Write> ZlibEncoder<W> {
         Ok(n)
     }
 
-    /// Flush the encoder, consume it, and return the contained writer if writing succeeds.
+    /// Encode all pending data to the contained writer, consume this `ZlibEncoder`,
+    /// and return the contained writer if writing succeeds.
     pub fn finish(mut self) -> io::Result<W> {
         self.output_all()?;
         // We have to move the inner state out of the encoder, and replace it with `None`
@@ -167,6 +197,11 @@ impl<W: Write> io::Write for ZlibEncoder<W> {
         compress_data_dynamic_n(buf, &mut self.deflate_state.as_mut().unwrap(), Flush::None)
     }
 
+    /// Flush the encoder.
+    ///
+    /// This will flush the encoder, emulating the Sync flush method from Zlib.
+    /// This essentially finishes the current block, and sends an additional empty stored block to
+    /// the writer.
     fn flush(&mut self) -> io::Result<()> {
         compress_data_dynamic_n(&[], &mut self.deflate_state.as_mut().unwrap(), Flush::Sync)
             .map(|_| ())
@@ -174,6 +209,10 @@ impl<W: Write> io::Write for ZlibEncoder<W> {
 }
 
 impl<W: Write> Drop for ZlibEncoder<W> {
+    /// When the encoder is dropped, output the rest of the data.
+    ///
+    /// WARNING: This may silently fail if writing fails, so using this to finish encoding
+    /// for writers where writing might fail is not recommended, for that call finish() instead.
     fn drop(&mut self) {
         if self.deflate_state.is_some() && !thread::panicking() {
             let _ = self.output_all();

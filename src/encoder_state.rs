@@ -13,6 +13,7 @@ const FIXED_FIRST_BYTE_FINAL: u16 = 0b011;
 const DYNAMIC_FIRST_BYTE: u16 = 0b100;
 const DYNAMIC_FIRST_BYTE_FINAL: u16 = 0b101;
 
+#[allow(dead_code)]
 pub enum BType {
     NoCompression = 0b00,
     FixedHuffman = 0b01,

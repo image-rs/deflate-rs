@@ -1,4 +1,6 @@
+//! This module contains functionality for doing lz77 compression of data.
 use std::cmp;
+use std::ops::Range;
 
 use input_buffer::InputBuffer;
 use matching::longest_match;
@@ -15,7 +17,11 @@ const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 /// An enum describing whether we use lazy or greedy matching.
 #[derive(Clone, Copy, Debug)]
 pub enum MatchingType {
+    /// Use lazy matching: after finding a match, the next input byte is checked, to see
+    /// if there is a better match starting at that byte.
     Lazy,
+    /// Use greedy matching: the matching algorithm simply uses a match right away
+    /// if found.
     Greedy,
 }
 
@@ -111,8 +117,7 @@ pub enum LDPair {
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
 fn process_chunk<W: OutputWriter>(data: &[u8],
-                                  start: usize,
-                                  end: usize,
+                                  iterated_data: Range<usize>,
                                   hash_table: &mut ChainedHashTable,
                                   writer: &mut W,
                                   max_hash_checks: u16,
@@ -121,12 +126,11 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
                                   -> usize {
     match matching_type {
         MatchingType::Greedy => {
-            process_chunk_greedy(data, start, end, hash_table, writer, max_hash_checks)
+            process_chunk_greedy(data, iterated_data, hash_table, writer, max_hash_checks)
         }
         MatchingType::Lazy => {
             process_chunk_lazy(data,
-                               start,
-                               end,
+                               iterated_data,
                                hash_table,
                                writer,
                                max_hash_checks,
@@ -136,14 +140,14 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
 }
 
 fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
-                                       start: usize,
-                                       end: usize,
+                                       iterated_data: Range<usize>,
                                        hash_table: &mut ChainedHashTable,
                                        writer: &mut W,
                                        max_hash_checks: u16,
                                        lazy_if_less_than: usize)
                                        -> usize {
-    let end = cmp::min(data.len(), end);
+    let end = cmp::min(data.len(), iterated_data.end);
+    let start = iterated_data.start;
     let current_chunk = &data[start..end];
 
     let mut insert_it = current_chunk.iter().enumerate();
@@ -269,13 +273,13 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
 }
 
 fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
-                                         start: usize,
-                                         end: usize,
+                                         iterated_data: Range<usize>,
                                          hash_table: &mut ChainedHashTable,
                                          writer: &mut W,
                                          max_hash_checks: u16)
                                          -> usize {
-    let end = cmp::min(data.len(), end);
+    let end = cmp::min(data.len(), iterated_data.end);
+    let start = iterated_data.start;
     let current_chunk = &data[start..end];
 
     let mut insert_it = current_chunk.iter().enumerate();
@@ -416,8 +420,7 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 };
 
                 state.overlap = process_chunk::<W>(buffer.get_buffer(),
-                                                   0,
-                                                   first_chunk_end,
+                                                   0..first_chunk_end,
                                                    &mut state.hash_table,
                                                    &mut writer,
                                                    state.max_hash_checks,
@@ -456,8 +459,7 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
             };
 
             state.overlap = process_chunk::<W>(buffer.get_buffer(),
-                                               start,
-                                               end,
+                                               start..end,
                                                &mut state.hash_table,
                                                &mut writer,
                                                state.max_hash_checks,
@@ -511,7 +513,7 @@ impl TestStruct {
         TestStruct {
             state: LZ77State::new(HIGH_MAX_HASH_CHECKS,
                                   HIGH_LAZY_IF_LESS_THAN,
-                                  MatchingType::Greedy),
+                                  MatchingType::Lazy),
             buffer: InputBuffer::empty(),
             writer: FixedWriter::new(),
         }

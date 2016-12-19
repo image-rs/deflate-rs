@@ -1,9 +1,10 @@
 //! An implementation an encoder using [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html)
 //! compression algorightm in pure rust.
 //!
-//! This library provides functions to compress data (currently only in-memory) using DEFLATE,
+//! This library provides functions to compress data using the DEFLATE algorithm,
 //! both with and without a [zlib](https://tools.ietf.org/html/rfc1950) header/trailer
-//! The current implementation is still a bit lacking speed-wise compared to C-libraries like zlib and miniz.
+//! The current implementation is still a bit lacking speed-wise compared to C-libraries
+//! like zlib and miniz.
 
 #[cfg(test)]
 extern crate flate2;
@@ -74,10 +75,9 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
 /// # Examples
 ///
 /// ```
-/// use deflate::{deflate_bytes_conf, CompressionOptions};
+/// use deflate::{deflate_bytes_conf, Compression};
 /// let data = b"This is some test data";
-/// let options = CompressionOptions::default();
-/// let compressed_data = deflate_bytes_conf(data, options);
+/// let compressed_data = deflate_bytes_conf(data, Compression::Best);
 /// # let _ = compressed_data;
 /// ```
 pub fn deflate_bytes_conf<O: Into<CompressionOptions>>(input: &[u8], options: O) -> Vec<u8> {
@@ -116,10 +116,9 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 /// # Examples
 ///
 /// ```
-/// use deflate::{deflate_bytes_zlib_conf, CompressionOptions};
-/// let options = CompressionOptions::default();
+/// use deflate::{deflate_bytes_zlib_conf, Compression};
 /// let data = b"This is some test data";
-/// let compressed_data = deflate_bytes_zlib_conf(data, options);
+/// let compressed_data = deflate_bytes_zlib_conf(data, Compression::Best);
 /// # let _ = compressed_data;
 /// ```
 pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], options: O) -> Vec<u8> {

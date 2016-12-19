@@ -10,18 +10,25 @@ pub const DEFAULT_LAZY_IF_LESS_THAN: u16 = 32;
 
 /// An enum describing the level of compression to be used by the encoder
 ///
-/// Higher compression ratios will be slower.
+/// Higher compression ratios will take longer to encode.
+///
+/// [See also `CompressionOptions`](./struct.CompressionOptions.html)
 #[derive(Clone, Copy, Debug)]
 pub enum Compression {
-    /// Fast minimal compression (CompressionOptions::fast()).
+    /// Fast minimal compression (`CompressionOptions::fast()`).
     Fast,
-    /// Default level (CompressionOptions::default()).
+    /// Default level (`CompressionOptions::default()`).
     Default,
-    /// Higher compression level (CompressionOptions::high()).
+    /// Higher compression level (`CompressionOptions::high()`).
+    ///
+    /// Best in this context isn't actually the highest possible level
+    /// the encoder can do, but is meant to emulate the `Best` setting in the `Flate2`
+    /// library.
     Best,
 }
 
 /// Enum allowing some special options (not implemented yet)!
+#[derive(Copy, Clone, Debug)]
 pub enum SpecialOptions {
     /// Compress normally.
     Normal,
@@ -56,21 +63,44 @@ pub const _HUFFMAN_ONLY: CompressionOptions = CompressionOptions {
 /// A struct describing the options for a compressor or compression function.
 ///
 /// These values are not stable and still subject to change!
+#[derive(Copy, Clone, Debug)]
 pub struct CompressionOptions {
     /// The maximum number of checks to make in the hash table for matches.
+    ///
+    /// Higher numbers mean slower, but better compression. Very high (say `>1024`) values
+    /// will impact compression speed a lot.
+    /// Default value: `128`
     pub max_hash_checks: u16,
     // pub _window_size: u16,
+
     /// Only lazy match if we have a length less than this value.
+    ///
+    /// Higher values degrade compression slightly, but improve compression speed.
+    ///
+    /// * `0`: Never lazy match. (Same effect as setting MatchingType to greedy, but may be slower).
+    /// * `1...257`: Only check for a better match if the first match was shorter than this value.
+    /// * `258`: Always lazy match.
+    ///
+    /// As the maximum length of a match is `258`, values higher than this will have no further effect.
+    ///
+    /// * Default value: `32`
     pub lazy_if_less_than: u16,
+
     // pub _decent_match: u16,
     /// Whether to use lazy or greedy matching.
+    ///
+    /// Lazy matching will provide better compression, at the expense of compression speed.
+    ///
+    /// [See `MatchingType`](./enum.MatchingType.html)
+    ///
+    /// * Default value: `MatchingType::Lazy`
     pub matching_type: MatchingType,
-    /// Force fixed/stored (Not implemented yet).
+    /// Force fixed/stored blocks (Not implemented yet).
     pub special: SpecialOptions,
 }
 
 impl CompressionOptions {
-    /// Returns compression settings rouhgly corresponding to the High(9) setting in miniz.
+    /// Returns compression settings rouhgly corresponding to the `HIGH(9)` setting in miniz.
     pub fn high() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: HIGH_MAX_HASH_CHECKS,
@@ -80,9 +110,9 @@ impl CompressionOptions {
         }
     }
 
-    /// Returns compression a fast set of compression settings settings
+    /// Returns  a fast set of compression settings
     ///
-    /// Ideally this should roughly correspond to the Fast(1) setting in miniz.
+    /// Ideally this should roughly correspond to the `FAST(1)` setting in miniz.
     /// However, that setting makes miniz use a somewhat different algorhithm,
     /// so currently hte fast level in this library is slower and better compressing
     /// than the corresponding level in miniz.

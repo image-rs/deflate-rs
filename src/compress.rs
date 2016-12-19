@@ -43,10 +43,10 @@ fn block_type_for_length(length: usize) -> BType {
         // For very short lengths, using fixed codes will be shorter as we don't need to
         // use two bytes to specify the length.
         BType::FixedHuffman
-    } else if length < 20 {
-        BType::NoCompression
-    } else if length < 70 {
-        BType::FixedHuffman
+        // } else if length < 20 {
+        // BType::NoCompression
+        // } else if length < 70 {
+        // BType::FixedHuffman
     } else {
         BType::DynamicHuffman
     }
@@ -74,7 +74,10 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     writer
 }
 
-fn write_stored_block<W: Write>(input: &[u8], deflate_state: &mut DeflateState<W>, final_block: bool) -> io::Result<usize> {
+fn write_stored_block<W: Write>(input: &[u8],
+                                deflate_state: &mut DeflateState<W>,
+                                final_block: bool)
+                                -> io::Result<usize> {
     // Write the block header
     write_stored_header(&mut deflate_state.encoder_state.writer, final_block)?;
     // Output some extra zeroes if needed to align with the byte boundary.
@@ -82,7 +85,7 @@ fn write_stored_block<W: Write>(input: &[u8], deflate_state: &mut DeflateState<W
 
     if input.len() > 0 {
         // Add the current input data to the input buffer.
-        let rem = deflate_state.input_buffer.add_data(&input);
+        let rem = deflate_state.input_buffer.add_data(input);
 
         if rem.is_some() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
@@ -109,9 +112,11 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
     // If we are flushing and have not yet written anything to the output stream (which is the case
     // if is_first_window is true), we check if it will be shorter to used fixed huffman codes
     // or just a stored block instead of full compression.
-    let block_type = if (flush == Flush::Finish || flush == Flush::Sync) && deflate_state.lz77_state.is_first_window() {
+    let block_type = if (flush == Flush::Finish || flush == Flush::Sync) &&
+                        deflate_state.lz77_state.is_first_window() {
         block_type_for_length(deflate_state.bytes_written + input.len())
-    } else if flush == Flush::None || flush == Flush::Finish || flush == Flush::Sync {
+    } else if flush == Flush::None || flush == Flush::Finish ||
+                               flush == Flush::Sync {
         BType::DynamicHuffman
     } else {
         println!("compress called with {:?}", flush);
