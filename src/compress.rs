@@ -190,6 +190,8 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                                            &mut deflate_state.encoder_state)?;
 
                         // End of block is written in flush_to_bitstream.
+
+                        // Clear the current lz77 data in the writer for the next call.
                         deflate_state.lz77_writer.clear();
                         if status == LZ77Status::Finished {
                             break;
@@ -197,20 +199,26 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                     }
                 }
                 BType::FixedHuffman => {
+                    // Lz77-compress the block. Since this block of code will be ran only at a
+                    // sync or finish point, and any previous calls will ensure that there will
+                    // only be at most one window size of data left, the function is called only
+                    // once here.
                     let (written, _) = lz77_compress_block(input,
                                                            &mut deflate_state.lz77_state,
                                                            &mut deflate_state.input_buffer,
                                                            &mut deflate_state.lz77_writer,
                                                            flush);
-                    println!("Input len: {}, written: {}", input.len(), written);
+
                     bytes_written += written;
                     deflate_state.bytes_written += written;
+                    // Update the state to use the fixed(pre-defined) huffman codes.
                     deflate_state.encoder_state
                         .update_huffman_table(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE)
                         .unwrap();
                     deflate_state.encoder_state.write_start_of_block(true, flush == Flush::Finish)?;
                     flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
                                        &mut deflate_state.encoder_state)?;
+                    // Clear the current lz77 data in the writer for the next call.
                     deflate_state.lz77_writer.clear();
                 }
                 BType::NoCompression => {
