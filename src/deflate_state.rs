@@ -14,7 +14,7 @@ pub struct DeflateState<W: Write> {
     pub compression_options: CompressionOptions,
     pub encoder_state: EncoderState<W>,
     pub lz77_writer: DynamicWriter,
-    pub bytes_written: usize,
+    pub bytes_written: u64,
 }
 
 impl<W: Write> DeflateState<W> {

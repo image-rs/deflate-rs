@@ -1,6 +1,6 @@
 [package]
 name = "deflate"
-version = "0.7.0"
+version = "0.7.1"
 license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
 readme = "README.md"
@@ -14,7 +14,7 @@ A DEFLATE and zlib encoder written in safe rust.
 
 [dependencies]
 adler32 = "0.3.0"
-byteorder = "0.5.3"
+byteorder = "1.0.0"
 
 [dev-dependencies]
 #flate2 = { version = "0.2.14", features = ["zlib"], default-features = false }

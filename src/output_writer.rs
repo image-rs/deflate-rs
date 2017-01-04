@@ -1,4 +1,3 @@
-// use lz77::LDPair;
 use lzvalue::LZValue;
 use huffman_table::{NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, END_OF_BLOCK_POSITION,
                     get_distance_code, get_length_code};

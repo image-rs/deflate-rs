@@ -39,7 +39,7 @@ pub fn flush_to_bitstream<W: Write>(buffer: &[LZValue],
 /// Write the data directly.
 fn block_type_for_length(length: usize) -> BType {
     // TODO: Do proper testing to determine what values make sense here
-    if length < 5 {
+    if length < 25 {
         // For very short lengths, using fixed codes will be shorter as we don't need to
         // use two bytes to specify the length.
         BType::FixedHuffman
@@ -113,8 +113,8 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
     // if is_first_window is true), we check if it will be shorter to used fixed huffman codes
     // or just a stored block instead of full compression.
     let block_type = if (flush == Flush::Finish || flush == Flush::Sync) &&
-                        deflate_state.lz77_state.is_first_window() {
-        block_type_for_length(deflate_state.bytes_written + input.len())
+        deflate_state.lz77_state.is_first_window() {
+                            block_type_for_length(input.len().saturating_add(deflate_state.bytes_written as usize))
     } else if flush == Flush::None || flush == Flush::Finish ||
                                flush == Flush::Sync {
         BType::DynamicHuffman
@@ -140,7 +140,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                         // Bytes written in this call
                         bytes_written += written;
                         // Total bytes written since the compression process started
-                        deflate_state.bytes_written += bytes_written;
+                        deflate_state.bytes_written += bytes_written as u64;
 
                         if status == LZ77Status::NeedInput {
                             // If we've consumed all the data input so far, and we're not
@@ -210,7 +210,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                                                            flush);
 
                     bytes_written += written;
-                    deflate_state.bytes_written += written;
+                    deflate_state.bytes_written += written as u64;
                     // Update the state to use the fixed(pre-defined) huffman codes.
                     deflate_state.encoder_state
                         .update_huffman_table(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE)
@@ -237,7 +237,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
             // Keep track of how many extra bytes we consumed in this call.
             let written = input.len();
             bytes_written += written;
-            deflate_state.bytes_written += written;
+            deflate_state.bytes_written += written as u64;
         }
     }
 

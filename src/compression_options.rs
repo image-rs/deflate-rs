@@ -12,6 +12,8 @@ pub const DEFAULT_LAZY_IF_LESS_THAN: u16 = 32;
 ///
 /// Higher compression ratios will take longer to encode.
 ///
+/// This is a simplified interface to specify a compression level.
+///
 /// [See also `CompressionOptions`](./struct.CompressionOptions.html)
 #[derive(Clone, Copy, Debug)]
 pub enum Compression {
@@ -72,7 +74,6 @@ pub struct CompressionOptions {
     /// Default value: `128`
     pub max_hash_checks: u16,
     // pub _window_size: u16,
-
     /// Only lazy match if we have a length less than this value.
     ///
     /// Higher values degrade compression slightly, but improve compression speed.

@@ -76,12 +76,10 @@ impl LZ77State {
     }
 
     /// Creates a new LZ77 state
-    /// Uses two arbitrary values to warm up the hash
     pub fn new(max_hash_checks: u16,
                lazy_if_less_than: u16,
                matching_type: MatchingType)
                -> LZ77State {
-        // Not sure if warming up the hash is actually needed.
         LZ77State::from_starting_values(55, 23, max_hash_checks, lazy_if_less_than, matching_type)
     }
 
@@ -411,6 +409,12 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
             // data.
             if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
 
+                if buffer.get_buffer().len() > 2 {
+                    let b = buffer.get_buffer();
+                    // Warm up the hash with the two first values, so we can match against
+                    // index 0.
+                    state.hash_table.add_initial_hash_values(b[0], b[1]);
+                }
 
                 let first_chunk_end = if finish && remaining_data.is_none() {
                     // If we are finishing, make sure we include data in the lookahead area

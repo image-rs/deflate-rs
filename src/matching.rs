@@ -95,7 +95,9 @@ pub fn longest_match(data: &[u8],
 
     let mut iters = 0;
 
-    while current_head >= limit && current_head != 0 && iters < max_hash_checks {
+    let mut prev_head = position;
+
+    while current_head >= limit && current_head != prev_head && iters < max_hash_checks {
         // We only check further if the match length can actually increase
         if data[position + best_length - 1..position + best_length + 1] ==
            data[current_head + best_length - 1..current_head + best_length + 1] {
@@ -111,7 +113,7 @@ pub fn longest_match(data: &[u8],
             }
         }
 
-        let prev_head = current_head;
+        prev_head = current_head;
         current_head = hash_table.get_prev(current_head) as usize;
         if current_head >= prev_head {
             break;
@@ -142,22 +144,24 @@ pub fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usi
 
 #[cfg(test)]
 mod test {
+    use chained_hash_table::{filled_hash_table, HASH_BYTES, ChainedHashTable};
+    use super::{get_match_length, longest_match};
+
     /// Test that match lengths are calculated correctly
     #[test]
-    fn test_match_length() {
+    fn match_length() {
         let test_arr = [5u8, 5, 5, 5, 5, 9, 9, 2, 3, 5, 5, 5, 5, 5];
-        let l = super::get_match_length(&test_arr, 9, 0);
+        let l = get_match_length(&test_arr, 9, 0);
         assert_eq!(l, 5);
-        let l2 = super::get_match_length(&test_arr, 9, 7);
+        let l2 = get_match_length(&test_arr, 9, 7);
         assert_eq!(l2, 0);
-        let l3 = super::get_match_length(&test_arr, 10, 0);
+        let l3 = get_match_length(&test_arr, 10, 0);
         assert_eq!(l3, 4);
     }
 
     /// Test that we get the longest of the matches
     #[test]
-    fn test_longest_match() {
-        use chained_hash_table::{filled_hash_table, HASH_BYTES};
+    fn get_longest_match() {
         use std::str::from_utf8;
 
         let test_data = b"xTest data, Test_data,zTest data";
@@ -177,5 +181,26 @@ mod test {
         println!("Distance: {}, length: {}", distance, length);
         assert_eq!(distance, 1);
         assert_eq!(length, 4);
+    }
+
+    /// Make sure we can get a match at index zero
+    #[test]
+    fn match_index_zero() {
+        let test_data = b"AAAAAAA";
+
+        let mut hash_table = ChainedHashTable::from_starting_values(test_data[0], test_data[1]);
+        for (n, &b) in test_data[2..5].iter().enumerate() {
+            hash_table.add_hash_value(n, b);
+            println!("N: {}", n);
+        }
+
+        let (match_length, match_dist) = longest_match(test_data, &hash_table, 2, 0, 4096);
+        let head = hash_table.current_head();
+        println!("Current head: {}", head);
+        let prev = hash_table.get_prev(head as usize);
+        println!("Current prev: {}", prev);
+
+        assert_eq!(match_dist, 1);
+        assert!(match_length > 2);
     }
 }

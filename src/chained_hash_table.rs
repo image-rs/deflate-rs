@@ -25,10 +25,14 @@ pub struct ChainedHashTable {
 
 impl ChainedHashTable {
     fn new() -> ChainedHashTable {
+        let mut arr = [0 as u16; WINDOW_SIZE];
+        for (n, mut b) in arr.iter_mut().enumerate() {
+            *b = n as u16;
+        }
         ChainedHashTable {
             current_hash: 0,
-            head: [0; WINDOW_SIZE],
-            prev: [0; WINDOW_SIZE],
+            head: arr,
+            prev: arr,
         }
     }
 
@@ -41,24 +45,20 @@ impl ChainedHashTable {
 
     /// Resets the hash value and hash chains
     pub fn reset(&mut self) {
-        // Not sure if warming up the hash is actually needed.
-        self.current_hash = 0;
-        self.current_hash = update_hash(self.current_hash, 55);
-        self.current_hash = update_hash(self.current_hash, 77);
+        *self = ChainedHashTable::from_starting_values(55, 77);
+    }
 
-        for elem in self.head.iter_mut() {
-            *elem = 0;
-        }
-
-        for elem in self.prev.iter_mut() {
-            *elem = 0;
-        }
+    pub fn add_initial_hash_values(&mut self, v1: u8, v2: u8) {
+        self.current_hash = update_hash(self.current_hash, v1);
+        self.current_hash = update_hash(self.current_hash, v2);
     }
 
     // Insert a byte into the hash table
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
         self.current_hash = update_hash(self.current_hash, value);
         self.prev[position & WINDOW_MASK] = self.head[self.current_hash as usize];
+        // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
+        // where in the buffer (which is 64k bytes) we are referring to.
         self.head[self.current_hash as usize] = position as u16;
     }
 
@@ -67,6 +67,12 @@ impl ChainedHashTable {
     #[inline]
     pub fn current_head(&self) -> u16 {
         self.head[self.current_hash as usize]
+    }
+
+    #[cfg(test)]
+    #[inline]
+    pub fn current_hash(&self) -> u16 {
+        self.current_hash
     }
 
     #[cfg(test)]
@@ -80,20 +86,19 @@ impl ChainedHashTable {
         self.prev[bytes & WINDOW_MASK]
     }
 
-    #[inline]
-    fn slide_value(b: u16, bytes: u16) -> u16 {
-        // Using b.saturating_sub(bytes) here would be cleaner, but it makes vectorisation fail
-        if b > bytes { b - bytes } else { 0 }
+    fn slide_value(b: u16, pos: u16, bytes: u16) -> u16 {
+        if b > bytes { b - bytes } else { pos }
+    }
+
+    fn slide_table(table: &mut [u16], bytes: u16) {
+        for (n, b) in table.iter_mut().enumerate() {
+            *b = ChainedHashTable::slide_value(*b, n as u16, bytes);
+        }
     }
 
     pub fn slide(&mut self, bytes: usize) {
-        for b in &mut self.head.iter_mut() {
-            *b = ChainedHashTable::slide_value(*b, bytes as u16);
-        }
-
-        for b in &mut self.prev.iter_mut() {
-            *b = ChainedHashTable::slide_value(*b, bytes as u16);
-        }
+        ChainedHashTable::slide_table(&mut self.head, bytes as u16);
+        ChainedHashTable::slide_table(&mut self.prev, bytes as u16);
     }
 
     // #[cfg(test)]
@@ -118,8 +123,10 @@ pub fn filled_hash_table(data: &[u8]) -> ChainedHashTable {
 
 #[cfg(test)]
 mod test {
+    use super::filled_hash_table;
+
     #[test]
-    fn test_chained_hash() {
+    fn chained_hash() {
         use std::str;
 
         let test_string = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do \
@@ -137,33 +144,36 @@ mod test {
         let num_iters = test_string.matches(str::from_utf8(current_bytes).unwrap())
             .count();
 
-        let hash_table = super::filled_hash_table(test_data);
+        let hash_table = filled_hash_table(test_data);
 
         // Test that the positions in the chain are valid
-        let mut prev_value = hash_table.current_head() as usize;
+        let mut prev_value = hash_table.get_prev(hash_table.current_head() as usize) as usize;
         let mut count = 0;
-        while prev_value > 1 {
-            assert_eq!(current_bytes,
-                       &test_data[prev_value..prev_value + super::HASH_BYTES]);
+        let mut current = hash_table.current_head() as usize;
+        while current != prev_value {
             count += 1;
+            current = prev_value;
             prev_value = hash_table.get_prev(prev_value) as usize;
         }
-        assert_eq!(count, num_iters);
+        // There should be at least as many occurences of the hash of the checked bytes as the
+        // numbers of occurences of the checked bytes themselves. As the hashes are not large enough
+        // to store 8 * 3 = 24 bits, there could be more with different input data.
+        assert!(count >= num_iters);
     }
 
     #[test]
-    fn test_table_unique() {
+    fn table_unique() {
         let mut test_data = Vec::new();
         test_data.extend((0u8..255));
         test_data.extend((255u8..0));
-        let hash_table = super::filled_hash_table(&test_data);
+        let hash_table = filled_hash_table(&test_data);
         let prev_pos = hash_table.get_prev(hash_table.current_head() as usize);
         // Since all sequences in the input are unique, there shouldn't be any previous values
-        assert_eq!(prev_pos, 0);
+        assert_eq!(prev_pos, hash_table.current_hash());
     }
 
     #[test]
-    fn test_table_slide() {
+    fn table_slide() {
         use std::fs::File;
         use std::io::Read;
         use std::str;
@@ -177,7 +187,7 @@ mod test {
 
         f.read_to_end(&mut input).unwrap();
 
-        let mut hash_table = super::filled_hash_table(&input[..window_size]);
+        let mut hash_table = filled_hash_table(&input[..window_size]);
         for (n, b) in input[..window_size].iter().enumerate() {
             hash_table.add_hash_value(n + window_size, *b);
         }
@@ -190,16 +200,10 @@ mod test {
             // higher than the window size
             assert!(*max_head < window_size16);
             assert!(*max_head > 0);
-            let mut pos = hash_table.current_head();
+            let pos = hash_table.get_prev(hash_table.current_head() as usize);
             // There should be a previous occurence since we inserted the data 3 times
             assert!(pos < window_size16);
             assert!(pos > 0);
-            let end_byte = input[window_size - 1];
-            while pos > 0 {
-                assert_eq!(input[pos as usize & window_size - 1], end_byte);
-                pos = hash_table.get_prev(pos as usize);
-            }
-
         }
 
         for (n, b) in input[..(window_size / 2)].iter().enumerate() {

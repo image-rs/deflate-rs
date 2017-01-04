@@ -2,9 +2,31 @@
 //! compression algorightm in pure rust.
 //!
 //! This library provides functions to compress data using the DEFLATE algorithm,
-//! both with and without a [zlib](https://tools.ietf.org/html/rfc1950) header/trailer
+//! both with and without a [zlib](https://tools.ietf.org/html/rfc1950) header/trailer.
 //! The current implementation is still a bit lacking speed-wise compared to C-libraries
 //! like zlib and miniz.
+//!
+//! # Examples:
+//! ## Simple compression function:
+//! ``` rust
+//! use deflate::deflate_bytes;
+//!
+//! let data = b"Some data";
+//! let compressed = deflate_bytes(data);
+//! ```
+//!
+//! ## Using a writer:
+//! ``` rust
+//! use std::io::Write;
+//!
+//! use deflate::Compression;
+//! use deflate::write::ZlibEncoder;
+//!
+//! let data = b"This is some test data";
+//! let mut encoder = ZlibEncoder::new(Vec::new(), Compression::Default);
+//! encoder.write_all(data).unwrap();
+//! let compressed_data = encoder.finish().unwrap();
+//! ```
 
 #[cfg(test)]
 extern crate flate2;
@@ -51,6 +73,8 @@ pub use lz77::lz77_compress;
 pub use compression_options::{CompressionOptions, SpecialOptions, Compression};
 use compress::Flush;
 pub use lz77::MatchingType;
+
+/// Encoders implementing a `Write` interface.
 pub mod write {
     pub use writer::{DeflateEncoder, ZlibEncoder};
 }

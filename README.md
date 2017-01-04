@@ -5,7 +5,9 @@ So far, deflate encoding with and without zlib metadata (no zlib dictionary or g
 # Usage:
 ## Simple compression function:
 ``` rust
-let data = ...;
+use deflate::deflate_bytes;
+
+let data = b"Some data";
 let compressed = deflate_bytes(&data);
 ```
 
