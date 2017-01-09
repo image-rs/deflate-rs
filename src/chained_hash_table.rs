@@ -24,17 +24,17 @@ pub struct ChainedHashTable {
     // Current running hash value of the last 3 bytes
     current_hash: u16,
     // Starts of hash chains (in prev)
-    head: [u16; WINDOW_SIZE],
+    head: Box<[u16; WINDOW_SIZE]>,
     // link to previous occurence of this hash value
-    prev: [u16; WINDOW_SIZE],
+    prev: Box<[u16; WINDOW_SIZE]>,
 }
 
 impl ChainedHashTable {
     fn new() -> ChainedHashTable {
         let mut c = ChainedHashTable {
             current_hash: 0,
-            head: [0; WINDOW_SIZE],
-            prev: [0; WINDOW_SIZE],
+            head: Box::new([0; WINDOW_SIZE]),
+            prev: Box::new([0; WINDOW_SIZE]),
         };
         init_array(&mut c.head);
         init_array(&mut c.prev);
@@ -102,8 +102,8 @@ impl ChainedHashTable {
     }
 
     pub fn slide(&mut self, bytes: usize) {
-        ChainedHashTable::slide_table(&mut self.head, bytes as u16);
-        ChainedHashTable::slide_table(&mut self.prev, bytes as u16);
+        ChainedHashTable::slide_table(&mut self.head[..], bytes as u16);
+        ChainedHashTable::slide_table(&mut self.prev[..], bytes as u16);
     }
 
     // #[cfg(test)]

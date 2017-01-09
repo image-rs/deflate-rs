@@ -7,7 +7,7 @@ const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
 pub const BUFFER_SIZE: usize = (WINDOW_SIZE * 2) + MAX_MATCH;
 
 pub struct InputBuffer {
-    buffer: [u8; BUFFER_SIZE],
+    buffer: Box<[u8; BUFFER_SIZE]>,
     current_end: usize,
 }
 
@@ -21,7 +21,7 @@ impl InputBuffer {
 
     pub fn empty() -> InputBuffer {
         InputBuffer {
-            buffer: [0; BUFFER_SIZE],
+            buffer: Box::new([0; BUFFER_SIZE]),
             current_end: 0,
         }
     }
