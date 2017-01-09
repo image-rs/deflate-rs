@@ -98,7 +98,6 @@ fn write_stored_block<W: Write>(input: &[u8],
                               &mut deflate_state.encoder_state.writer)
     } else {
         // Make sure we output an empty block if the input is empty.
-        println!("Empty block!");
         compress_block_stored(input, &mut deflate_state.encoder_state.writer)
     }
 }
@@ -113,8 +112,8 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
     // if is_first_window is true), we check if it will be shorter to used fixed huffman codes
     // or just a stored block instead of full compression.
     let block_type = if (flush == Flush::Finish || flush == Flush::Sync) &&
-        deflate_state.lz77_state.is_first_window() {
-                            block_type_for_length(input.len().saturating_add(deflate_state.bytes_written as usize))
+                        deflate_state.lz77_state.is_first_window() {
+        block_type_for_length(input.len().saturating_add(deflate_state.bytes_written as usize))
     } else if flush == Flush::None || flush == Flush::Finish ||
                                flush == Flush::Sync {
         BType::DynamicHuffman
@@ -230,8 +229,6 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
         BType::NoCompression => {
             assert!(flush != Flush::None);
 
-            println!("Writing stored!");
-
             write_stored_block(input, deflate_state, flush == Flush::Finish)?;
 
             // Keep track of how many extra bytes we consumed in this call.
@@ -242,7 +239,6 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
     }
 
     if flush == Flush::Sync {
-        println!("written: {}", deflate_state.bytes_written);
         write_stored_block(&[], deflate_state, false)?;
     }
 

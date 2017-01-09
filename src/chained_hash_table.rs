@@ -14,6 +14,12 @@ fn update_hash_conf(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> 
     ((current_hash << shift) ^ (to_insert as u16)) & mask
 }
 
+fn init_array(arr: &mut [u16; WINDOW_SIZE]) {
+    for (n, mut b) in arr.iter_mut().enumerate() {
+        *b = n as u16;
+    }
+}
+
 pub struct ChainedHashTable {
     // Current running hash value of the last 3 bytes
     current_hash: u16,
@@ -25,15 +31,14 @@ pub struct ChainedHashTable {
 
 impl ChainedHashTable {
     fn new() -> ChainedHashTable {
-        let mut arr = [0 as u16; WINDOW_SIZE];
-        for (n, mut b) in arr.iter_mut().enumerate() {
-            *b = n as u16;
-        }
-        ChainedHashTable {
+        let mut c = ChainedHashTable {
             current_hash: 0,
-            head: arr,
-            prev: arr,
-        }
+            head: [0; WINDOW_SIZE],
+            prev: [0; WINDOW_SIZE],
+        };
+        init_array(&mut c.head);
+        init_array(&mut c.prev);
+        c
     }
 
     pub fn from_starting_values(v1: u8, v2: u8) -> ChainedHashTable {

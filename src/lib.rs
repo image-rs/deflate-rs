@@ -286,6 +286,7 @@ mod test {
         assert!(compressed == compressed2);
     }
 
+    #[ignore]
     #[test]
     /// Test the writer by inputing data in one chunk at the time.
     fn zlib_writer_chunks() {

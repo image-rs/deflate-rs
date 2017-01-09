@@ -82,7 +82,8 @@ pub struct CompressionOptions {
     /// * `1...257`: Only check for a better match if the first match was shorter than this value.
     /// * `258`: Always lazy match.
     ///
-    /// As the maximum length of a match is `258`, values higher than this will have no further effect.
+    /// As the maximum length of a match is `258`, values higher than this will have
+    /// no further effect.
     ///
     /// * Default value: `32`
     pub lazy_if_less_than: u16,
