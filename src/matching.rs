@@ -61,6 +61,7 @@ fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usi
 /// `position`: The position in the data to match against.
 /// `prev_length`: The length of the previous `longest_match` check to compare against.
 /// `max_hash_checks`: The maximum number of matching hash chain positions to check.
+#[allow(unused_assignments)]
 pub fn longest_match(data: &[u8],
                      hash_table: &ChainedHashTable,
                      position: usize,
@@ -84,6 +85,7 @@ pub fn longest_match(data: &[u8],
 
     let max_length = cmp::min((data.len() - position), MAX_MATCH);
 
+    // The position in the hash chain we are currently checking.
     let mut current_head = hash_table.get_prev(position) as usize;
 
     if current_head >= position {
@@ -95,9 +97,10 @@ pub fn longest_match(data: &[u8],
 
     let mut iters = 0;
 
-    let mut prev_head = position;
+    // The position of the previous value in the hash chain.
+    let mut prev_head = 0;
 
-    while current_head >= limit && current_head != prev_head && iters < max_hash_checks {
+    while current_head >= limit && iters < max_hash_checks {
         // We only check further if the match length can actually increase
         if data[position + best_length - 1..position + best_length + 1] ==
            data[current_head + best_length - 1..current_head + best_length + 1] {
@@ -116,6 +119,9 @@ pub fn longest_match(data: &[u8],
         prev_head = current_head;
         current_head = hash_table.get_prev(current_head) as usize;
         if current_head >= prev_head {
+            // If the current hash chain value refers to itself, or is referring to
+            // a value that's higher (we only move backwars through the chain),
+            // we are at the end and can stop.
             break;
         }
         iters += 1;

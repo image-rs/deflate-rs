@@ -181,8 +181,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                         // Output update the huffman table that will be used to encode the
                         // lz77-compressed data.
                         deflate_state.encoder_state
-                            .update_huffman_table(&l_lengths, &d_lengths)
-                            .expect("Fatal error!: Failed to create huffman table!");
+                            .update_huffman_table(&l_lengths, &d_lengths)?;
 
                         // write the huffman compressed data and end of block code.
                         flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
@@ -212,8 +211,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                     deflate_state.bytes_written += written as u64;
                     // Update the state to use the fixed(pre-defined) huffman codes.
                     deflate_state.encoder_state
-                        .update_huffman_table(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE)
-                        .unwrap();
+                        .update_huffman_table(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE)?;
                     deflate_state.encoder_state.write_start_of_block(true, flush == Flush::Finish)?;
                     flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
                                        &mut deflate_state.encoder_state)?;

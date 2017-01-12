@@ -1,11 +1,30 @@
 use std::fmt;
 use bit_reverse::reverse_bits;
+use std::io;
 
 #[derive(Debug)]
 pub enum HuffmanError {
     EmptyLengthTable,
     CodeTooLong,
     _TooManyOfLength,
+}
+
+impl From<HuffmanError> for io::Error {
+    fn from(err: HuffmanError) -> io::Error {
+        // As these errors indicate bugs, rather than invalid input,
+        // we don't bother returning custom error types for them to the user.
+        match err {
+            HuffmanError::EmptyLengthTable => {
+                io::Error::new(io::ErrorKind::Other, "BUG! The length table was empty!")
+            }
+            HuffmanError::CodeTooLong => {
+                io::Error::new(io::ErrorKind::Other,
+                               "BUG! One or more huffman codes had a length that exceeded the \
+                                maximum allowed length value.")
+            }
+            _ => unimplemented!(),
+        }
+    }
 }
 
 // The number of length codes in the huffman table

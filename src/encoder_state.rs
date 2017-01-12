@@ -53,7 +53,13 @@ impl<W: Write> EncoderState<W> {
         match value {
             LDPair::Literal(l) => self.write_literal(l),
             LDPair::Length(l) => {
-                let (code, extra_bits_code) = self.huffman_table.get_length_huffman(l).unwrap();
+                let (code, extra_bits_code) =
+                    self.huffman_table
+                    .get_length_huffman(l).expect("Invalid huffman length value!");
+                // Ideally we would want to return Err here to avoid panicing an application on a
+                // bug, but that seems to drastically impact performance negatively.
+                        //.ok_or(io::Error::new(ErrorKind::Other,
+                        //                      "BUG!: Invalid huffman length value!"))?;
                 self.writer
                     .write_bits(code.code, code.length)?;
                 self.writer.write_bits(extra_bits_code.code, extra_bits_code.length)
@@ -61,7 +67,9 @@ impl<W: Write> EncoderState<W> {
             LDPair::Distance(d) => {
                 let (code, extra_bits_code) = self.huffman_table
                     .get_distance_huffman(d)
-                    .unwrap();
+                    .expect("Invalid huffman distance value!");
+//                    .ok_or(io::Error::new(ErrorKind::Other,
+//                                          "BUG!: Invalid huffman distance value!"))?;
 
                 self.writer
                     .write_bits(code.code, code.length)?;
