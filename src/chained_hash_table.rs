@@ -6,10 +6,12 @@ const HASH_SHIFT: u16 = 5;
 const HASH_MASK: u16 = WINDOW_MASK as u16;
 
 /// Returns a new hash value based on the previous value and the next byte
+#[inline]
 fn update_hash(current_hash: u16, to_insert: u8) -> u16 {
     update_hash_conf(current_hash, to_insert, HASH_SHIFT, HASH_MASK)
 }
 
+#[inline]
 fn update_hash_conf(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> u16 {
     ((current_hash << shift) ^ (to_insert as u16)) & mask
 }
@@ -60,11 +62,18 @@ impl ChainedHashTable {
 
     // Insert a byte into the hash table
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
-        self.current_hash = update_hash(self.current_hash, value);
-        self.prev[position & WINDOW_MASK] = self.head[self.current_hash as usize];
+        // Storing the hash in a temporary variable here makes the compiler avoid the
+        // bounds checks in this function.
+        let new_hash = update_hash(self.current_hash, value);
+
+        self.prev[position & WINDOW_MASK] = self.head[new_hash as usize];
+
         // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
         // where in the buffer (which is 64k bytes) we are referring to.
-        self.head[self.current_hash as usize] = position as u16;
+        self.head[new_hash as usize] = position as u16;
+
+        // Update the stored hash value with the new hash.
+        self.current_hash = new_hash;
     }
 
     // Get the head of the hash chain for the current hash value

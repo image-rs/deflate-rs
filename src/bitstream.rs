@@ -183,7 +183,6 @@ define_bit_writers!{
 }
 
 impl<W: Write> BitWriter for LsbWriter<W> {
-    #[inline(always)]
     fn write_bits(&mut self, v: u16, n: u8) -> io::Result<()> {
         // NOTE:(oyvindln) This outputs garbage data if n is 0, but v is not 0
         self.acc |= (v as u32) << self.bits;
