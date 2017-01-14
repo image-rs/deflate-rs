@@ -3,7 +3,7 @@ use std::io::Write;
 use std::mem;
 use huffman_table::{HuffmanTable, HuffmanError};
 use bitstream::{LsbWriter, BitWriter};
-use lz77::LDPair;
+use lzvalue::LZType;
 
 // The first bits of each block, which describe the type of the block
 // `-TTF` - TT = type, 00 = stored, 01 = fixed, 10 = dynamic, 11 = reserved, F - 1 if final block
@@ -47,29 +47,25 @@ impl<W: Write> EncoderState<W> {
         self.writer.write_bits(code.code, code.length)
     }
 
-    #[inline]
-    /// Write a LDPair value to the writer, returning Err if the write operation fails
-    pub fn write_ldpair(&mut self, value: LDPair) -> io::Result<()> {
+    // Write a LDPair value to the contained writer, returning Err if the write operation fails
+    pub fn write_lzvalue2(&mut self, value: LZType) -> io::Result<()> {
         match value {
-            LDPair::Literal(l) => self.write_literal(l),
-            LDPair::Length(l) => {
+            LZType::Literal(l) => self.write_literal(l),
+            LZType::StoredLengthDistance(l, d) => {
                 let (code, extra_bits_code) =
                     self.huffman_table
-                    .get_length_huffman(l).expect("Invalid huffman length value!");
-                // Ideally we would want to return Err here to avoid panicing an application on a
-                // bug, but that seems to drastically impact performance negatively.
-                        //.ok_or(io::Error::new(ErrorKind::Other,
-                        //                      "BUG!: Invalid huffman length value!"))?;
+                    .get_length_huffman(l);
                 self.writer
                     .write_bits(code.code, code.length)?;
-                self.writer.write_bits(extra_bits_code.code, extra_bits_code.length)
-            }
-            LDPair::Distance(d) => {
+                self.writer.write_bits(extra_bits_code.code, extra_bits_code.length)?;
+
                 let (code, extra_bits_code) = self.huffman_table
                     .get_distance_huffman(d)
                     .expect("Invalid huffman distance value!");
-//                    .ok_or(io::Error::new(ErrorKind::Other,
-//                                          "BUG!: Invalid huffman distance value!"))?;
+                // Ideally we would want to return Err here to avoid panicing an application on a
+                // bug, but that seems to drastically impact performance negatively.
+                //                    .ok_or(io::Error::new(ErrorKind::Other,
+                //                                          "BUG!: Invalid huffman distance value!"))?;
 
                 self.writer
                     .write_bits(code.code, code.length)?;

@@ -104,14 +104,6 @@ impl LZ77State {
     }
 }
 
-/// A structure representing either a literal, length or distance value
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum LDPair {
-    Literal(u8),
-    Length(u16),
-    Distance(u16),
-}
-
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
 fn process_chunk<W: OutputWriter>(data: &[u8],
@@ -563,22 +555,20 @@ pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use lzvalue::LZValue;
+    use lzvalue::{LZValue, LZType};
     use chained_hash_table::WINDOW_SIZE;
     use compression_options::DEFAULT_LAZY_IF_LESS_THAN;
     use test_utils::get_test_data;
 
     fn decompress_lz77(input: &[LZValue]) -> Vec<u8> {
         let mut output = Vec::new();
-        let mut last_length = 0;
         for p in input {
             match p.value() {
-                LDPair::Literal(l) => output.push(l),
-                LDPair::Length(l) => last_length = l,
-                LDPair::Distance(d) => {
+                LZType::Literal(l) => output.push(l),
+                LZType::StoredLengthDistance(l, d) => {
                     let start = output.len() - d as usize;
                     let mut n = 0;
-                    while n < last_length as usize {
+                    while n < l.actual_length() as usize {
                         let b = output[start + n];
                         output.push(b);
                         n += 1;
@@ -595,9 +585,11 @@ mod test {
         let mut output = vec![];
         for l in input {
             match l.value() {
-                LDPair::Literal(l) => output.push(l),
-                LDPair::Length(l) => output.extend(format!("<L {}>", l).into_bytes()),
-                LDPair::Distance(d) => output.extend(format!("<D {}>", d).into_bytes()),
+                LZType::Literal(l) => output.push(l),
+                LZType::StoredLengthDistance(l, d) => {
+                    output.extend(format!("<L {}>", l.actual_length()).into_bytes());
+                    output.extend(format!("<D {}>", d).into_bytes())
+                }
             }
         }
 
@@ -653,9 +645,9 @@ mod test {
         // let data = b" nba nbadg badger nbadger";
         let data = b"nba badger nbadger";
         let compressed = lz77_compress(data).unwrap();
-        let test = compressed[compressed.len() - 2];
-        if let LDPair::Length(n) = test.value() {
-            assert_eq!(n, 6);
+        let test = compressed[compressed.len() - 1];
+        if let LZType::StoredLengthDistance(l, _) = test.value() {
+            assert_eq!(l.actual_length(), 6);
         } else {
             print_output(&compressed);
             panic!();

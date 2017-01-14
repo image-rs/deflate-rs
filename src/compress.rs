@@ -30,7 +30,7 @@ pub fn flush_to_bitstream<W: Write>(buffer: &[LZValue],
                                     state: &mut EncoderState<W>)
                                     -> io::Result<()> {
     for &b in buffer {
-        state.write_ldpair(b.value())?
+        state.write_lzvalue2(b.value())?
     }
     state.write_end_of_block()
 }

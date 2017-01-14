@@ -1,6 +1,7 @@
 use std::fmt;
 use bit_reverse::reverse_bits;
 use std::io;
+use lzvalue::StoredLength;
 
 #[derive(Debug)]
 pub enum HuffmanError {
@@ -156,26 +157,20 @@ pub fn get_length_code(length: u16) -> Option<usize> {
 }
 
 /// Get the code for the huffman table and the extra bits for the requested length.
-/// returns None if length < 3 or length > 258.
-fn get_length_code_and_extra_bits(length: u16) -> Option<ExtraBits> {
-    if length < MIN_MATCH || length > MAX_MATCH {
-        // Invalid length!;
-        return None;
-    }
-
+fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
     // The minimun match length is 3, but length code table starts at 0,
     // so we need to subtract 3 to get the correct code.
-    let n = LENGTH_CODE[(length - MIN_MATCH) as usize];
+    let n = LENGTH_CODE[length.stored_length() as usize];
 
     // We can then get the base length from the base length table,
     // which we use to calculate the value of the extra bits.
-    let base = u16::from(BASE_LENGTH[n as usize]);
+    let base = BASE_LENGTH[n as usize];
     let num_bits = LENGTH_EXTRA_BITS_LENGTH[n as usize];
-    Some(ExtraBits {
+    ExtraBits {
         code_number: u16::from(n) + LENGTH_BITS_START,
         num_bits: num_bits,
-        value: length - base - MIN_MATCH,
-    })
+        value: (length.stored_length() - base).into(),
+    }
 
 }
 
@@ -387,22 +382,16 @@ impl HuffmanTable {
     /// Get the huffman code and extra bits for the specified length
     ///
     /// returns None if the length is larger than MIN_MATCH or smaller than MAX_MATCH
-    pub fn get_length_huffman(&self, length: u16) -> Option<((HuffmanCode, HuffmanCode))> {
-        if length < MIN_MATCH || length > MAX_MATCH {
-            return None;
-        }
+    pub fn get_length_huffman(&self, length: StoredLength) -> (HuffmanCode, HuffmanCode) {
 
-        let length_data = match get_length_code_and_extra_bits(length) {
-            Some(t) => t,
-            None => return None,
-        };
+        let length_data = get_length_code_and_extra_bits(length);
 
         let length_huffman_code = self.codes[length_data.code_number as usize];
-        Some((length_huffman_code,
-              HuffmanCode {
-                  code: length_data.value,
-                  length: length_data.num_bits,
-              }))
+        (length_huffman_code,
+         HuffmanCode {
+             code: length_data.value,
+             length: length_data.num_bits,
+         })
     }
 
     /// Get the huffman code and extra bits for the specified distance
@@ -432,7 +421,8 @@ impl HuffmanTable {
                                     length: u16,
                                     distance: u16)
                                     -> Option<(LengthAndDistanceBits)> {
-        let l_codes = self.get_length_huffman(length).unwrap();
+        assert!(length >= MIN_MATCH && length < MAX_DISTANCE);
+        let l_codes = self.get_length_huffman(StoredLength::from_actual_length(length));
         let d_codes = self.get_distance_huffman(distance).unwrap();
         Some(LengthAndDistanceBits {
             length_code: l_codes.0,
@@ -443,6 +433,7 @@ impl HuffmanTable {
     }
 }
 
+#[cfg(test)]
 mod test {
     // There seems to be a bug with unused importwarnings here, so we ignore them for now
     #[allow(unused_imports)]
@@ -450,24 +441,31 @@ mod test {
     #[allow(unused_imports)]
     use super::{get_length_code_and_extra_bits, get_distance_code_and_extra_bits,
                 build_length_count_table};
+
+    use lzvalue::StoredLength;
+
+    fn l(length: u16) -> StoredLength {
+        StoredLength::from_actual_length(length)
+    }
+
     #[test]
     fn test_get_length_code() {
-        let extra_bits = get_length_code_and_extra_bits(4).unwrap();
+        let extra_bits = get_length_code_and_extra_bits(l(4));
         assert_eq!(extra_bits.code_number, 258);
         assert_eq!(extra_bits.num_bits, 0);
         assert_eq!(extra_bits.value, 0);
 
-        let extra_bits = get_length_code_and_extra_bits(165).unwrap();
+        let extra_bits = get_length_code_and_extra_bits(l(165));
         assert_eq!(extra_bits.code_number, 282);
         assert_eq!(extra_bits.num_bits, 5);
         assert_eq!(extra_bits.value, 2);
 
-        let extra_bits = get_length_code_and_extra_bits(257).unwrap();
+        let extra_bits = get_length_code_and_extra_bits(l(257));
         assert_eq!(extra_bits.code_number, 284);
         assert_eq!(extra_bits.num_bits, 5);
         assert_eq!(extra_bits.value, 30);
 
-        let extra_bits = get_length_code_and_extra_bits(258).unwrap();
+        let extra_bits = get_length_code_and_extra_bits(l(258));
         assert_eq!(extra_bits.code_number, 285);
         assert_eq!(extra_bits.num_bits, 0);
     }

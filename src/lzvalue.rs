@@ -1,43 +1,70 @@
-use lz77::LDPair;
-use huffman_table::MAX_DISTANCE;
+use huffman_table::{MAX_DISTANCE, MIN_MATCH};
+#[cfg(test)]
+use huffman_table::MAX_MATCH;
 
-const LITERAL_MASK: u16 = 0b1100_0000_0000_0000;
-const LENGTH_MASK: u16 = 0b1000_0000_0000_0000;
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct StoredLength {
+    length: u8,
+}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+impl StoredLength {
+    #[cfg(test)]
+    pub fn from_actual_length(length: u16) -> StoredLength {
+        assert!(length <= MAX_MATCH && length >= MIN_MATCH);
+        StoredLength { length: (length - MIN_MATCH) as u8 }
+    }
+
+    pub fn new(stored_length: u8) -> StoredLength {
+        StoredLength { length: stored_length }
+    }
+
+    pub fn stored_length(&self) -> u8 {
+        self.length
+    }
+
+    #[cfg(test)]
+    pub fn actual_length(&self) -> u16 {
+        u16::from(self.length) + MIN_MATCH
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum LZType {
+    Literal(u8),
+    StoredLengthDistance(StoredLength, u16),
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct LZValue {
-    data: u16,
+    litlen: u8,
+    distance: u16,
 }
 
 impl LZValue {
+    #[inline]
     pub fn literal(value: u8) -> LZValue {
-        LZValue { data: value as u16 ^ LITERAL_MASK }
-    }
-
-    pub fn length(length: u16) -> LZValue {
-        // We prob want to use length - 3 here
-        LZValue { data: length ^ LENGTH_MASK }
-    }
-
-    pub fn distance(mut distance: u16) -> LZValue {
-        if distance == MAX_DISTANCE {
-            distance = 0;
+        LZValue {
+            litlen: value,
+            distance: 0,
         }
-        LZValue { data: distance }
     }
 
     #[inline]
-    pub fn value(&self) -> LDPair {
-        match self.data & LITERAL_MASK {
-            LITERAL_MASK => LDPair::Literal(self.data as u8),
-            LENGTH_MASK => LDPair::Length(self.data & !LENGTH_MASK),
-            _ => {
-                if self.data == 0 {
-                    LDPair::Distance(MAX_DISTANCE)
-                } else {
-                    LDPair::Distance(self.data)
-                }
-            }
+    pub fn length_distance(length: u16, distance: u16) -> LZValue {
+        assert!(distance > 0 && distance <= MAX_DISTANCE);
+        let stored_length = (length - MIN_MATCH) as u8;
+        LZValue {
+            litlen: stored_length,
+            distance: distance,
+        }
+    }
+
+    #[inline]
+    pub fn value(&self) -> LZType {
+        if self.distance != 0 {
+            LZType::StoredLengthDistance(StoredLength::new(self.litlen), self.distance)
+        } else {
+            LZType::Literal(self.litlen)
         }
     }
 }
@@ -45,13 +72,12 @@ impl LZValue {
 #[cfg(test)]
 mod test {
     use super::*;
-    use lz77::LDPair;
     use huffman_table::{MIN_MATCH, MIN_DISTANCE, MAX_MATCH, MAX_DISTANCE};
     #[test]
     fn lzvalue() {
         for i in 0..255 as usize + 1 {
             let v = LZValue::literal(i as u8);
-            if let LDPair::Literal(n) = v.value() {
+            if let LZType::Literal(n) = v.value() {
                 assert_eq!(n as usize, i);
             } else {
                 panic!();
@@ -59,18 +85,19 @@ mod test {
         }
 
         for i in MIN_MATCH..MAX_MATCH + 1 {
-            let v = LZValue::length(i);
-            if let LDPair::Length(n) = v.value() {
-                assert_eq!(n, i);
+            let v = LZValue::length_distance(i, 5);
+            if let LZType::StoredLengthDistance(l, _) = v.value() {
+                assert_eq!(l.actual_length(), i);
             } else {
                 panic!();
             }
         }
 
         for i in MIN_DISTANCE..MAX_DISTANCE + 1 {
-            let v = LZValue::distance(i);
-            if let LDPair::Distance(n) = v.value() {
-                assert_eq!(n, i);
+            let v = LZValue::length_distance(5, i);
+
+            if let LZType::StoredLengthDistance(_, d) = v.value() {
+                assert_eq!(d, i);
             } else {
                 panic!("Failed to get distance {}", i);
             }
