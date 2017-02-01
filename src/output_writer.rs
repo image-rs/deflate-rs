@@ -2,6 +2,8 @@ use lzvalue::LZValue;
 use huffman_table::{NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, END_OF_BLOCK_POSITION,
                     get_distance_code, get_length_code};
 
+pub type FrequencyType = u16;
+
 /// A trait used by the lz77 compression function to write output.
 /// Used to use the same function for compression with both fixed and dynamic huffman codes
 /// (When fixed codes are used, there is no need to store frequency information)
@@ -75,8 +77,8 @@ pub struct DynamicWriter {
     // we want to use
     // The two last length codes are not actually used, but only participates in code construction
     // Therefore, we ignore them to get the correct number of lengths
-    frequencies: [u16; NUM_LITERALS_AND_LENGTHS],
-    distance_frequencies: [u16; NUM_DISTANCE_CODES],
+    frequencies: [FrequencyType; NUM_LITERALS_AND_LENGTHS],
+    distance_frequencies: [FrequencyType; NUM_DISTANCE_CODES],
 }
 
 impl OutputWriter for DynamicWriter {

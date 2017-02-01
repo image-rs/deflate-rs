@@ -19,7 +19,7 @@ fn load_from_file(name: &str) -> Vec<u8> {
 
 fn get_test_data() -> Vec<u8> {
     use std::env;
-    let path = env::var("TEST_FILE").unwrap_or("tests/pg11.txt".to_string());
+    let path = env::var("TEST_FILE").unwrap_or_else(|_| "tests/pg11.txt".to_string());
     load_from_file(&path)
 }
 

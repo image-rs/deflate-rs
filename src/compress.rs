@@ -259,7 +259,7 @@ mod test {
         let compressed = compress_data_fixed(&test_data);
 
         let result = decompress_to_end(&compressed);
-        println!("Output: `{}`", str::from_utf8(&result).unwrap());
+
         assert_eq!(test_data, result);
     }
 
@@ -269,10 +269,6 @@ mod test {
         let compressed = compress_data_fixed(&data);
         let result = decompress_to_end(&compressed);
 
-        println!("data len: {}, result len: {}", data.len(), result.len());
-        for n in compressed {
-            println!("{:#b}", n)
-        }
         assert_eq!(data, result);
     }
 
@@ -300,7 +296,7 @@ mod test {
         let input = get_test_data();
 
         let compressed = compress_data_fixed(&input);
-        println!("Compressed len: {}", compressed.len());
+        println!("Fixed codes compressed len: {}", compressed.len());
         let result = decompress_to_end(&compressed);
 
         assert_eq!(input.len(), result.len());

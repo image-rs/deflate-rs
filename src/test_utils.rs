@@ -45,8 +45,8 @@ pub fn decompress_to_end(input: &[u8]) -> Vec<u8> {
     let mut e = DeflateDecoder::new(i);
 
     let res = e.read_to_end(&mut result);
-    if let Ok(n) = res {
-        println!("{} bytes decompressed successfully", n);
+    if let Ok(_) = res {
+        //        println!("{} bytes decompressed successfully", n);
     } else {
         println!("result size: {}", result.len());
         res.unwrap();

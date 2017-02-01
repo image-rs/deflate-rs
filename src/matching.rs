@@ -168,23 +168,18 @@ mod test {
     /// Test that we get the longest of the matches
     #[test]
     fn get_longest_match() {
-        use std::str::from_utf8;
-
         let test_data = b"xTest data, Test_data,zTest data";
         let hash_table = filled_hash_table(&test_data[..23 + 1 + HASH_BYTES - 1]);
 
-        println!("Bytes: {}",
-                 from_utf8(&test_data[..23 + 1 + HASH_BYTES - 1]).unwrap());
-        println!("23: {}", from_utf8(&[test_data[23]]).unwrap());
         let (length, distance) = super::longest_match_current(test_data, &hash_table);
-        println!("Distance: {}", distance);
+
         // We check that we get the longest match, rather than the shorter, but closer one.
         assert_eq!(distance, 22);
         assert_eq!(length, 9);
         let test_arr2 = [10u8, 10, 10, 10, 10, 10, 10, 10, 2, 3, 5, 10, 10, 10, 10, 10];
         let hash_table = filled_hash_table(&test_arr2[..HASH_BYTES + 1 + 1 + 2]);
         let (length, distance) = super::longest_match_current(&test_arr2, &hash_table);
-        println!("Distance: {}, length: {}", distance, length);
+
         assert_eq!(distance, 1);
         assert_eq!(length, 4);
     }
@@ -197,14 +192,9 @@ mod test {
         let mut hash_table = ChainedHashTable::from_starting_values(test_data[0], test_data[1]);
         for (n, &b) in test_data[2..5].iter().enumerate() {
             hash_table.add_hash_value(n, b);
-            println!("N: {}", n);
         }
 
         let (match_length, match_dist) = longest_match(test_data, &hash_table, 2, 0, 4096);
-        let head = hash_table.current_head();
-        println!("Current head: {}", head);
-        let prev = hash_table.get_prev(head as usize);
-        println!("Current prev: {}", prev);
 
         assert_eq!(match_dist, 1);
         assert!(match_length > 2);

@@ -28,6 +28,7 @@ use std::thread;
 /// let mut encoder = DeflateEncoder::new(Vec::new(), Compression::Default);
 /// encoder.write_all(data).unwrap();
 /// let compressed_data = encoder.finish().unwrap();
+/// # let _ = compressed_data;
 /// ```
 pub struct DeflateEncoder<W: Write> {
     // We use a box here to avoid putting the buffers on the stack
@@ -111,6 +112,7 @@ impl<W: Write> Drop for DeflateEncoder<W> {
 /// let mut encoder = ZlibEncoder::new(Vec::new(), Compression::Default);
 /// encoder.write_all(data).unwrap();
 /// let compressed_data = encoder.finish().unwrap();
+/// # let _ = compressed_data;
 /// ```
 pub struct ZlibEncoder<W: Write> {
     // We use a box here to avoid putting the buffers on the stack
@@ -239,7 +241,7 @@ mod test {
             compressor.write(&data[data.len() / 2..]).unwrap();
             compressor.finish().unwrap()
         };
-        println!("writer compressed len:{}", compressed.len());
+
         let res = decompress_to_end(&compressed);
         assert!(res == data);
     }
@@ -254,7 +256,7 @@ mod test {
             compressor.write(&data[data.len() / 2..]).unwrap();
             compressor.finish().unwrap()
         };
-        println!("writer compressed len:{}", compressed.len());
+
         let res = decompress_zlib(&compressed);
         assert!(res == data);
     }

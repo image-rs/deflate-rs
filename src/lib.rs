@@ -26,6 +26,7 @@
 //! let mut encoder = ZlibEncoder::new(Vec::new(), Compression::Default);
 //! encoder.write_all(data).unwrap();
 //! let compressed_data = encoder.finish().unwrap();
+//! # let _ = compressed_data;
 //! ```
 
 #[cfg(test)]
@@ -214,7 +215,8 @@ mod test {
         let input = get_test_data();
         let compressed = deflate_bytes(&input);
 
-        println!("Compressed len: {}", compressed.len());
+        println!("dynamic_string_file compressed(default) len: {}",
+                 compressed.len());
 
         let result = decompress_to_end(&compressed);
         // Not using assert_eq here deliberately to avoid massive amounts of output spam
@@ -235,7 +237,7 @@ mod test {
         //     f.write_all(&compressed).unwrap();
         // }
 
-        println!("compressed length: {}", compressed.len());
+        println!("file_zlib compressed(default) length: {}", compressed.len());
 
         let result = decompress_zlib(&compressed);
 

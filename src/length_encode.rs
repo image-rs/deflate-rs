@@ -91,9 +91,10 @@ pub fn encode_lengths<I>(lengths: I) -> Option<(Vec<EncodedLength>, [u16; 19])>
                 let val = EncodedLength::from_prev_and_repeat(prev, repeat);
                 update_out_and_freq(val, &mut out, &mut frequencies);
                 repeat = 0;
-                // If we have a new length value, output l unless the last value is 0.
+                // If we have a new length value, output l unless the last value is 0 or l is the
+                // last byte.
                 if l != prev {
-                    if l != 0 {
+                    if l != 0 || iter.peek().is_none() {
                         update_out_and_freq(EncodedLength::Length(l), &mut out, &mut frequencies);
                         repeat = 0;
                     } else {
@@ -140,195 +141,412 @@ pub fn encode_lengths<I>(lengths: I) -> Option<(Vec<EncodedLength>, [u16; 19])>
     Some((out, frequencies))
 }
 
-type NodeIndex = u16;
-type WeightType = u32;
+#[cfg(currently_not_in_use)]
+mod bpm {
 
-/// A struct representing a node used in the package-merge algorithm
-#[derive(Copy, Clone, Debug)]
-struct ChainNode {
-    // The weight of the node, which in this case is the frequency of the symbol in the input
-    // data we are creating huffman codes for
-    weight: WeightType,
-    // Number of leaf nodes to the left of this node
-    // In this case, the count is equal to the symbol in the input data this node represents
-    count: u16,
-    // A pointer to the previous node in this chain, if it exists
-    // As using actual pointers in rust would involve unsafe code, the tail is represented by an
-    // index to the vector containing all the nodes. (This comes with the added benefit of being
-    // able to use a smaller type than a pointer, potentially saving some memory)
-    tail: Option<NodeIndex>,
-}
+    type NodeIndex = u16;
+    type WeightType = u32;
 
-/// A struct representing leaves (same as chainNode, but without the tail)
-#[derive(Debug)]
-struct Leaf {
-    weight: WeightType,
-    count: u16,
-}
-
-fn advance_lookahead(indexes: &mut [(usize, usize)], index: usize, next: usize) {
-    indexes[index].0 = indexes[index].1;
-    indexes[index].1 = next;
-}
-
-/// Implementation of boundary package merge algorithm described by Katajainen/Moffat/Turpin in
-/// "A Fast and Space-Economical Algorithm for Length-Limited Coding"
-fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
-                          nodes: &mut Vec<ChainNode>,
-                          leaves: &[Leaf],
-                          index: usize,
-                          last: bool) {
-
-    let count = nodes[lookahead_indexes[index].1].count;
-    let next_count = count + 1;
-
-    if index == 0 && count >= leaves.len() as u16 {
-        return;
-    };
-
-    if index == 0 {
-        // If we are at index 0, we need to move the lookahead to the next leaf node.
-        advance_lookahead(lookahead_indexes, index, nodes.len());
-
-        let new_weight = leaves[count as usize].weight;
-
-        // Add the new leaf node.
-        nodes.push(ChainNode {
-            weight: new_weight,
-            count: next_count,
-            tail: None,
-        });
-
-        return;
+    /// A struct representing a node used in the package-merge algorithm
+    #[derive(Copy, Clone, Debug)]
+    struct ChainNode {
+        // The weight of the node, which in this case is the frequency of the symbol in the input
+        // data we are creating huffman codes for
+        weight: WeightType,
+        // Number of leaf nodes to the left of this node
+        // In this case, the count is equal to the symbol in the input data this node represents
+        count: u16,
+        // A pointer to the previous node in this chain, if it exists
+        // As using actual pointers in rust would involve unsafe code, the tail is represented by an
+        // index to the vector containing all the nodes. (This comes with the added benefit of being
+        // able to use a smaller type than a pointer, potentially saving some memory)
+        tail: Option<NodeIndex>,
     }
 
-    let sum = {
-        let la = lookahead_indexes[index - 1];
-        nodes[la.0].weight + nodes[la.1].weight
-    };
+    /// A struct representing leaves (same as chainNode, but without the tail)
+    #[derive(Debug)]
+    struct Leaf {
+        weight: WeightType,
+        count: u16,
+    }
 
-    // If the sum of the two lookahead nodes in the previous list is smaller than the next leaf
-    // node, we add a new package, otherwise, we add another leaf node.
-    if count < leaves.len() as u16 && sum > leaves[count as usize].weight {
-        // Record the tail of the current lookahead first to avoid the borrow checker.
-        let y = nodes[lookahead_indexes[index].1].tail;
+    fn advance_lookahead(indexes: &mut [(usize, usize)], index: usize, next: usize) {
+        indexes[index].0 = indexes[index].1;
+        indexes[index].1 = next;
+    }
 
-        let next_weight = leaves[count as usize].weight;
+    /// Implementation of boundary package merge algorithm described by Katajainen/Moffat/Turpin in
+    /// "A Fast and Space-Economical Algorithm for Length-Limited Coding"
+    fn boundary_package_merge(lookahead_indexes: &mut [(usize, usize)],
+                              nodes: &mut Vec<ChainNode>,
+                              leaves: &[Leaf],
+                              index: usize,
+                              last: bool) {
 
-        advance_lookahead(lookahead_indexes, index, nodes.len());
+        let count = nodes[lookahead_indexes[index].1].count;
+        let next_count = count + 1;
 
-        // Add a leaf node.
-        nodes.push(ChainNode {
-            weight: next_weight,
-            count: next_count,
-            tail: y,
-        });
-    } else {
-        {
+        if index == 0 && count >= leaves.len() as u16 {
+            return;
+        };
+
+        if index == 0 {
+            // If we are at index 0, we need to move the lookahead to the next leaf node.
             advance_lookahead(lookahead_indexes, index, nodes.len());
 
-            // Add a package containing the sum of the lookaheads in the previous list.
+            let new_weight = leaves[count as usize].weight;
+
+            // Add the new leaf node.
             nodes.push(ChainNode {
-                weight: sum,
-                count: count,
-                tail: Some(lookahead_indexes[index - 1].1 as NodeIndex),
+                weight: new_weight,
+                count: next_count,
+                tail: None,
             });
+
+            return;
         }
-        if !last {
-            // If we add a package, we need to run boundary_pm on the previous lists to look for
-            // more leaf nodes
-            // We might want to avoid using recursion here, though we won't ever go more than 15
-            // levels in as that is the maximum code length allowed by the deflate spec.
-            boundary_package_merge(lookahead_indexes, nodes, leaves, index - 1, false);
-            boundary_package_merge(lookahead_indexes, nodes, leaves, index - 1, false);
+
+        let sum = {
+            let la = lookahead_indexes[index - 1];
+            nodes[la.0].weight + nodes[la.1].weight
+        };
+
+        // If the sum of the two lookahead nodes in the previous list is smaller than the next leaf
+        // node, we add a new package, otherwise, we add another leaf node.
+        if count < leaves.len() as u16 && sum > leaves[count as usize].weight {
+            // Record the tail of the current lookahead first to avoid the borrow checker.
+            let y = nodes[lookahead_indexes[index].1].tail;
+
+            let next_weight = leaves[count as usize].weight;
+
+            advance_lookahead(lookahead_indexes, index, nodes.len());
+
+            // Add a leaf node.
+            nodes.push(ChainNode {
+                weight: next_weight,
+                count: next_count,
+                tail: y,
+            });
+        } else {
+            {
+                advance_lookahead(lookahead_indexes, index, nodes.len());
+
+                // Add a package containing the sum of the lookaheads in the previous list.
+                nodes.push(ChainNode {
+                    weight: sum,
+                    count: count,
+                    tail: Some(lookahead_indexes[index - 1].1 as NodeIndex),
+                });
+            }
+            if !last {
+                // If we add a package, we need to run boundary_pm on the previous lists to look for
+                // more leaf nodes
+                // We might want to avoid using recursion here, though we won't ever go more than 15
+                // levels in as that is the maximum code length allowed by the deflate spec.
+                boundary_package_merge(lookahead_indexes, nodes, leaves, index - 1, false);
+                boundary_package_merge(lookahead_indexes, nodes, leaves, index - 1, false);
+            }
         }
+    }
+
+    pub fn _huffman_lengths_from_frequency_bpm(frequencies: &[u16], max_len: usize) -> Vec<u8> {
+        // Make sure the number of frequencies is sensible since we use u16 to index.
+        assert!(max_len > 1 && max_len < 16);
+
+        let mut lengths = vec![0; frequencies.len()];
+
+        // Create a vector of nodes used by the package merge algorithm
+        // We start by adding a leaf node for each nonzero frequency, and subsequently
+        // sorting them by weight.
+        let mut leaves: Vec<_> = frequencies.iter()
+            .enumerate()
+            .filter_map(|(n, f)| {
+                if *f > 0 {
+                    Some(Leaf {
+                        weight: *f as WeightType,
+                        count: n as u16,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        // NOTE: We might want to consider normalising the
+        // frequencies if we are going to use very large blocks as large freq values
+        // result in a large number of nodes
+
+        // Special case with zero or 1 value having a non-zero frequency
+        // (this will break the package merge otherwise)
+        if leaves.len() == 1 {
+            lengths[leaves[0].count as usize] += 1;
+            return lengths;
+        } else if leaves.is_empty() {
+            return lengths;
+        }
+
+        leaves.sort_by(|a, b| a.weight.cmp(&b.weight));
+
+        // We create the two first lookahead nodes from the two first leaves, with counts 1 and 2
+        // TODO: Find an algorhithm to approximate the number of nodes we will get
+        let mut nodes = Vec::with_capacity(8 * leaves.len());
+        nodes.extend(leaves.iter()
+            .take(2)
+            .enumerate()
+            .map(|(n, f)| {
+                ChainNode {
+                    weight: f.weight,
+                    count: n as u16 + 1,
+                    tail: None,
+                }
+            }));
+
+        // Indexes to the current lookahead nodes in each list.
+        // The lookahead indexes in each list start out pointing to the first two leaves.
+        let mut lookahead_ptrs = vec![(0, 1); max_len];
+
+        // The boundary package-merge algorhithm is run repeatedly until we have 2n - 2 nodes in the
+        // last list, which tells us how many active nodes there are in each list.
+        // As we have already added the two first nodes in each list, we need to run
+        // 2n - 2 - 2 times more to get the needed number of nodes in the last list.
+        let num_runs = (2 * leaves.len()) - 2 - 2;
+        for i in 0..num_runs {
+            let last = i == num_runs - 1;
+            boundary_package_merge(&mut lookahead_ptrs, &mut nodes, &leaves, max_len - 1, last);
+        }
+
+
+        let head = lookahead_ptrs.last().unwrap().1;
+
+        // Generate the lengths from the trees generated by the package merge algorithm.
+        let mut next_node = head;
+        loop {
+            let node = nodes[next_node];
+
+            for item in leaves.iter().take(node.count as usize) {
+                lengths[item.count as usize] += 1;
+            }
+
+            if let Some(n) = node.tail {
+                next_node = n as usize;
+            } else {
+                break;
+            }
+        }
+        lengths
     }
 }
 
 pub fn huffman_lengths_from_frequency(frequencies: &[u16], max_len: usize) -> Vec<u8> {
-    // Make sure the number of frequencies is sensible since we use u16 to index.
-    assert!(max_len > 1 && max_len < 16);
+    in_place::in_place_lengths(frequencies, max_len)
+    // huffman_lengths_from_frequency_bpm(frequencies, max_len)
+}
 
-    let mut lengths = vec![0; frequencies.len()];
+mod in_place {
+    type WeightType = u32;
 
-    // Create a vector of nodes used by the package merge algorithm
-    // We start by adding a leaf node for each nonzero frequency, and subsequently
-    // sorting them by weight.
-    let mut leaves: Vec<_> = frequencies.iter()
-        .enumerate()
-        .filter_map(|(n, f)| {
-            if *f > 0 {
-                Some(Leaf {
-                    weight: *f as WeightType,
-                    count: n as u16,
-                })
-            } else {
-                None
-            }
-        })
-        .collect();
-    // NOTE: We might want to consider normalising the
-    // frequencies if we are going to use very large blocks as large freq values
-    // result in a large number of nodes
-
-    // Special case with zero or 1 value having a non-zero frequency
-    // (this will break the package merge otherwise)
-    if leaves.len() == 1 {
-        lengths[leaves[0].count as usize] += 1;
-        return lengths;
-    } else if leaves.is_empty() {
-        return lengths;
-    }
-
-    leaves.sort_by(|a, b| a.weight.cmp(&b.weight));
-
-    // We create the two first lookahead nodes from the two first leaves, with counts 1 and 2
-    // TODO: Find an algorhithm to approximate the number of nodes we will get
-    let mut nodes = Vec::with_capacity(8 * leaves.len());
-    nodes.extend(leaves.iter()
-        .take(2)
-        .enumerate()
-        .map(|(n, f)| {
-            ChainNode {
-                weight: f.weight,
-                count: n as u16 + 1,
-                tail: None,
-            }
-        }));
-
-    // Indexes to the current lookahead nodes in each list.
-    // The lookahead indexes in each list start out pointing to the first two leaves.
-    let mut lookahead_ptrs = vec![(0, 1); max_len];
-
-    // The boundary package-merge algorhithm is run repeatedly until we have 2n - 2 nodes in the
-    // last list, which tells us how many active nodes there are in each list.
-    // As we have already added the two first nodes in each list, we need to run
-    // 2n - 2 - 2 times more to get the needed number of nodes in the last list.
-    let num_runs = (2 * leaves.len()) - 2 - 2;
-    for i in 0..num_runs {
-        let last = i == num_runs - 1;
-        boundary_package_merge(&mut lookahead_ptrs, &mut nodes, &leaves, max_len - 1, last);
-    }
-
-
-    let head = lookahead_ptrs.last().unwrap().1;
-
-    // Generate the lengths from the trees generated by the package merge algorithm.
-    let mut next_node = head;
-    loop {
-        let node = nodes[next_node];
-
-        for item in leaves.iter().take(node.count as usize) {
-            lengths[item.count as usize] += 1;
-        }
-
-        if let Some(n) = node.tail {
-            next_node = n as usize;
+    fn validate_lengths(lengths: &[u8]) -> bool {
+        let v = lengths.iter().fold(0f64, |acc, &n| {
+            acc + if n != 0 { 2f64.powi(-(n as i32)) } else { 0f64 }
+        });
+        if v > 1.0 {
+            println!("Sum greater than 1.0: ({})", v);
+            false
         } else {
-            break;
+            // println!("Sum ok: ({})", v);
+            true
         }
     }
-    lengths
+
+    #[derive(Eq, Ord, PartialEq, PartialOrd, Debug, Clone, Copy, Default)]
+    pub struct Node {
+        value: WeightType,
+        symbol: u16,
+    }
+
+    fn step_1(leaves: &mut [Node]) {
+        // If there are less than 2 non-zero frequencies, this function should not have been
+        // called and we should not have gotten to this point.
+        debug_assert!(leaves.len() >= 2);
+        let mut root = 0;
+        let mut leaf = 2;
+
+        leaves[0].value += leaves[1].value;
+
+        for next in 1..leaves.len() - 1 {
+            if (leaf >= leaves.len()) || (leaves[root].value < leaves[leaf].value) {
+                leaves[next].value = leaves[root].value;
+                leaves[root].value = next as WeightType;
+                root += 1;
+            } else {
+                leaves[next].value = leaves[leaf].value;
+                leaf += 1;
+            }
+
+            if (leaf >= leaves.len()) ||
+               (root < next && (leaves[root].value < leaves[leaf].value)) {
+                leaves[next].value += leaves[root].value;
+                leaves[root].value = next as WeightType;
+                root += 1;
+            } else {
+                leaves[next].value += leaves[leaf].value;
+                leaf += 1;
+            }
+        }
+    }
+
+    fn step_2(leaves: &mut [Node]) {
+        debug_assert!(leaves.len() >= 2);
+        let n = leaves.len();
+
+        leaves[n - 2].value = 0;
+        for t in (0..(n + 1 - 3)).rev() {
+            leaves[t].value = leaves[leaves[t].value as usize].value + 1;
+        }
+
+        let mut available = 1 as usize;
+        let mut used = 0;
+        let mut depth = 0;
+        let mut root = n as isize - 2;
+        let mut next = n as isize - 1;
+
+        while available > 0 {
+            while root >= 0 && leaves[root as usize].value == depth {
+                used += 1;
+                root -= 1;
+            }
+            while available > used {
+                leaves[next as usize].value = depth;
+                next -= 1;
+                available -= 1;
+            }
+            available = 2 * used;
+            depth += 1;
+            used = 0;
+        }
+    }
+
+    const MAX_NUMBER_OF_CODES: usize = 32;
+    const NUM_CODES_LENGTH: usize = MAX_NUMBER_OF_CODES + 1;
+
+    /// Checks if any of the lengths exceed `max_len`, and if that is the case, alters the length
+    /// table so that no codes exceed `max_len`.
+    /// This is ported from miniz (which is released as public domain by Rich Geldreich
+    /// https://github.com/richgel999/miniz/blob/master/miniz.c)
+    ///
+    /// This will not generate optimal (minimim-redundancy) codes, however in most cases
+    /// this won't make a large difference.
+    pub fn enforce_max_code_lengths(num_codes: &mut [u16; NUM_CODES_LENGTH],
+                                    num_used: usize,
+                                    max_len: usize) {
+        debug_assert!(max_len <= 15);
+
+        if num_used <= 1 {
+            return;
+        } else {
+            let mut num_above_max = 0u16;
+            for &l in num_codes[(max_len as usize + 1)..].iter() {
+                num_above_max += l;
+            }
+
+            num_codes[max_len] += num_above_max;
+
+            let mut total = 0u32;
+            for i in (1..max_len + 1).rev() {
+                // This should be safe as max_len won't be higher than 15, and num_codes[i] can't
+                // be higher than 288,
+                // and 288 << 15 will not be anywhere close to overflowing 32 bits
+                total += (num_codes[i] as u32) << (max_len - i);
+            }
+
+            // miniz uses unsigned long here. 32-bits should be sufficient though,
+            // as max_len won't be longer than 15 anyhow.
+            while total != 1u32 << max_len {
+                num_codes[max_len] -= 1;
+                for i in (1..max_len).rev() {
+                    if num_codes[i] != 0 {
+                        num_codes[i] -= 1;
+                        num_codes[i + 1] += 2;
+                        break;
+                    }
+                }
+                total -= 1;
+            }
+        }
+    }
+
+    /// Generate huffman code lengths, using the algorithm described by
+    /// Moffat and Katajainen in In-Place Calculation of Minimum-Redundancy Codes
+    /// http://people.eng.unimelb.edu.au/ammoffat/abstracts/mk95wads.html
+    /// and it's implementation.
+    ///
+    /// This is significantly faster, and seems to generally create lengths that result in length
+    /// tables that are better compressible than the algorithm used previously. The downside of this
+    /// algorithm is that it's not length-limited, so if too long code lengths are generated,
+    /// it might result in a sub-optimal tables as the length-restricting function isn't optimal.
+    pub fn in_place_lengths(frequencies: &[u16], max_len: usize) -> Vec<u8> {
+        // Discard zero length nodes as they won't be given a code and thus don't need to
+        // participate in code length generation and create a new vec of the remaining
+        // symbols and weights.
+        let mut leaves: Vec<Node> = frequencies.iter()
+            .enumerate()
+            .filter_map(|(n, f)| {
+                if *f > 0 {
+                    Some(Node {
+                        value: *f as WeightType,
+                        symbol: n as u16,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut ret = vec![0u8; frequencies.len()];
+
+        // Special cases with zero or 1 value having a non-zero frequency
+        if leaves.len() == 1 {
+            ret[leaves[0].symbol as usize] = 1;
+            return ret;
+        } else if leaves.is_empty() {
+            return ret;
+        }
+
+        // Sort the leaves by value. As the sort in the standard library is stable, we don't
+        // have to worry about the symbol code here.
+        leaves.sort_by(|&a, &b| a.value.cmp(&b.value));
+
+        step_1(&mut leaves);
+        step_2(&mut leaves);
+
+        // Count how many codes of each length used, for usage in the next section.
+        let mut num_codes = {
+            let mut num_codes = [0u16; NUM_CODES_LENGTH];
+            for l in &leaves {
+                num_codes[l.value as usize] += 1;
+            }
+            num_codes
+        };
+
+        // As the algorithm used here doesn't limit the maximum length that can be generated
+        // we need to make sure none of the lengths exceed `max_len`
+        enforce_max_code_lengths(&mut num_codes, leaves.len(), max_len);
+
+        // Output the actual lengths
+        let mut leaf_it = leaves.iter().rev();
+        for (&n_codes, i) in num_codes[1..max_len + 1].iter().zip(1..(max_len as u8) + 1) {
+            for _ in 0..n_codes {
+                ret[leaf_it.next().unwrap().symbol as usize] = i;
+            }
+        }
+
+        debug_assert_eq!(leaf_it.next(), None);
+        debug_assert!(validate_lengths(&ret),
+                      "The generated length codes were not valid!");
+
+        ret
+    }
+
+
 }
 
 #[cfg(test)]
@@ -343,7 +561,8 @@ mod test {
 
     fn zero(repeats: u8) -> EncodedLength {
         match repeats {
-            0...10 => EncodedLength::RepeatZero3Bits(repeats),
+            0...1 => EncodedLength::Length(0),
+            2...10 => EncodedLength::RepeatZero3Bits(repeats),
             _ => EncodedLength::RepeatZero7Bits(repeats),
         }
     }
@@ -425,6 +644,9 @@ mod test {
 
         let enc = encode_lengths([0, 0, 0, 5, 0].iter().cloned()).unwrap().0;
         assert!(*enc.last().unwrap() != lit(5));
+
+        let enc = encode_lengths([0, 4, 4, 4, 4, 0].iter().cloned()).unwrap().0;
+        assert_eq!(*enc.last().unwrap(), zero(0));
     }
 
     #[test]

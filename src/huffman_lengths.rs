@@ -42,6 +42,8 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
     assert!(literal_len_lengths.len() >= MIN_NUM_LITERALS_AND_LENGTHS);
     assert!(distance_lengths.len() <= NUM_DISTANCE_CODES);
     assert!(distance_lengths.len() >= MIN_NUM_DISTANCES);
+    // println!("literal_len_lengths: {:?}", literal_len_lengths);
+    // println!("distance_lenghts: {:?}", distance_lengths);
 
     // Number of length codes - 257
     let hlit = (literal_len_lengths.len() - MIN_NUM_LITERALS_AND_LENGTHS) as u16;
@@ -54,6 +56,8 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
     let (encoded, freqs) =
         encode_lengths(literal_len_lengths.iter().chain(distance_lengths.iter()).cloned()).unwrap();
 
+    // println!("Encoded lengths: {:?}", encoded);
+
     // Create huffman lengths for the length/distance code lengths
     let huffman_table_lengths = huffman_lengths_from_frequency(&freqs, MAX_HUFFMAN_CODE_LENGTH);
 
@@ -64,7 +68,10 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
         .count();
 
     // Number of huffman table lengths - 4
+    // TODO: Is this safe?
     let hclen = used_hclens - 4;
+
+    // println!("HLIT: {}, HDIST: {}, HCLEN: {}", hlit, hdist, hclen);
 
     writer.write_bits(hclen as u16, HCLEN_BITS)?;
 

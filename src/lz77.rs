@@ -603,12 +603,10 @@ mod test {
 
         let test_bytes = String::from("Deflate late").into_bytes();
         let res = lz77_compress(&test_bytes).unwrap();
-        // println!("{:?}", res);
         // TODO: Check that compression is correct
-        // print_output(&res);
+
         let decompressed = decompress_lz77(&res);
-        let d_str = str::from_utf8(&decompressed).unwrap();
-        println!("{}", d_str);
+
         assert_eq!(test_bytes, decompressed);
         // assert_eq!(res[8],
         // LDPair::LengthDistance {
@@ -624,9 +622,9 @@ mod test {
         let input = get_test_data();
         let compressed = lz77_compress(&input).unwrap();
         assert!(compressed.len() < input.len());
-        // print_output(&compressed);
+
         let decompressed = decompress_lz77(&compressed);
-        // println!("{}", str::from_utf8(&decompressed).unwrap());
+
         // This is to check where the compression fails, if it were to
         for (n, (&a, &b)) in input.iter().zip(decompressed.iter()).enumerate() {
             if a != b {
@@ -686,7 +684,7 @@ mod test {
         let compressed = super::lz77_compress(&data).unwrap();
         assert!(compressed.len() < data.len());
         let decompressed = decompress_lz77(&compressed);
-        // print_output(&compressed);
+
         assert_eq!(decompressed.len(), data.len());
         assert!(decompressed == data);
     }
@@ -736,14 +734,14 @@ mod test {
         assert_eq!(status, LZ77Status::EndBlock);
         let buf_len = buffer.get_buffer().len();
         assert!(buffer.get_buffer()[..] == data[..buf_len]);
-        // print_output(writer.get_buffer());
+
         writer.clear_buffer();
         let (_, status) = lz77_compress_block_finish(&data[bytes_consumed..],
                                                      &mut state,
                                                      &mut buffer,
                                                      &mut writer);
         assert_eq!(status, LZ77Status::EndBlock);
-        // print_output(writer.get_buffer());
+
     }
 
     #[test]
