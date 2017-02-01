@@ -1,5 +1,5 @@
 # deflate-rs
-An rust implementation of a [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) encoder. Not a direct port, but does take some inspiration from [zlib](http://www.zlib.net/), [miniz](https://github.com/richgel999/miniz) and [zopfli](https://github.com/google/zopfli)(for huffman code length generation).
+An rust implementation of a [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) encoder. Not a direct port, but does take some inspiration from [zlib](http://www.zlib.net/), [miniz](https://github.com/richgel999/miniz) and [zopfli](https://github.com/google/zopfli).
 
 So far, deflate encoding with and without zlib metadata (no zlib dictionary or gzip support yet) has been is implemented. No unsafe code has been used. Speed-wise it's not quite up to miniz-levels yet.
 # Usage:
@@ -37,5 +37,7 @@ let compressed_data = encoder.finish().unwrap();
 deflate is distributed under the terms of both the MIT and Apache 2.0 licences.
 
 bitstream.rs is © @nwin and was released under both MIT and Apache 2.0
+
+Some code in length_encode.rs has been ported from the `miniz` library, which is public domain.
 
 The test data (src/pg11.txt) is borrowed from [Project Gutenberg](https://www.gutenberg.org/ebooks/11) and is available under public domain, or the Project Gutenberg Licence
