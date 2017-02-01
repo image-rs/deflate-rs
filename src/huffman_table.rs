@@ -246,7 +246,7 @@ pub struct LengthAndDistanceBits {
 /// Counts the number of values of each length.
 /// Returns a tuple containing the longest length value in the table, it's position,
 /// and a vector of lengths.
-/// Returns an error if `table` is empty, or if any of the lenghts exceed 15.
+/// Returns an error if `table` is empty, or if any of the lengths exceed 15.
 fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), HuffmanError> {
     // TODO: Validate the length table properly
     //

@@ -12,7 +12,7 @@ pub const MIN_NUM_LITERALS_AND_LENGTHS: usize = 257;
 // The minimum number of distances
 pub const MIN_NUM_DISTANCES: usize = 1;
 
-// The output ordering of the lenghts for the huffman codes used to encode the lenghts
+// The output ordering of the lengths for the huffman codes used to encode the lengths
 // used to build the full huffman tree for length/literal codes.
 // http://www.gzip.org/zlib/rfc-deflate.html#dyn
 const HUFFMAN_LENGTH_ORDER: [u8; 19] = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14,
@@ -42,8 +42,6 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
     assert!(literal_len_lengths.len() >= MIN_NUM_LITERALS_AND_LENGTHS);
     assert!(distance_lengths.len() <= NUM_DISTANCE_CODES);
     assert!(distance_lengths.len() >= MIN_NUM_DISTANCES);
-    // println!("literal_len_lengths: {:?}", literal_len_lengths);
-    // println!("distance_lenghts: {:?}", distance_lengths);
 
     // Number of length codes - 257
     let hlit = (literal_len_lengths.len() - MIN_NUM_LITERALS_AND_LENGTHS) as u16;
@@ -55,8 +53,6 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
     // Encode length values
     let (encoded, freqs) =
         encode_lengths(literal_len_lengths.iter().chain(distance_lengths.iter()).cloned()).unwrap();
-
-    // println!("Encoded lengths: {:?}", encoded);
 
     // Create huffman lengths for the length/distance code lengths
     let huffman_table_lengths = huffman_lengths_from_frequency(&freqs, MAX_HUFFMAN_CODE_LENGTH);
@@ -70,8 +66,6 @@ pub fn write_huffman_lengths<W: Write>(literal_len_lengths: &[u8],
     // Number of huffman table lengths - 4
     // TODO: Is this safe?
     let hclen = used_hclens - 4;
-
-    // println!("HLIT: {}, HDIST: {}, HCLEN: {}", hlit, hdist, hclen);
 
     writer.write_bits(hclen as u16, HCLEN_BITS)?;
 
