@@ -18,23 +18,6 @@ pub struct DeflateState<W: Write> {
 }
 
 impl<W: Write> DeflateState<W> {
-    pub fn _new_with_data(input: &[u8],
-                          compression_options: CompressionOptions,
-                          writer: W)
-                          -> DeflateState<W> {
-        DeflateState {
-            input_buffer: InputBuffer::empty(),
-            lz77_state: LZ77State::_new_warmup(input,
-                                               compression_options.max_hash_checks,
-                                               compression_options.lazy_if_less_than,
-                                               compression_options.matching_type),
-            encoder_state: EncoderState::new(HuffmanTable::empty(), writer),
-            lz77_writer: DynamicWriter::new(),
-            compression_options: compression_options,
-            bytes_written: 0,
-        }
-    }
-
     pub fn new(compression_options: CompressionOptions, writer: W) -> DeflateState<W> {
         DeflateState {
             input_buffer: InputBuffer::empty(),

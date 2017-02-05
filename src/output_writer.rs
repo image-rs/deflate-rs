@@ -1,15 +1,26 @@
+use std::u16;
+
 use lzvalue::LZValue;
 use huffman_table::{NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, END_OF_BLOCK_POSITION,
                     get_distance_code, get_length_code};
 
 pub type FrequencyType = u16;
+/// The maximum number of literals/lengths in the buffer, which in practice also means the maximum
+/// number of literals/lengths output before a new block is started.
+/// This should not be larger than the maximum value `FrequencyType` can represent.
+const _MAX_BUFFER_LENGTH: usize = u16::MAX as usize;
+
+pub enum BufferStatus {
+    NotFull,
+    Full,
+}
 
 /// A trait used by the lz77 compression function to write output.
 /// Used to use the same function for compression with both fixed and dynamic huffman codes
 /// (When fixed codes are used, there is no need to store frequency information)
 pub trait OutputWriter {
-    fn write_literal(&mut self, literal: u8);
-    fn write_length_distance(&mut self, length: u16, distance: u16);
+    fn write_literal(&mut self, literal: u8) -> BufferStatus;
+    fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus;
     fn buffer_length(&self) -> usize;
     fn clear_buffer(&mut self);
     fn get_buffer(&self) -> &[LZValue];
@@ -20,11 +31,13 @@ pub struct _DummyWriter {
 }
 
 impl OutputWriter for _DummyWriter {
-    fn write_literal(&mut self, _: u8) {
+    fn write_literal(&mut self, _: u8) -> BufferStatus {
         self.written += 1;
+        BufferStatus::NotFull
     }
-    fn write_length_distance(&mut self, _: u16, _: u16) {
+    fn write_length_distance(&mut self, _: u16, _: u16) -> BufferStatus {
         self.written += 2;
+        BufferStatus::NotFull
     }
     fn buffer_length(&self) -> usize {
         self.written
@@ -49,12 +62,14 @@ impl FixedWriter {
 }
 
 impl OutputWriter for FixedWriter {
-    fn write_literal(&mut self, literal: u8) {
+    fn write_literal(&mut self, literal: u8) -> BufferStatus {
         self.buffer.push(LZValue::literal(literal));
+        BufferStatus::NotFull
     }
 
-    fn write_length_distance(&mut self, length: u16, distance: u16) {
+    fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
         self.buffer.push(LZValue::length_distance(length, distance));
+        BufferStatus::NotFull
     }
 
     fn buffer_length(&self) -> usize {
@@ -82,18 +97,20 @@ pub struct DynamicWriter {
 }
 
 impl OutputWriter for DynamicWriter {
-    fn write_literal(&mut self, literal: u8) {
+    fn write_literal(&mut self, literal: u8) -> BufferStatus {
         self.fixed_writer.write_literal(literal);
         self.frequencies[usize::from(literal)] += 1;
+        BufferStatus::NotFull
     }
 
-    fn write_length_distance(&mut self, length: u16, distance: u16) {
+    fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
         self.fixed_writer.write_length_distance(length, distance);
         let l_code_num = get_length_code(length).expect("Invalid length!");
         self.frequencies[l_code_num] += 1;
         let d_code_num = get_distance_code(distance)
             .expect("Tried to get a distance code which was out of range!");
         self.distance_frequencies[usize::from(d_code_num)] += 1;
+        BufferStatus::NotFull
     }
 
     fn buffer_length(&self) -> usize {

@@ -1,6 +1,8 @@
 //! This module contains functionality for doing lz77 compression of data.
 use std::cmp;
 use std::ops::Range;
+use std::iter::{Iterator, Enumerate};
+use std::slice::Iter;
 
 use input_buffer::InputBuffer;
 use matching::longest_match;
@@ -8,7 +10,7 @@ use lzvalue::LZValue;
 use huffman_table;
 use chained_hash_table::ChainedHashTable;
 use compression_options::{HIGH_MAX_HASH_CHECKS, HIGH_LAZY_IF_LESS_THAN};
-use output_writer::{OutputWriter, FixedWriter};
+use output_writer::{OutputWriter, FixedWriter, BufferStatus};
 use compress::Flush;
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
@@ -59,20 +61,6 @@ impl LZ77State {
             lazy_if_less_than: lazy_if_less_than,
             matching_type: matching_type,
         }
-    }
-
-    /// Creates a new LZ77 state, adding the first to bytes to the hash value
-    /// to warm it up
-    pub fn _new_warmup(data: &[u8],
-                       max_hash_checks: u16,
-                       lazy_if_less_than: u16,
-                       matching_type: MatchingType)
-                       -> LZ77State {
-        LZ77State::from_starting_values(data[0],
-                                        data[1],
-                                        max_hash_checks,
-                                        lazy_if_less_than,
-                                        matching_type)
     }
 
     /// Creates a new LZ77 state
@@ -129,9 +117,29 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
     }
 }
 
+/// Add the specified number of bytes to the hash table from the iterators
+/// adding `start` to the position supplied to the hash table.
+fn add_to_hash_table(bytes_to_add: usize,
+                     start: usize,
+                     insert_it: &mut Enumerate<Iter<u8>>,
+                     hash_it: &mut Iter<u8>,
+                     hash_table: &mut ChainedHashTable) {
+    let taker = insert_it.by_ref().take(bytes_to_add);
+    let mut hash_taker = hash_it.by_ref().take(bytes_to_add);
+
+    // Advance the iterators and add the bytes we jump over to the hash table and
+    // checksum
+    for (ipos, _) in taker {
+        if let Some(&i_hash_byte) = hash_taker.next() {
+            hash_table.add_hash_value(ipos + start, i_hash_byte);
+        }
+    }
+
+}
+
 fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                                        iterated_data: Range<usize>,
-                                       hash_table: &mut ChainedHashTable,
+                                       mut hash_table: &mut ChainedHashTable,
                                        writer: &mut W,
                                        max_hash_checks: u16,
                                        lazy_if_less_than: usize)
@@ -211,16 +219,11 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                 // Since we've already added two of them, we need to add two less than
                 // the length
                 let bytes_to_add = prev_length - 2;
-                let taker = insert_it.by_ref().take(bytes_to_add);
-                let mut hash_taker = hash_it.by_ref().take(bytes_to_add);
-
-                // Advance the iterators and add the bytes we jump over to the hash table and
-                // checksum
-                for (ipos, _) in taker {
-                    if let Some(&i_hash_byte) = hash_taker.next() {
-                        hash_table.add_hash_value(ipos + start, i_hash_byte);
-                    }
-                }
+                add_to_hash_table(bytes_to_add,
+                                  start,
+                                  &mut insert_it,
+                                  &mut hash_it,
+                                  &mut hash_table);
 
                 // If the match is longer than the current window, we have note how many
                 // bytes we overlap, since we don't need to do any matching on these bytes
@@ -264,10 +267,11 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
 
 fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
                                          iterated_data: Range<usize>,
-                                         hash_table: &mut ChainedHashTable,
+                                         mut hash_table: &mut ChainedHashTable,
                                          writer: &mut W,
                                          max_hash_checks: u16)
                                          -> usize {
+    //(BufferStatus, usize) {
     let end = cmp::min(data.len(), iterated_data.end);
     let start = iterated_data.start;
     let current_chunk = &data[start..end];
@@ -284,11 +288,6 @@ fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
 
     const NO_LENGTH: usize = MIN_MATCH as usize - 1;
 
-    // The byte before the currently read one in the stream.
-    let mut prev_byte = 0u8;
-    // Whether prev_byte should be output if we move one byte forward to find a better match
-    // (or at the end of the stream).
-    let mut add = false;
     // The number of bytes past end that was added due to finding a match that extends into
     // the lookahead window.
     let mut overlap = 0;
@@ -313,16 +312,11 @@ fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
                 // Since we've already added one of them, we need to add one less than
                 // the length
                 let bytes_to_add = match_len - 1;
-                let taker = insert_it.by_ref().take(bytes_to_add);
-                let mut hash_taker = hash_it.by_ref().take(bytes_to_add);
-
-                // Advance the iterators and add the bytes we jump over to the hash table and
-                // checksum
-                for (ipos, _) in taker {
-                    if let Some(&i_hash_byte) = hash_taker.next() {
-                        hash_table.add_hash_value(ipos + start, i_hash_byte);
-                    }
-                }
+                add_to_hash_table(bytes_to_add,
+                                  start,
+                                  &mut insert_it,
+                                  &mut hash_it,
+                                  &mut hash_table);
 
                 // If the match is longer than the current window, we have note how many
                 // bytes we overlap, since we don't need to do any matching on these bytes
@@ -331,30 +325,17 @@ fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
                     // We need to subtract 1 since the byte at pos is also included
                     overlap = position + match_len - end;
                 };
-
-                add = false;
-                // There was no match
-
             } else {
                 writer.write_literal(b);
             }
-            prev_byte = b;
         } else {
-            if add {
-                // We may still have a leftover byte at this point, so we add it here if needed.
-                writer.write_literal(prev_byte);
-                add = false;
-            }
             // We are at the last two bytes we want to add, so there is no point
             // searching for matches here.
             writer.write_literal(b);
         }
     }
-    if add {
-        // We may still have a leftover byte at this point, so we add it here if needed.
-        writer.write_literal(prev_byte);
-    }
     overlap
+    //(BufferStatus::NotFull, overlap)
 }
 
 
