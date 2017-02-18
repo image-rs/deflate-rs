@@ -94,6 +94,12 @@ impl LZ77State {
 
 const DEFAULT_WINDOW_SIZE: usize = 32768;
 
+#[derive(Debug)]
+enum ProcessStatus {
+    Ok,
+    BufferFull(usize),
+}
+
 fn process_chunk<W: OutputWriter>(data: &[u8],
                                   iterated_data: Range<usize>,
                                   hash_table: &mut ChainedHashTable,
@@ -101,7 +107,7 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
                                   max_hash_checks: u16,
                                   lazy_if_less_than: usize,
                                   matching_type: MatchingType)
-                                  -> usize {
+                                  -> (usize, ProcessStatus) {
     match matching_type {
         MatchingType::Greedy => {
             process_chunk_greedy(data, iterated_data, hash_table, writer, max_hash_checks)
@@ -137,13 +143,40 @@ fn add_to_hash_table(bytes_to_add: usize,
 
 }
 
+// Write the specified literal `byte` to the writer `w`, and return
+// `ProcessStatus::BufferFull($pos)` if the buffer is full after writing.
+macro_rules! write_literal{
+    ($w:ident, $byte:ident, $pos:expr) => {
+        let b_status = $w.write_literal($byte);
+
+        if let BufferStatus::Full = b_status {
+            return (0, ProcessStatus::BufferFull($pos));
+        }
+    };
+}
+
+#[inline]
+fn match_too_far(match_len: usize, match_dist: usize) -> bool {
+    const TOO_FAR: usize = 8 * 1024;
+    match_len == MIN_MATCH && match_dist > TOO_FAR
+}
+
 fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                                        iterated_data: Range<usize>,
                                        mut hash_table: &mut ChainedHashTable,
                                        writer: &mut W,
                                        max_hash_checks: u16,
                                        lazy_if_less_than: usize)
-                                       -> usize {
+                                       -> (usize, ProcessStatus) {
+    // If this is less than 3 it prevents a check from working properly
+    // TODO: This is a workaround, might want to return 0 from longest match on fail instead.
+    let lazy_if_less_than = {
+        if lazy_if_less_than < 3 {
+            3
+        } else {
+            lazy_if_less_than
+        }
+    };
     let end = cmp::min(data.len(), iterated_data.end);
     let start = iterated_data.start;
     let current_chunk = &data[start..end];
@@ -199,6 +232,7 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                     // the previous byte.
                     longest_match(data, hash_table, position, prev_length, max_hash_checks)
                 };
+
                 if match_len > lazy_if_less_than {
                     // We found a decent match, so we won't check for a better one at the next byte.
                     ignore_next = true;
@@ -209,15 +243,17 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                 (NO_LENGTH, 0)
             };
 
-            if prev_length >= match_len && prev_length >= MIN_MATCH as usize && prev_distance > 0 {
-                // The previous match was better so we add it
+            if prev_length >= match_len && prev_length >= MIN_MATCH as usize &&
+               prev_distance > 0 && !match_too_far(prev_length, prev_distance) {
+                // The previous match was better so we add it.
                 // Casting note: length and distance is already bounded by the longest match
-                // function. Usize is just used for convenience
-                writer.write_length_distance(prev_length as u16, prev_distance as u16);
+                // function. Usize is just used for convenience.
+                let b_status =
+                    writer.write_length_distance(prev_length as u16, prev_distance as u16);
 
                 // We add the bytes to the hash table and checksum.
                 // Since we've already added two of them, we need to add two less than
-                // the length
+                // the length.
                 let bytes_to_add = prev_length - 2;
                 add_to_hash_table(bytes_to_add,
                                   start,
@@ -229,17 +265,23 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                 // bytes we overlap, since we don't need to do any matching on these bytes
                 // in the next call of this function.
                 if position + prev_length > end {
-                    // We need to subtract 1 since the byte at pos is also included
+                    // We need to subtract 1 since the byte at pos is also included.
                     overlap = position + prev_length - end - 1;
                 };
+
+                if let BufferStatus::Full = b_status {
+                    // MATCH(lazy)
+                    return (overlap, ProcessStatus::BufferFull(position + prev_length - 1));
+                }
 
                 add = false;
                 ignore_next = false;
 
             } else if add {
                 // We found a better match (or there was no previous match)
-                // so output the previous byte
-                writer.write_literal(prev_byte);
+                // so output the previous byte.
+                // BETTER OR NO MATCH
+                write_literal!(writer, prev_byte, position);
             } else {
                 add = true
             }
@@ -248,21 +290,31 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
             prev_distance = match_dist;
             prev_byte = b;
         } else {
+            let position = n + start;
+
             if add {
                 // We may still have a leftover byte at this point, so we add it here if needed.
-                writer.write_literal(prev_byte);
+                // let b_status = writer.write_literal(prev_byte);
                 add = false;
+
+                // ADD
+                write_literal!(writer, prev_byte, position);
+
             }
+
             // We are at the last two bytes we want to add, so there is no point
             // searching for matches here.
-            writer.write_literal(b);
+
+            // AFTER ADD
+            write_literal!(writer, b, position + 1);
         }
     }
     if add {
         // We may still have a leftover byte at this point, so we add it here if needed.
-        writer.write_literal(prev_byte);
+        // END
+        write_literal!(writer, prev_byte, end);
     }
-    overlap
+    (overlap, ProcessStatus::Ok)
 }
 
 fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
@@ -270,8 +322,7 @@ fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
                                          mut hash_table: &mut ChainedHashTable,
                                          writer: &mut W,
                                          max_hash_checks: u16)
-                                         -> usize {
-    //(BufferStatus, usize) {
+                                         -> (usize, ProcessStatus) {
     let end = cmp::min(data.len(), iterated_data.end);
     let start = iterated_data.start;
     let current_chunk = &data[start..end];
@@ -292,25 +343,26 @@ fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
     // the lookahead window.
     let mut overlap = 0;
 
-    // Iterate through the slice, adding literals or length/distance pairs
+    // Iterate through the slice, adding literals or length/distance pairs.
     while let Some((n, &b)) = insert_it.next() {
         if let Some(&hash_byte) = hash_it.next() {
             let position = n + start;
             hash_table.add_hash_value(position, hash_byte);
 
-            // TODO: This should be cleaned up a bit
+            // TODO: This should be cleaned up a bit.
             let (match_len, match_dist) = {
                 longest_match(data, hash_table, position, NO_LENGTH, max_hash_checks)
             };
 
-            if match_len >= MIN_MATCH as usize && match_dist > 0 {
+            if match_len >= MIN_MATCH as usize && match_dist > 0 &&
+               !match_too_far(match_len, match_dist) {
                 // Casting note: length and distance is already bounded by the longest match
-                // function. Usize is just used for convenience
-                writer.write_length_distance(match_len as u16, match_dist as u16);
+                // function. Usize is just used for convenience.
+                let b_status = writer.write_length_distance(match_len as u16, match_dist as u16);
 
                 // We add the bytes to the hash table and checksum.
                 // Since we've already added one of them, we need to add one less than
-                // the length
+                // the length.
                 let bytes_to_add = match_len - 1;
                 add_to_hash_table(bytes_to_add,
                                   start,
@@ -322,27 +374,38 @@ fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
                 // bytes we overlap, since we don't need to do any matching on these bytes
                 // in the next call of this function.
                 if position + match_len > end {
-                    // We need to subtract 1 since the byte at pos is also included
+                    // We need to subtract 1 since the byte at pos is also included.
                     overlap = position + match_len - end;
                 };
+
+                if let BufferStatus::Full = b_status {
+                    // MATCH
+                    return (overlap, ProcessStatus::BufferFull(position + match_len));
+                }
+
             } else {
-                writer.write_literal(b);
+                // NO MATCH
+                write_literal!(writer, b, position + 1);
             }
         } else {
             // We are at the last two bytes we want to add, so there is no point
             // searching for matches here.
-            writer.write_literal(b);
+            // END
+            write_literal!(writer, b, n + start + 1);
         }
     }
-    overlap
-    //(BufferStatus::NotFull, overlap)
+    (overlap, ProcessStatus::Ok)
 }
 
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum LZ77Status {
+    // Waiting for more input before doing any processing
     NeedInput,
+    // The output buffer is full, so the current block needs to be ended so the
+    // buffer can be flushed.
     EndBlock,
+    // All pending data has been processed.
     Finished,
 }
 
@@ -370,13 +433,18 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
     // Currently we only support the maximum window size
     let window_size = DEFAULT_WINDOW_SIZE;
 
+    // Indicates whether we should try to process all the data including the lookahead, or if we
+    // should wait until we have at least one window size of data before doing anything.
     let finish = flush == Flush::Finish || flush == Flush::Sync;
     let sync = flush == Flush::Sync;
 
+    // The current status of the encoding.
     let mut status = LZ77Status::EndBlock;
+    // Add data to the input buffer and keep a reference to the slice of data no added yet.
     let mut remaining_data = buffer.add_data(data);
 
-    while writer.buffer_length() < (window_size * 2) {
+    loop {
+        assert!(writer.buffer_length() <= (window_size * 2));
         if state.is_first_window {
             // Don't do anything until we are either flushing, or we have at least one window of
             // data.
@@ -384,71 +452,107 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
 
                 if buffer.get_buffer().len() > 2 {
                     let b = buffer.get_buffer();
-                    // Warm up the hash with the two first values, so we can match against
+                    // Warm up the hash with the two first values, so we can find  matches at
                     // index 0.
                     state.hash_table.add_initial_hash_values(b[0], b[1]);
                 }
 
                 let first_chunk_end = if finish && remaining_data.is_none() {
-                    // If we are finishing, make sure we include data in the lookahead area
+                    // If we are finishing, make sure we include data in the lookahead area.
                     buffer.current_end()
                 } else {
                     cmp::min(window_size, buffer.current_end())
                 };
 
-                state.overlap = process_chunk::<W>(buffer.get_buffer(),
-                                                   0..first_chunk_end,
-                                                   &mut state.hash_table,
-                                                   &mut writer,
-                                                   state.max_hash_checks,
-                                                   state.lazy_if_less_than as usize,
-                                                   state.matching_type);
+                let (overlap, p_status) = process_chunk::<W>(buffer.get_buffer(),
+                                                             state.overlap..first_chunk_end,
+                                                             &mut state.hash_table,
+                                                             &mut writer,
+                                                             state.max_hash_checks,
+                                                             state.lazy_if_less_than as usize,
+                                                             state.matching_type);
 
-                // We are at the first window so we don't need to slide the hash table yet,
+                state.overlap = overlap;
 
+                // If the buffer is full, we want to end the block.
+                if let ProcessStatus::BufferFull(written) = p_status {
+                    // The buffer being full in the first window can only really happen in tests
+                    // where we've pre-filled the buffer as each literal will take up at most one
+                    // space in the buffer pending any bugs.
+                    state.overlap = if overlap > 0 { overlap } else { written };
+                    status = LZ77Status::EndBlock;
+                    break;
+                }
+
+                // We are at the first window so we don't need to slide the hash table yet.
+                // If finishing or syncing, we stop here.
                 if first_chunk_end >= data.len() && finish {
                     if !sync {
                         state.set_last();
                     }
                     status = LZ77Status::Finished;
-                } else {
-                    status = LZ77Status::EndBlock;
+                    state.is_first_window = false;
+                    break;
                 }
+                // Otherwise, continue.
                 state.is_first_window = false;
-                break;
             } else {
                 status = LZ77Status::NeedInput;
                 break;
             }
         } else if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
-            // This isn't the first chunk, so we start reading at one window in in them
+            // This isn't the first chunk, so we start reading at one window in in the
             // buffer plus any additional overlap from earlier.
             let start = window_size + state.overlap;
 
             // Determine where we have to stop iterating to slide the buffer and hash,
             // or stop because we are at the end of the input data.
             let end = if remaining_data.is_none() && finish {
-                // If we are finishing, make sure we include the lookahead data
+                // If we are finishing, make sure we include the lookahead data.
                 buffer.current_end()
             } else {
-                // Otherwise we process one window size of data.
+                // Otherwise we process at most one window size of data.
                 cmp::min(window_size * 2, buffer.current_end())
             };
 
-            state.overlap = process_chunk::<W>(buffer.get_buffer(),
-                                               start..end,
-                                               &mut state.hash_table,
-                                               &mut writer,
-                                               state.max_hash_checks,
-                                               state.lazy_if_less_than as usize,
-                                               state.matching_type);
+            let (overlap, p_status) = process_chunk::<W>(buffer.get_buffer(),
+                                                         start..end,
+                                                         &mut state.hash_table,
+                                                         &mut writer,
+                                                         state.max_hash_checks,
+                                                         state.lazy_if_less_than as usize,
+                                                         state.matching_type);
+
+            if let ProcessStatus::BufferFull(written) = p_status {
+                // If the buffer is full, return and end the block.
+                // If overlap is non-zero, the buffer was full after outputting the last byte,
+                // otherwise we have to skip to the point in the buffer where we stopped in the
+                // next call.
+                state.overlap = if overlap > 0 {
+                    overlap
+                } else {
+                    written - window_size
+                };
+                // Status is already EndBlock at this point.
+                // status = LZ77Status::EndBlock;
+                break;
+            }
+
+            // The buffer is not full, but we still need to note if there is any overlap into the
+            // next window.
+            state.overlap = overlap;
+
             if remaining_data.is_none() && finish {
                 // We stopped before or at the window size, so we are at the end.
                 if !sync {
+                    // If we are finishing and not syncing, we simply indicate that we are done.
                     state.set_last();
                 } else {
-                    // For sync flushing we need to slide the buffer and the has chains so that the
+                    // For sync flushing we need to slide the buffer and the hash chains so that the
                     // next call to this function starts at the right place.
+
+                    // There won't be any overlap, since when syncing, we process to the end of the.
+                    // pending data.
                     state.overlap = 0;
                     let n = buffer.move_down();
                     state.hash_table.slide(n);
@@ -456,18 +560,18 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 status = LZ77Status::Finished;
                 break;
             } else {
-                // We are not at the end, so slide and continue
+                // We are not at the end, so slide and continue.
                 // We slide the hash table back to make space for new hash values
-                // We only need to remember 32k bytes back (the maximum distance allowed by the
-                // deflate spec)
+                // We only need to remember 2^15 bytes back (the maximum distance allowed by the
+                // deflate spec).
                 state.hash_table.slide(window_size);
 
-                // Slide the buffer
+                // Also slide the buffer, discarding data we no longer need and adding new data.
                 remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
-
-                status = LZ77Status::EndBlock;
             }
         } else {
+            // The caller has not indicated that they want to finish or flush, and there is less
+            // than a window + lookahead of new data, so we wait for more.
             status = LZ77Status::NeedInput;
             break;
         }
@@ -487,10 +591,17 @@ pub struct TestStruct {
 #[allow(dead_code)]
 impl TestStruct {
     fn new() -> TestStruct {
+        TestStruct::with_config(HIGH_MAX_HASH_CHECKS,
+                                HIGH_LAZY_IF_LESS_THAN,
+                                MatchingType::Lazy)
+    }
+
+    fn with_config(max_hash_checks: u16,
+                   lazy_if_less_than: u16,
+                   matching_type: MatchingType)
+                   -> TestStruct {
         TestStruct {
-            state: LZ77State::new(HIGH_MAX_HASH_CHECKS,
-                                  HIGH_LAZY_IF_LESS_THAN,
-                                  MatchingType::Lazy),
+            state: LZ77State::new(max_hash_checks, lazy_if_less_than, matching_type),
             buffer: InputBuffer::empty(),
             writer: FixedWriter::new(),
         }
@@ -505,13 +616,25 @@ impl TestStruct {
     }
 }
 
+pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
+    lz77_compress_conf(data,
+                       HIGH_MAX_HASH_CHECKS,
+                       HIGH_LAZY_IF_LESS_THAN,
+                       MatchingType::Lazy)
+}
+
 /// Compress a slice, not storing frequency information
 ///
 /// This is a convenience function for compression with fixed huffman values
 /// Only used in tests for now
 #[allow(dead_code)]
-pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
-    let mut test_boxed = Box::new(TestStruct::new());
+pub fn lz77_compress_conf(data: &[u8],
+                          max_hash_checks: u16,
+                          lazy_if_less_than: u16,
+                          matching_type: MatchingType)
+                          -> Option<Vec<LZValue>> {
+    let mut test_boxed =
+        Box::new(TestStruct::with_config(max_hash_checks, lazy_if_less_than, matching_type));
     let mut out = Vec::<LZValue>::with_capacity(data.len() / 3);
     {
         let mut test = test_boxed.as_mut();
@@ -538,8 +661,9 @@ mod test {
     use super::*;
     use lzvalue::{LZValue, LZType};
     use chained_hash_table::WINDOW_SIZE;
-    use compression_options::DEFAULT_LAZY_IF_LESS_THAN;
+    use compression_options::{DEFAULT_MAX_HASH_CHECKS, DEFAULT_LAZY_IF_LESS_THAN};
     use test_utils::get_test_data;
+    use output_writer::MAX_BUFFER_LENGTH;
 
     fn decompress_lz77(input: &[LZValue]) -> Vec<u8> {
         let mut output = Vec::new();
@@ -745,4 +869,99 @@ mod test {
         };
         assert!(comp1 == comp2);
     }
+
+
+    #[test]
+    /// Test that the exit from process_chunk when buffer is full is working correctly.
+    fn buffer_fill() {
+        let data = get_test_data();
+        // The comments above these calls refers the positions with the
+        // corersponding comments in process_chunk_{greedy/lazy}.
+        // POS BETTER OR NO MATCH
+        buffer_test_literals(&data);
+        // POS END
+        // POS NO MATCH
+        buffer_test_last_bytes(MatchingType::Greedy, &data);
+        // POS ADD
+        // POS AFTER ADD
+        buffer_test_last_bytes(MatchingType::Lazy, &data);
+
+        // POS MATCH
+        buffer_test_match(MatchingType::Greedy);
+        // POS MATCH(lazy)
+        buffer_test_match(MatchingType::Lazy);
+
+        // POS END
+        buffer_test_add_end(&data);
+    }
+
+    // Test buffer fill when a byte is added due to no match being found.
+    fn buffer_test_literals(data: &[u8]) {
+        let mut state = TestStruct::with_config(0, 0, MatchingType::Lazy);
+        let (bytes_consumed, status) = state.compress_block(&data, false);
+        let total_consumed = bytes_consumed;
+        assert_eq!(status, LZ77Status::EndBlock);
+        assert!(bytes_consumed <= (WINDOW_SIZE * 2) + MAX_MATCH);
+
+        // The buffer should be full.
+        assert_eq!(state.writer.get_buffer().len(), u16::max_value() as usize);
+
+        let mut out = decompress_lz77(state.writer.get_buffer());
+        state.writer.clear_buffer();
+        // The buffer should now be cleared.
+        assert_eq!(state.writer.get_buffer().len(), 0);
+
+        let (bytes_consumed, _) = state.compress_block(&data[total_consumed..], false);
+        // Now that the buffer has been cleared, we should have consumed more data.
+        assert!(bytes_consumed > 0);
+        // We should have some new data in the buffer at this point.
+        assert!(state.writer.get_buffer().len() > 0);
+        // total_consumed += bytes_consumed;
+        out.extend_from_slice(&decompress_lz77(state.writer.get_buffer()));
+        assert!(data[..out.len()] == out[..]);
+    }
+
+    // Test buffer fill at the last two bytes that are not hashed.
+    fn buffer_test_last_bytes(matching_type: MatchingType, data: &[u8]) {
+        const BYTES_USED: usize = MAX_BUFFER_LENGTH;
+        assert!(&data[..BYTES_USED] ==
+                &decompress_lz77(&lz77_compress_conf(&data[..BYTES_USED], 0, 0, matching_type)
+            .unwrap())[..]);
+        assert!(&data[..BYTES_USED + 1] ==
+                &decompress_lz77(&lz77_compress_conf(&data[..BYTES_USED + 1],
+                                                     0,
+                                                     0,
+                                                     matching_type)
+            .unwrap())[..]);
+    }
+
+    // Test buffer fill when buffer is full at a match.
+    fn buffer_test_match(matching_type: MatchingType) {
+        let mut state = TestStruct::with_config(1, 0, matching_type);
+        for _ in 0..MAX_BUFFER_LENGTH - 4 {
+            assert!(state.writer.write_literal(0) == BufferStatus::NotFull);
+        }
+        state.compress_block(&[1, 2, 3, 1, 2, 3, 4], true);
+        assert!(*state.writer.get_buffer().last().unwrap() == LZValue::length_distance(3, 3));
+
+    }
+
+    // Test buffer fill for the lazy match algorithm when adding a pending byte at the end.
+    fn buffer_test_add_end(data: &[u8]) {
+        let mut state = TestStruct::with_config(DEFAULT_MAX_HASH_CHECKS,
+                                                DEFAULT_LAZY_IF_LESS_THAN,
+                                                MatchingType::Lazy);
+        // For the test file, this is how much data needs to be added to get the buffer
+        // full at the right spot to test that this buffer full exit is workong correctly.
+        for _ in 0..33583 {
+            assert!(state.writer.write_literal(0) == BufferStatus::NotFull)
+        }
+
+        state.compress_block(data, false);
+
+        let dec = decompress_lz77(&state.writer.get_buffer()[33583..]);
+        assert!(dec.len() > 0);
+        assert!(dec[..] == data[..dec.len()]);
+    }
+
 }

@@ -13,6 +13,7 @@
 //!
 //! let data = b"Some data";
 //! let compressed = deflate_bytes(data);
+//! # let _ = compressed;
 //! ```
 //!
 //! ## Using a writer:

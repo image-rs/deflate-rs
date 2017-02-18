@@ -8,8 +8,9 @@ pub type FrequencyType = u16;
 /// The maximum number of literals/lengths in the buffer, which in practice also means the maximum
 /// number of literals/lengths output before a new block is started.
 /// This should not be larger than the maximum value `FrequencyType` can represent.
-const _MAX_BUFFER_LENGTH: usize = u16::MAX as usize;
+pub const MAX_BUFFER_LENGTH: usize = u16::MAX as usize;
 
+#[derive(PartialEq)]
 pub enum BufferStatus {
     NotFull,
     Full,
@@ -49,6 +50,14 @@ impl OutputWriter for _DummyWriter {
     }
 }
 
+fn check_buffer_length(buffer: &[LZValue]) -> BufferStatus {
+    if buffer.len() >= MAX_BUFFER_LENGTH {
+        BufferStatus::Full
+    } else {
+        BufferStatus::NotFull
+    }
+}
+
 /// `OutputWriter` that doesn't store frequency information
 #[derive(Debug)]
 pub struct FixedWriter {
@@ -57,19 +66,21 @@ pub struct FixedWriter {
 
 impl FixedWriter {
     pub fn new() -> FixedWriter {
-        FixedWriter { buffer: Vec::with_capacity(10000) }
+        FixedWriter { buffer: Vec::with_capacity(MAX_BUFFER_LENGTH) }
     }
 }
 
 impl OutputWriter for FixedWriter {
     fn write_literal(&mut self, literal: u8) -> BufferStatus {
+        debug_assert!(self.buffer.len() < MAX_BUFFER_LENGTH);
         self.buffer.push(LZValue::literal(literal));
-        BufferStatus::NotFull
+        check_buffer_length(&self.buffer)
     }
 
     fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
+        debug_assert!(self.buffer.len() < MAX_BUFFER_LENGTH);
         self.buffer.push(LZValue::length_distance(length, distance));
-        BufferStatus::NotFull
+        check_buffer_length(&self.buffer)
     }
 
     fn buffer_length(&self) -> usize {
@@ -88,8 +99,6 @@ impl OutputWriter for FixedWriter {
 // `OutputWriter` that keeps track of the usage of different codes
 pub struct DynamicWriter {
     fixed_writer: FixedWriter,
-    // We may want to use u16 instead, depending on how large blocks
-    // we want to use
     // The two last length codes are not actually used, but only participates in code construction
     // Therefore, we ignore them to get the correct number of lengths
     frequencies: [FrequencyType; NUM_LITERALS_AND_LENGTHS],
@@ -98,19 +107,19 @@ pub struct DynamicWriter {
 
 impl OutputWriter for DynamicWriter {
     fn write_literal(&mut self, literal: u8) -> BufferStatus {
-        self.fixed_writer.write_literal(literal);
+        let ret = self.fixed_writer.write_literal(literal);
         self.frequencies[usize::from(literal)] += 1;
-        BufferStatus::NotFull
+        ret
     }
 
     fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
-        self.fixed_writer.write_length_distance(length, distance);
+        let ret = self.fixed_writer.write_length_distance(length, distance);
         let l_code_num = get_length_code(length).expect("Invalid length!");
         self.frequencies[l_code_num] += 1;
         let d_code_num = get_distance_code(distance)
             .expect("Tried to get a distance code which was out of range!");
         self.distance_frequencies[usize::from(d_code_num)] += 1;
-        BufferStatus::NotFull
+        ret
     }
 
     fn buffer_length(&self) -> usize {
