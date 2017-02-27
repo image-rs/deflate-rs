@@ -4,21 +4,27 @@ use std::io;
 use deflate_state::DeflateState;
 use encoder_state::{EncoderState, BType};
 use lzvalue::LZValue;
-use lz77::{lz77_compress_block, LZ77Status};
-use length_encode::huffman_lengths_from_frequency;
-use huffman_lengths::{write_huffman_lengths, remove_trailing_zeroes, MIN_NUM_LITERALS_AND_LENGTHS,
-                      MIN_NUM_DISTANCES};
-use huffman_table::{MAX_CODE_LENGTH, FIXED_CODE_LENGTHS, FIXED_CODE_LENGTHS_DISTANCE};
+use lz77::{lz77_compress_block, LZ77Status, decompress_lz77_with_backbuffer};
+use huffman_lengths::{gen_huffman_lengths, write_huffman_lengths};
+use huffman_table::{FIXED_CODE_LENGTHS, FIXED_CODE_LENGTHS_DISTANCE};
 use output_writer::OutputWriter;
-use stored_block::{compress_block_stored, write_stored_header};
+use stored_block::{compress_block_stored, write_stored_header, MAX_STORED_BLOCK_LENGTH};
 
+/// Flush mode to use when compressing input received in multiple steps.
+///
+/// (The more obscure ZLIB flush modes are not implemented.)
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum Flush {
+    // Simply wait for more input when we are out of input data to process.
     None,
+    // Send a "sync block", corresponding to Z_SYNC_FLUSH in zlib. This finishes compressing and
+    // outputting all pending data, and then outputs an empty stored block.
+    // (That is, the block header indicating a stored block followed by `0000FFFF`).
     Sync,
     _Partial,
     _Block,
     _Full,
+    // Finish compressing and output all remaining input.
     Finish,
 }
 
@@ -52,10 +58,10 @@ fn block_type_for_length(length: usize) -> BType {
     }
 }
 
-#[cfg(test)]
 /// Compress the input data using only fixed huffman codes.
 ///
 /// Currently only used in tests.
+#[cfg(test)]
 pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     use lz77::lz77_compress;
 
@@ -78,27 +84,28 @@ fn write_stored_block<W: Write>(input: &[u8],
                                 deflate_state: &mut DeflateState<W>,
                                 final_block: bool)
                                 -> io::Result<usize> {
-    // Write the block header
-    write_stored_header(&mut deflate_state.encoder_state.writer, final_block)?;
-    // Output some extra zeroes if needed to align with the byte boundary.
-    deflate_state.encoder_state.flush()?;
 
-    if input.len() > 0 {
-        // Add the current input data to the input buffer.
-        let rem = deflate_state.input_buffer.add_data(input);
+    // If the input is not zero, we write stored blocks for the input data.
+    if !input.is_empty() {
+        let mut written = 0;
+        let mut i = input.chunks(MAX_STORED_BLOCK_LENGTH).peekable();
 
-        if rem.is_some() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                                      "write_stored_block called with more data\
-                                       than currently supported!"));
+        while let Some(chunk) = i.next() {
+            let last_chunk = i.peek().is_none();
+            // Write the block header
+            write_stored_header(&mut deflate_state.encoder_state.writer,
+                                final_block && last_chunk)?;
+
+            // Write the actual data.
+            written += compress_block_stored(chunk, &mut deflate_state.encoder_state.writer)?;
+
         }
-
-        // Write the length of the data and the actual (uncompressed) data.
-        compress_block_stored(deflate_state.input_buffer.get_buffer(),
-                              &mut deflate_state.encoder_state.writer)
+        Ok(written)
     } else {
-        // Make sure we output an empty block if the input is empty.
-        compress_block_stored(input, &mut deflate_state.encoder_state.writer)
+        // If the input length is zero, we output an empty block. This is used for syncing.
+        write_stored_header(&mut deflate_state.encoder_state.writer,
+                            final_block)?;
+        compress_block_stored(&[], &mut deflate_state.encoder_state.writer)
     }
 }
 
@@ -130,12 +137,13 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                 BType::DynamicHuffman => {
                     let mut slice = input;
                     loop {
-                        let (written, status) =
+                        let (written, status, position) =
                             lz77_compress_block(slice,
                                                 &mut deflate_state.lz77_state,
                                                 &mut deflate_state.input_buffer,
                                                 &mut deflate_state.lz77_writer,
                                                 flush);
+
                         // Bytes written in this call
                         bytes_written += written;
                         // Total bytes written since the compression process started
@@ -150,62 +158,83 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
 
                         // Increment start of input data
                         slice = &slice[written..];
-                        deflate_state.encoder_state
-                            .write_start_of_block(false, deflate_state.lz77_state.is_last_block())?;
 
-                        // Generate the lengths of the huffman codes we will be using, using the
-                        // frequency of the different symbols/lengths/distances.
-                        let (l_lengths, d_lengths) = {
+                        // We need to check if this is the last block as the header will then be
+                        // slightly different to indicate this.
+                        let last_block = deflate_state.lz77_state.is_last_block();
+
+                        let current_block_input_bytes = deflate_state.lz77_state
+                            .current_block_input_bytes();
+
+                        let res = {
                             let (l_freqs, d_freqs) = deflate_state.lz77_writer.get_frequencies();
-                            // The huffman spec allows us to exclude zeroes at the end of the table
-                            // of huffman lengths. Since a frequency of 0 will give an huffman
-                            // length of 0. We strip off the trailing zeroes before even generating
-                            // the lengths to save some work.
-                            // There is however a minimum number of values we have to keep according
-                            // to the deflate spec.
-                            (
-                                huffman_lengths_from_frequency(
-                                    remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS),
-                                    MAX_CODE_LENGTH
-                            ),
-                                huffman_lengths_from_frequency(
-                                    remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES),
-                                    MAX_CODE_LENGTH)
-                            )
+                            gen_huffman_lengths(l_freqs, d_freqs, current_block_input_bytes)
                         };
-                        // Output the lengths of the huffman codes used in this block.
-                        write_huffman_lengths(&l_lengths,
-                                              &d_lengths,
-                                              &mut deflate_state.encoder_state.writer)?;
 
-                        // Output update the huffman table that will be used to encode the
-                        // lz77-compressed data.
-                        deflate_state.encoder_state
-                            .update_huffman_table(&l_lengths, &d_lengths)?;
+                        // If the compressed representation is larger than the number of bytes
+                        // we write a stored block to avoid making the output larger than needed.
+                        if let Some(header) = res {
+                            // Write the block header.
+                            deflate_state.encoder_state
+                                .write_start_of_block(false, last_block)?;
 
-                        // write the huffman compressed data and end of block code.
-                        flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
-                                           &mut deflate_state.encoder_state)?;
+                            // Output the lengths of the huffman codes used in this block.
+                            write_huffman_lengths(&header,
+                                                  &mut deflate_state.encoder_state.writer)?;
 
-                        // End of block is written in flush_to_bitstream.
+                            // Output update the huffman table that will be used to encode the
+                            // lz77-compressed data.
+                            deflate_state.encoder_state
+                                .update_huffman_table(&header.l_lengths, &header.d_lengths)?;
+
+
+                            // Write the huffman compressed data and the end of block marker.
+                            flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
+                                               &mut deflate_state.encoder_state)?;
+                        } else {
+                            // Decompress the current lz77 encoded data to get back the
+                            // uncompressd bytes.
+                            // TODO: Avoid the temporary buffer here.
+                            let data = decompress_lz77_with_backbuffer(deflate_state.lz77_writer
+                                                                           .get_buffer(),
+                                                                       deflate_state.back_buffer
+                                                                           .get_buffer());
+                            // TODO: May want to clear hash table here on lower compression
+                            // levels.
+                            write_stored_block(&data,
+                                               deflate_state,
+                                               flush == Flush::Finish && last_block)?;
+                        };
 
                         // Clear the current lz77 data in the writer for the next call.
                         deflate_state.lz77_writer.clear();
+                        // We are done with the block, so we reset the number of bytes taken
+                        // for the next one.
+                        deflate_state.lz77_state.reset_input_bytes();
+
+                        // Fill the back buffer.
+                        deflate_state.back_buffer
+                            .fill_buffer(&deflate_state.input_buffer.get_buffer()[..position]);
+
                         if status == LZ77Status::Finished {
                             break;
                         }
                     }
                 }
                 BType::FixedHuffman => {
+                    assert_ne!(flush, Flush::None);
+
                     // Lz77-compress the block. Since this block of code will be ran only at a
                     // sync or finish point, and any previous calls will ensure that there will
                     // only be at most one window size of data left, the function is called only
                     // once here.
-                    let (written, _) = lz77_compress_block(input,
-                                                           &mut deflate_state.lz77_state,
-                                                           &mut deflate_state.input_buffer,
-                                                           &mut deflate_state.lz77_writer,
-                                                           flush);
+                    let (written, ..) = lz77_compress_block(input,
+                                                            &mut deflate_state.lz77_state,
+                                                            &mut deflate_state.input_buffer,
+                                                            &mut deflate_state.lz77_writer,
+                                                            flush);
+
+                    //TODO: Check if the block is actually compressed.
 
                     bytes_written += written;
                     deflate_state.bytes_written += written as u64;
@@ -225,7 +254,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
 
         }
         BType::NoCompression => {
-            assert!(flush != Flush::None);
+            assert_ne!(flush, Flush::None);
 
             write_stored_block(input, deflate_state, flush == Flush::Finish)?;
 

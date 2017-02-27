@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::io;
+use std::u16;
 use bitstream::BitWriter;
 
 use byteorder::{LittleEndian, WriteBytesExt};
@@ -9,6 +10,7 @@ const BLOCK_SIZE: u16 = 32000;
 
 const STORED_FIRST_BYTE: u8 = 0b0000_0000;
 pub const STORED_FIRST_BYTE_FINAL: u8 = 0b0000_0001;
+pub const MAX_STORED_BLOCK_LENGTH: usize = (u16::MAX as usize) / 2;
 
 pub fn write_stored_header<W: BitWriter>(writer: &mut W, final_block: bool) -> io::Result<()> {
     let header = if final_block {
@@ -18,7 +20,7 @@ pub fn write_stored_header<W: BitWriter>(writer: &mut W, final_block: bool) -> i
     };
     // Write the block header
     writer.write_bits(header.into(), 3)?;
-    // Output some extra zeroes if needed to align with the byte boundary.
+    // Flush the writer to make sure we are aligned to the byte boundary.
     writer.flush()
 }
 

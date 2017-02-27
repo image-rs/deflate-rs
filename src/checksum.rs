@@ -6,8 +6,7 @@ pub trait RollingChecksum {
     fn current_hash(&self) -> u32;
 }
 
-pub struct NoChecksum {
-}
+pub struct NoChecksum {}
 
 impl NoChecksum {
     pub fn new() -> NoChecksum {

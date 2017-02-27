@@ -260,15 +260,13 @@ mod bpm {
         // sorting them by weight.
         let mut leaves: Vec<_> = frequencies.iter()
             .enumerate()
-            .filter_map(|(n, f)| {
-                if *f > 0 {
-                    Some(Leaf {
-                        weight: *f as WeightType,
-                        count: n as u16,
-                    })
-                } else {
-                    None
-                }
+            .filter_map(|(n, f)| if *f > 0 {
+                Some(Leaf {
+                    weight: *f as WeightType,
+                    count: n as u16,
+                })
+            } else {
+                None
             })
             .collect();
         // NOTE: We might want to consider normalising the
@@ -489,15 +487,13 @@ mod in_place {
         // symbols and weights.
         let mut leaves: Vec<Node> = frequencies.iter()
             .enumerate()
-            .filter_map(|(n, f)| {
-                if *f > 0 {
-                    Some(Node {
-                        value: *f as WeightType,
-                        symbol: n as u16,
-                    })
-                } else {
-                    None
-                }
+            .filter_map(|(n, f)| if *f > 0 {
+                Some(Node {
+                    value: *f as WeightType,
+                    symbol: n as u16,
+                })
+            } else {
+                None
             })
             .collect();
 
@@ -697,8 +693,8 @@ mod test {
     }
 
     #[test]
-    // Test if the bit lengths are optimal (give the best compression given the
-    // provided frequency information).
+    /// Test if the bit lengths for a set of frequencies are optimal (give the best compression
+    /// give the provided frequencies).
     fn optimal_lengths() {
         let freqs = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                      0, 0, 0, 0, 0, 0, 0, 68, 0, 14, 0, 0, 0, 0, 3, 7, 6, 1, 0, 12, 14, 9, 2, 6,
@@ -718,12 +714,10 @@ mod test {
 
         // Lengths produced by miniz for this frequency table for comparison
         // the number of total bits encoded with these huffman codes is 7701
-        // NOTE: miniz and zlib produce a set of length codes that themselves can be represented in
-        // a more compact way. (Contains one 3bit -length code is 4 bitslong instead, which lets the
-        // 11-length codes be 10 bits instead, avoiding needing to store an additional huffman code)
-        // for 11 length codes, which result in 2 saved bytes in total for the file compared to this
-        // implementation.
-        //
+        // NOTE: There can be more than one set of optimal lengths for a set of frequencies,
+        // (though there may be a difference in how well the table itself can be represented)
+        // so testing for a specific length table is not ideal since different algorithms
+        // may produce different length tables.
         // let lens3 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         // 0, 0, 0, 0, 0,
         // 0, 0, 0, 0, 0, 0, 4, 0, 7, 0, 0, 0, 0, 9, 8, 8, 10, 0, 7, 7, 7, 10, 8, 7, 8,

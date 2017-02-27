@@ -4,10 +4,15 @@ use lzvalue::LZValue;
 use huffman_table::{NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, END_OF_BLOCK_POSITION,
                     get_distance_code, get_length_code};
 
+/// The type used for representing how many times a literal, length or distance code has been ouput
+/// to the current buffer.
+/// As we are limiting the blocks to be at most 2^16 bytes long, we can represent frequencies using
+/// 16-bit values.
 pub type FrequencyType = u16;
 /// The maximum number of literals/lengths in the buffer, which in practice also means the maximum
 /// number of literals/lengths output before a new block is started.
-/// This should not be larger than the maximum value `FrequencyType` can represent.
+/// This should not be larger than the maximum value `FrequencyType` can represent to prevent
+/// overflowing (which would degrade, or in the worst case break compression).
 pub const MAX_BUFFER_LENGTH: usize = u16::MAX as usize;
 
 #[derive(PartialEq)]

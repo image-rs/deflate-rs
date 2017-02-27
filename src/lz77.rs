@@ -6,7 +6,7 @@ use std::slice::Iter;
 
 use input_buffer::InputBuffer;
 use matching::longest_match;
-use lzvalue::LZValue;
+use lzvalue::{LZValue, LZType};
 use huffman_table;
 use chained_hash_table::ChainedHashTable;
 use compression_options::{HIGH_MAX_HASH_CHECKS, HIGH_LAZY_IF_LESS_THAN};
@@ -37,6 +37,8 @@ pub struct LZ77State {
     is_last_block: bool,
     /// How many bytes the last match in the previous window extended into the current one.
     overlap: usize,
+    /// How many bytes of input the current block contains.
+    current_block_input_bytes: u64,
     /// The maximum number of hash entries to search.
     max_hash_checks: u16,
     /// Only lazy match if we have a match length less than this.
@@ -57,6 +59,7 @@ impl LZ77State {
             is_first_window: true,
             is_last_block: false,
             overlap: 0,
+            current_block_input_bytes: 0,
             max_hash_checks: max_hash_checks,
             lazy_if_less_than: lazy_if_less_than,
             matching_type: matching_type,
@@ -77,18 +80,30 @@ impl LZ77State {
         self.is_first_window = true;
         self.is_last_block = false;
         self.overlap = 0;
+        self.current_block_input_bytes = 0;
     }
 
     pub fn set_last(&mut self) {
         self.is_last_block = true;
     }
 
+    /// Is this the last block we are outputting?
     pub fn is_last_block(&self) -> bool {
         self.is_last_block
     }
 
+    /// Is this the first window we are processing?
     pub fn is_first_window(&self) -> bool {
         self.is_first_window
+    }
+
+    /// How many bytes of input the current block contains.
+    pub fn current_block_input_bytes(&self) -> u64 {
+        self.current_block_input_bytes
+    }
+
+    pub fn reset_input_bytes(&mut self) {
+        self.current_block_input_bytes = 0;
     }
 }
 
@@ -101,7 +116,7 @@ enum ProcessStatus {
 }
 
 fn process_chunk<W: OutputWriter>(data: &[u8],
-                                  iterated_data: Range<usize>,
+                                  iterated_data: &Range<usize>,
                                   hash_table: &mut ChainedHashTable,
                                   writer: &mut W,
                                   max_hash_checks: u16,
@@ -162,7 +177,7 @@ fn match_too_far(match_len: usize, match_dist: usize) -> bool {
 }
 
 fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
-                                       iterated_data: Range<usize>,
+                                       iterated_data: &Range<usize>,
                                        mut hash_table: &mut ChainedHashTable,
                                        writer: &mut W,
                                        max_hash_checks: u16,
@@ -318,7 +333,7 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
 }
 
 fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
-                                         iterated_data: Range<usize>,
+                                         iterated_data: &Range<usize>,
                                          mut hash_table: &mut ChainedHashTable,
                                          writer: &mut W,
                                          max_hash_checks: u16)
@@ -400,12 +415,12 @@ fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum LZ77Status {
-    // Waiting for more input before doing any processing
+    /// Waiting for more input before doing any processing
     NeedInput,
-    // The output buffer is full, so the current block needs to be ended so the
-    // buffer can be flushed.
+    /// The output buffer is full, so the current block needs to be ended so the
+    /// buffer can be flushed.
     EndBlock,
-    // All pending data has been processed.
+    /// All pending data has been processed.
     Finished,
 }
 
@@ -414,7 +429,9 @@ pub fn lz77_compress_block_finish<W: OutputWriter>(data: &[u8],
                                                    buffer: &mut InputBuffer,
                                                    mut writer: &mut W)
                                                    -> (usize, LZ77Status) {
-    lz77_compress_block::<W>(data, state, buffer, &mut writer, Flush::Finish)
+    let (consumed, status, _) =
+        lz77_compress_block::<W>(data, state, buffer, &mut writer, Flush::Finish);
+    (consumed, status)
 }
 
 /// Compress a slice with lz77 compression.
@@ -422,14 +439,14 @@ pub fn lz77_compress_block_finish<W: OutputWriter>(data: &[u8],
 /// This function processes one window at a time, and returns when there is no input left,
 /// or it determines it's time to end a block.
 ///
-/// Returns the number of bytes of the input that were not processed, and a status describing
+/// Returns the number of bytes of the input that were consumed and a status describing
 /// whether there is no input, it's time to finish, or it's time to end the block.
 pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                                             state: &mut LZ77State,
                                             buffer: &mut InputBuffer,
                                             mut writer: &mut W,
                                             flush: Flush)
-                                            -> (usize, LZ77Status) {
+                                            -> (usize, LZ77Status, usize) {
     // Currently we only support the maximum window size
     let window_size = DEFAULT_WINDOW_SIZE;
 
@@ -437,6 +454,8 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
     // should wait until we have at least one window size of data before doing anything.
     let finish = flush == Flush::Finish || flush == Flush::Sync;
     let sync = flush == Flush::Sync;
+
+    let mut current_position = 0;
 
     // The current status of the encoding.
     let mut status = LZ77Status::EndBlock;
@@ -464,8 +483,10 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                     cmp::min(window_size, buffer.current_end())
                 };
 
+                let start = state.overlap;
+
                 let (overlap, p_status) = process_chunk::<W>(buffer.get_buffer(),
-                                                             state.overlap..first_chunk_end,
+                                                             &(start..first_chunk_end),
                                                              &mut state.hash_table,
                                                              &mut writer,
                                                              state.max_hash_checks,
@@ -473,6 +494,7 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                                                              state.matching_type);
 
                 state.overlap = overlap;
+                state.current_block_input_bytes += (first_chunk_end - start + overlap) as u64;
 
                 // If the buffer is full, we want to end the block.
                 if let ProcessStatus::BufferFull(written) = p_status {
@@ -481,6 +503,7 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                     // space in the buffer pending any bugs.
                     state.overlap = if overlap > 0 { overlap } else { written };
                     status = LZ77Status::EndBlock;
+                    current_position = written;
                     break;
                 }
 
@@ -516,12 +539,14 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
             };
 
             let (overlap, p_status) = process_chunk::<W>(buffer.get_buffer(),
-                                                         start..end,
+                                                         &(start..end),
                                                          &mut state.hash_table,
                                                          &mut writer,
                                                          state.max_hash_checks,
                                                          state.lazy_if_less_than as usize,
                                                          state.matching_type);
+
+            state.current_block_input_bytes += (end - start + overlap) as u64;
 
             if let ProcessStatus::BufferFull(written) = p_status {
                 // If the buffer is full, return and end the block.
@@ -533,6 +558,9 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 } else {
                     written - window_size
                 };
+
+                current_position = written;
+
                 // Status is already EndBlock at this point.
                 // status = LZ77Status::EndBlock;
                 break;
@@ -578,7 +606,50 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
 
     }
 
-    (data.len() - remaining_data.unwrap_or(&[]).len(), status)
+    (data.len() - remaining_data.unwrap_or(&[]).len(), status, current_position)
+}
+
+#[cfg(test)]
+pub fn decompress_lz77(input: &[LZValue]) -> Vec<u8> {
+    decompress_lz77_with_backbuffer(input, &[])
+}
+
+pub fn decompress_lz77_with_backbuffer(input: &[LZValue], back_buffer: &[u8]) -> Vec<u8> {
+    let mut output = Vec::new();
+    for p in input {
+        match p.value() {
+            LZType::Literal(l) => output.push(l),
+            LZType::StoredLengthDistance(l, d) => {
+                // We found a match, so we have to get the data that the match refers to.
+                let d = d as usize;
+                let prev_output_len = output.len();
+                // Get match data from the back buffer if the match extends that far.
+                let consumed = if d > output.len() {
+                    let into_back_buffer = d - output.len();
+
+                    assert!(into_back_buffer <= back_buffer.len(),
+                            "FATAL ERROR: Attempted to refer to a match in non-existing data!");
+                    let start = back_buffer.len() - into_back_buffer;
+                    let end = cmp::min(back_buffer.len(), start + l.actual_length() as usize);
+                    output.extend_from_slice(&back_buffer[start..end]);
+
+                    end - start
+                } else {
+                    0
+                };
+
+                // Get match data from the currently decompressed data.
+                let start = prev_output_len.saturating_sub(d);
+                let mut n = 0;
+                while n < (l.actual_length() as usize).saturating_sub(consumed) {
+                    let b = output[start + n];
+                    output.push(b);
+                    n += 1;
+                }
+            }
+        }
+    }
+    output
 }
 
 #[allow(dead_code)]
@@ -607,7 +678,7 @@ impl TestStruct {
         }
     }
 
-    fn compress_block(&mut self, data: &[u8], flush: bool) -> (usize, LZ77Status) {
+    fn compress_block(&mut self, data: &[u8], flush: bool) -> (usize, LZ77Status, usize) {
         lz77_compress_block(data,
                             &mut self.state,
                             &mut self.buffer,
@@ -665,24 +736,7 @@ mod test {
     use test_utils::get_test_data;
     use output_writer::MAX_BUFFER_LENGTH;
 
-    fn decompress_lz77(input: &[LZValue]) -> Vec<u8> {
-        let mut output = Vec::new();
-        for p in input {
-            match p.value() {
-                LZType::Literal(l) => output.push(l),
-                LZType::StoredLengthDistance(l, d) => {
-                    let start = output.len() - d as usize;
-                    let mut n = 0;
-                    while n < l.actual_length() as usize {
-                        let b = output[start + n];
-                        output.push(b);
-                        n += 1;
-                    }
-                }
-            }
-        }
-        output
-    }
+
 
 
     /// Helper function to print the output from the lz77 compression function
@@ -859,10 +913,10 @@ mod test {
             let first_part = &data[..SPLIT];
             let second_part = &data[SPLIT..];
             let mut state = TestStruct::new();
-            let (bytes_written, status) = state.compress_block(first_part, false);
+            let (bytes_written, status, _) = state.compress_block(first_part, false);
             assert_eq!(bytes_written, first_part.len());
             assert_eq!(status, LZ77Status::NeedInput);
-            let (bytes_written, status) = state.compress_block(second_part, true);
+            let (bytes_written, status, _) = state.compress_block(second_part, true);
             assert_eq!(bytes_written, second_part.len());
             assert_eq!(status, LZ77Status::Finished);
             Vec::from(state.writer.get_buffer())
@@ -898,7 +952,7 @@ mod test {
     // Test buffer fill when a byte is added due to no match being found.
     fn buffer_test_literals(data: &[u8]) {
         let mut state = TestStruct::with_config(0, 0, MatchingType::Lazy);
-        let (bytes_consumed, status) = state.compress_block(&data, false);
+        let (bytes_consumed, status, _) = state.compress_block(&data, false);
         let total_consumed = bytes_consumed;
         assert_eq!(status, LZ77Status::EndBlock);
         assert!(bytes_consumed <= (WINDOW_SIZE * 2) + MAX_MATCH);
@@ -911,7 +965,7 @@ mod test {
         // The buffer should now be cleared.
         assert_eq!(state.writer.get_buffer().len(), 0);
 
-        let (bytes_consumed, _) = state.compress_block(&data[total_consumed..], false);
+        let (bytes_consumed, ..) = state.compress_block(&data[total_consumed..], false);
         // Now that the buffer has been cleared, we should have consumed more data.
         assert!(bytes_consumed > 0);
         // We should have some new data in the buffer at this point.
@@ -926,13 +980,15 @@ mod test {
         const BYTES_USED: usize = MAX_BUFFER_LENGTH;
         assert!(&data[..BYTES_USED] ==
                 &decompress_lz77(&lz77_compress_conf(&data[..BYTES_USED], 0, 0, matching_type)
-            .unwrap())[..]);
+            .unwrap())
+                     [..]);
         assert!(&data[..BYTES_USED + 1] ==
                 &decompress_lz77(&lz77_compress_conf(&data[..BYTES_USED + 1],
                                                      0,
                                                      0,
                                                      matching_type)
-            .unwrap())[..]);
+            .unwrap())
+                     [..]);
     }
 
     // Test buffer fill when buffer is full at a match.
@@ -962,6 +1018,25 @@ mod test {
         let dec = decompress_lz77(&state.writer.get_buffer()[33583..]);
         assert!(dec.len() > 0);
         assert!(dec[..] == data[..dec.len()]);
+    }
+
+    fn lit(l: u8) -> LZValue {
+        LZValue::literal(l)
+    }
+
+    fn ld(l: u16, d: u16) -> LZValue {
+        LZValue::length_distance(l, d)
+    }
+
+    /// Check that decompressing lz77-data that refers to the back-buffer works.
+    #[test]
+    fn test_decompress_with_backbuffer() {
+        let bb = vec![5; WINDOW_SIZE];
+        let lz_compressed = [lit(2), lit(4), ld(4, 20), lit(1), lit(1), ld(5, 10)];
+        let dec = decompress_lz77_with_backbuffer(&lz_compressed, &bb);
+
+        // ------------l2 l4  <-ld4,20-> l1 l1  <---ld5,10-->
+        assert!(dec == [2, 4, 5, 5, 5, 5, 1, 1, 5, 5, 2, 4, 5]);
     }
 
 }

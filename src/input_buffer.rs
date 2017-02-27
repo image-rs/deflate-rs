@@ -4,6 +4,7 @@ use chained_hash_table::WINDOW_SIZE;
 use huffman_table;
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
+const MAX_DISTANCE: usize = huffman_table::MAX_DISTANCE as usize;
 pub const BUFFER_SIZE: usize = (WINDOW_SIZE * 2) + MAX_MATCH;
 
 pub struct InputBuffer {
@@ -55,7 +56,7 @@ impl InputBuffer {
     /// Returns a slice containing the data that did not fit, or None if all data was consumed.
     pub fn slide<'a>(&mut self, data: &'a [u8]) -> Option<&'a [u8]> {
         // This should only be used when the buffer is full
-        assert!(self.current_end == BUFFER_SIZE);
+        assert_eq!(self.current_end, BUFFER_SIZE);
         // Split into lower window and upper window + lookahead
         let (lower, upper) = self.buffer[..].split_at_mut(WINDOW_SIZE);
         // Copy the upper window to the lower window
@@ -104,6 +105,41 @@ impl InputBuffer {
     }
 }
 
+/// A buffer used to keep a backlog of the last 2^15 (maximum match distance) of bytes of the
+/// previous block.
+///
+/// This is used so we can derive a output a stored block when compression fails from the
+/// lz77-compressed data instead of keeping a very long buffer. Keeping this backlog is needed
+/// in this case since there might be matches in the current block that may refer to data in the
+/// previous block.
+pub struct BackBuffer {
+    buffer: Vec<u8>,
+}
+
+impl BackBuffer {
+    pub fn new() -> BackBuffer {
+        BackBuffer { buffer: Vec::with_capacity(MAX_DISTANCE) }
+    }
+
+    /// Fill the buffer with up to 2^15 (`MAX_DISTANCE`) data from the end of the input slice.
+    ///
+    /// This will erase the current buffer data.
+    pub fn fill_buffer(&mut self, data: &[u8]) {
+        let start = data.len().saturating_sub(MAX_DISTANCE);
+        self.buffer.clear();
+        self.buffer.extend_from_slice(&data[start..]);
+    }
+
+    /// Borrow a slice of the currently buffered data.
+    pub fn get_buffer(&self) -> &[u8] {
+        self.buffer.as_slice()
+    }
+
+    /// Clear the internal buffer.
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+    }
+}
 #[cfg(test)]
 mod test {
     use super::MAX_MATCH;

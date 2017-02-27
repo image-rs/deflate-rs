@@ -2,7 +2,7 @@ use std::io::Write;
 use lz77::LZ77State;
 use output_writer::DynamicWriter;
 use encoder_state::EncoderState;
-use input_buffer::InputBuffer;
+use input_buffer::{InputBuffer, BackBuffer};
 use compression_options::CompressionOptions;
 use huffman_table::HuffmanTable;
 use std::io;
@@ -15,6 +15,7 @@ pub struct DeflateState<W: Write> {
     pub encoder_state: EncoderState<W>,
     pub lz77_writer: DynamicWriter,
     pub bytes_written: u64,
+    pub back_buffer: BackBuffer,
 }
 
 impl<W: Write> DeflateState<W> {
@@ -28,6 +29,7 @@ impl<W: Write> DeflateState<W> {
             lz77_writer: DynamicWriter::new(),
             compression_options: compression_options,
             bytes_written: 0,
+            back_buffer: BackBuffer::new(),
         }
     }
 
@@ -36,12 +38,15 @@ impl<W: Write> DeflateState<W> {
     /// If flushing the current writer succeeds, it is replaced with the provided one,
     /// buffers and status (except compression options) is reset and the old writer
     /// is returned.
+    ///
+    /// If flushing fails, the rest of the writer is not cleared.
     pub fn reset(&mut self, writer: W) -> io::Result<W> {
         let ret = self.encoder_state.reset(writer)?;
         self.input_buffer = InputBuffer::empty();
         self.lz77_writer.clear();
         self.lz77_state.reset();
         self.bytes_written = 0;
+        self.back_buffer.clear();
         Ok(ret)
     }
 }

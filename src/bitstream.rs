@@ -29,6 +29,7 @@ pub trait BitWriter: Write {
     fn write_bits(&mut self, v: u16, n: u8) -> io::Result<()>;
 }
 
+#[cfg(test)]
 macro_rules! define_bit_readers {
     {$(
         $name:ident, #[$doc:meta];
@@ -61,11 +62,13 @@ impl $name {
     }
 }
 
+#[cfg(test)]
 define_bit_readers!{
     LsbReader, #[doc = "Reads bits from a byte stream, LSB first."];
     MsbReader, #[doc = "Reads bits from a byte stream, MSB first."];
 }
 
+#[cfg(test)]
 impl BitReader for LsbReader {
     fn read_bits(&mut self, mut buf: &[u8], n: u8) -> Bits {
         if n > 16 {
@@ -93,6 +96,7 @@ impl BitReader for LsbReader {
     }
 }
 
+#[cfg(test)]
 impl BitReader for MsbReader {
     fn read_bits(&mut self, mut buf: &[u8], n: u8) -> Bits {
         if n > 16 {
