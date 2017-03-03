@@ -19,7 +19,7 @@ fn get_test_data() -> Vec<u8> {
 
 // A test comparing the compression ratio of the library with flate2
 #[test]
-fn test_file_zlib_compare_output() {
+fn file_zlib_compare_output() {
     use flate2::Compression;
     use std::io::{Write, Read};
     use deflate::{CompressionOptions, deflate_bytes_zlib_conf};
@@ -55,6 +55,24 @@ fn test_file_zlib_compare_output() {
         out
     };
 
+
+    assert!(decompressed == test_data);
+}
+
+#[test]
+fn block_type() {
+    use std::io::Read;
+    let test_file = "tests/short.bin";
+    let test_data = get_test_file_data(test_file);
+    let compressed = deflate::deflate_bytes_zlib(&test_data);
+    assert_eq!(compressed.len(), 30);
+
+    let decompressed = {
+        let mut d = flate2::read::ZlibDecoder::new(compressed.as_slice());
+        let mut out = Vec::new();
+        d.read_to_end(&mut out).unwrap();
+        out
+    };
 
     assert!(decompressed == test_data);
 }

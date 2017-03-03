@@ -108,6 +108,10 @@ impl<W: Write> EncoderState<W> {
         self.huffman_table.update_from_length_tables(literals_and_lengths, distances)
     }
 
+    pub fn set_huffman_to_fixed(&mut self) -> Result<(), HuffmanError> {
+        self.huffman_table.set_to_fixed()
+    }
+
     /// Reset the encoder state with a new writer, returning the old one if flushing
     /// succeeds.
     pub fn reset(&mut self, writer: W) -> io::Result<W> {

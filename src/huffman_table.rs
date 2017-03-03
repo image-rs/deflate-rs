@@ -95,7 +95,7 @@ static BASE_LENGTH: [u8; NUM_LENGTH_CODES] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12,
                                               224, 255]; // 258 - MIN_MATCh
 
 // What number in the literal/length table the lengths start at
-const LENGTH_BITS_START: u16 = 257;
+pub const LENGTH_BITS_START: u16 = 257;
 
 // Lengths for the distance codes in the pre-defined/fixed huffman table
 // (All distance codes are 5 bits long)
@@ -134,6 +134,14 @@ static DISTANCE_BASE: [u16; NUM_DISTANCE_CODES] =
     [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536,
      2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576];
 
+pub fn num_extra_bits_for_length_code(code: u8) -> u8 {
+    LENGTH_EXTRA_BITS_LENGTH[code as usize]
+}
+
+pub fn num_extra_bits_for_distance_code(code: u8) -> u8 {
+    DISTANCE_EXTRA_BITS[code as usize]
+}
+
 /// A struct representing the data needed to generate the bit codes for
 /// a given value and huffman table.
 #[derive(Copy, Clone)]
@@ -165,7 +173,7 @@ fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
     // We can then get the base length from the base length table,
     // which we use to calculate the value of the extra bits.
     let base = BASE_LENGTH[n as usize];
-    let num_bits = LENGTH_EXTRA_BITS_LENGTH[n as usize];
+    let num_bits = num_extra_bits_for_length_code(n);
     ExtraBits {
         code_number: u16::from(n) + LENGTH_BITS_START,
         num_bits: num_bits,
@@ -192,7 +200,7 @@ pub fn get_distance_code(distance: u16) -> Option<u8> {
 
 fn get_distance_code_and_extra_bits(distance: u16) -> Option<ExtraBits> {
     if let Some(distance_code) = get_distance_code(distance) {
-        let extra = DISTANCE_EXTRA_BITS[distance_code as usize];
+        let extra = num_extra_bits_for_distance_code(distance_code);
         // FIXME: We should add 1 to the values in distance_base to avoid having to add one here
         let base = DISTANCE_BASE[distance_code as usize] + 1;
         Some(ExtraBits {
@@ -357,6 +365,10 @@ impl HuffmanTable {
                                      -> Result<(), HuffmanError> {
         create_codes_in_place(self.codes.as_mut(), literals_and_lengths)?;
         create_codes_in_place(self.distance_codes.as_mut(), distances)
+    }
+
+    pub fn set_to_fixed(&mut self) -> Result<(), HuffmanError> {
+        self.update_from_length_tables(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE)
     }
 
     /// Create a HuffmanTable using the fixed tables specified in the DEFLATE format specification.

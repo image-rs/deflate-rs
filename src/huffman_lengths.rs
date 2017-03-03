@@ -1,7 +1,9 @@
 use length_encode::EncodedLength;
 use length_encode::{encode_lengths, huffman_lengths_from_frequency, COPY_PREVIOUS,
                     REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS};
-use huffman_table::{create_codes, NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, MAX_CODE_LENGTH};
+use huffman_table::{create_codes, num_extra_bits_for_length_code, num_extra_bits_for_distance_code,
+                    NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, MAX_CODE_LENGTH,
+                    FIXED_CODE_LENGTHS, LENGTH_BITS_START};
 use bitstream::{BitWriter, LsbWriter};
 use output_writer::FrequencyType;
 
@@ -36,17 +38,66 @@ pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T], min_length: 
     &input[0..cmp::max(input.len() - num_zeroes, min_length)]
 }
 
-/// Calculate the number of bits that will be used to represent a block with the given frequencies
-/// and code lengths (not including headers).
-///
-/// Frequencies that are missing code lengths or vice versa will not be counted. This should
-/// be okay, as the places this function is used any frequencies that are missing lengths
-/// should be zero anyhow.
-fn calculate_block_length(frequencies: &[FrequencyType], code_lengths: &[u8]) -> u64 {
-    debug_assert!(frequencies.len() >= code_lengths.len());
+/// How many extra bits the huffman length code uses to represent a value.
+fn extra_bits_for_huffman_length_code(code: u8) -> u8 {
+    match code {
+        16...17 => 3,
+        18 => 7,
+        _ => 0,
+    }
+}
+
+/// Calculate how many bits the huffman-encoded huffman lengths will use.
+fn calculate_huffman_length(frequencies: &[FrequencyType], code_lengths: &[u8]) -> u64 {
     frequencies.iter()
         .zip(code_lengths)
-        .fold(0, |acc, (&f, &l)| acc + (u64::from(f) * u64::from(l)))
+        .enumerate()
+        .fold(0, |acc, (n, (&f, &l))| {
+            acc +
+            (u64::from(f) * (u64::from(l) + u64::from(extra_bits_for_huffman_length_code(n as u8))))
+        })
+}
+
+/// Calculate how many bits data with the given frequencies will use when compressed with dynamic
+/// code lengths (first return value) and static code lengths (second return value).
+///
+/// Parameters:
+/// Frequencies, length of dynamic codes, and a function to get how many extra bits in addition
+/// to the length of the huffman code the symbol will use.
+fn calculate_block_length<F>(frequencies: &[FrequencyType],
+                             dyn_code_lengths: &[u8],
+                             get_num_extra_bits: F)
+                             -> (u64, u64)
+    where F: Fn(usize) -> u64
+{
+    // Length of data represented by dynamic codes.
+    let mut d_ll_length = 0u64;
+    // length of data represented by static codes.
+    let mut s_ll_length = 0u64;
+
+    let iter =
+        frequencies.iter().zip(dyn_code_lengths.iter().zip(FIXED_CODE_LENGTHS.iter())).enumerate();
+
+    // This could maybe be optimised a bit by splitting the iteration of codes using extra bits and
+    // codes not using extra bits, but the extra complexity may not be worth it.
+    for (c, (&f, (&l, &fl))) in iter {
+        // Frequency
+        let f = u64::from(f);
+        // How many extra bits the current code number needs.
+        let extra_bits_for_code = get_num_extra_bits(c);
+
+        d_ll_length += f * (u64::from(l) + extra_bits_for_code);
+        s_ll_length += f * (u64::from(fl) + extra_bits_for_code);
+
+    }
+
+    (d_ll_length, s_ll_length)
+}
+
+pub enum BlockType {
+    Stored,
+    Fixed,
+    Dynamic(DynamicBlockHeader),
 }
 
 /// A struct containing the different data needed to write the header for a dynamic block.
@@ -59,15 +110,19 @@ pub struct DynamicBlockHeader {
     pub encoded_lengths: Vec<EncodedLength>,
     /// Length of the run-length encoding symbols.
     pub huffman_table_lengths: Vec<u8>,
+    /// Number of lengths for values describing the huffman table that encodes the length values
+    /// of the main huffman tables.
+    pub used_hclens: usize,
 }
 
 /// Generate the lengths of the huffman codes we will be using, using the
-/// frequency of the different symbols/lengths/distances, checking if the block does not expand
-/// in size.
+/// frequency of the different symbols/lengths/distances, and determine what block type will give
+/// the shortest representation.
+/// TODO: This needs a test
 pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
                            d_freqs: &[FrequencyType],
                            num_input_bytes: u64)
-                           -> Option<DynamicBlockHeader> {
+                           -> BlockType {
 
     // The huffman spec allows us to exclude zeroes at the end of the
     // table of huffman lengths.
@@ -92,24 +147,62 @@ pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
     // Create huffman lengths for the length/distance code lengths
     let huffman_table_lengths = huffman_lengths_from_frequency(&freqs, MAX_HUFFMAN_CODE_LENGTH);
 
+    // Count how many of these lengths we use.
+    let used_hclens = HUFFMAN_LENGTH_ORDER.len() -
+                      HUFFMAN_LENGTH_ORDER.iter()
+        .rev()
+        .take_while(|&&n| huffman_table_lengths[n as usize] == 0)
+        .count();
 
-    // Calculate how many bytes of space this block will take up.
-    let total_compressed_length =
-        (calculate_block_length(l_freqs, &l_lengths) + calculate_block_length(d_freqs, &d_lengths) +
-         calculate_block_length(&freqs, &huffman_table_lengths)) / 8;
+    // There has to be at least 4 hclens, so if there isn't, something went wrong.
+    debug_assert!(used_hclens >= 4);
+
+    // Calculate how many bytes of space this block will take up with the different block types
+    // (excluding the 3-bit block header since it's used in all block types).
+
+    // Total length of the compressed literals/lengths.
+    let (d_ll_length, s_ll_length) = calculate_block_length(l_freqs, &l_lengths, |c| {
+        num_extra_bits_for_length_code(c.saturating_sub(LENGTH_BITS_START as usize) as u8).into()
+    });
+
+    // Total length of the compressed distances.
+    let (d_dist_length, s_dist_length) = calculate_block_length(d_freqs, &d_lengths, |c| {
+        num_extra_bits_for_distance_code(c as u8).into()
+    });
+
+    // Total length of the compressed huffman code lengths.
+    let huff_table_length = calculate_huffman_length(&freqs, &huffman_table_lengths);
+
+    // For dynamic blocks the huffman tables takes up some extra space.
+    let dynamic_length =
+        d_ll_length + d_dist_length + huff_table_length + (used_hclens as u64 * 3) +
+        u64::from(HLIT_BITS) + u64::from(HDIST_BITS) + u64::from(HCLEN_BITS);
+
+    // Static blocks don't have any extra header data.
+    let static_length = s_ll_length + s_dist_length;
+
+    // For stored blocks, the length is simply the number of input bytes + 2 bytes that are used to
+    // represent the block length.
+    let stored_length = (num_input_bytes + STORED_BLOCK_HEADER_LENGTH) * 8;
+
+    let used_length = cmp::min(cmp::min(dynamic_length, static_length), stored_length);
 
     // Check if the block is actually compressed. If using a dynamic block
     // increases the length of the block (for instance if the input data is mostly random or
     // already compressed), we want to output a stored(uncompressed) block instead to avoid wasting
     // space.
-    if total_compressed_length > num_input_bytes + STORED_BLOCK_HEADER_LENGTH {
-        None
+
+    if used_length == static_length {
+        BlockType::Fixed
+    } else if used_length == stored_length {
+        BlockType::Stored
     } else {
-        Some(DynamicBlockHeader {
+        BlockType::Dynamic(DynamicBlockHeader {
             l_lengths: l_lengths,
             d_lengths: d_lengths,
             encoded_lengths: encoded,
             huffman_table_lengths: huffman_table_lengths,
+            used_hclens: used_hclens,
         })
     }
 }
@@ -123,6 +216,7 @@ pub fn write_huffman_lengths<W: Write>(header: &DynamicBlockHeader,
     let distance_lengths = &header.d_lengths;
     let huffman_table_lengths = &header.huffman_table_lengths;
     let encoded_lengths = &header.encoded_lengths;
+    let used_hclens = header.used_hclens;
 
     assert!(literal_len_lengths.len() <= NUM_LITERALS_AND_LENGTHS);
     assert!(literal_len_lengths.len() >= MIN_NUM_LITERALS_AND_LENGTHS);
@@ -136,16 +230,12 @@ pub fn write_huffman_lengths<W: Write>(header: &DynamicBlockHeader,
     let hdist = (distance_lengths.len() - MIN_NUM_DISTANCES) as u16;
     writer.write_bits(hdist, HDIST_BITS)?;
 
-    let used_hclens = HUFFMAN_LENGTH_ORDER.len() -
-                      HUFFMAN_LENGTH_ORDER.iter()
-        .rev()
-        .take_while(|&&n| huffman_table_lengths[n as usize] == 0)
-        .count();
-
     // Number of huffman table lengths - 4
-    // TODO: Is this safe?
     let hclen = used_hclens.saturating_sub(4);
 
+    // Write HCLEN.
+    // Casting to u16 is safe since the length can never be more than the length of
+    // `HUFFMAN_LENGTH_ORDER` anyhow.
     writer.write_bits(hclen as u16, HCLEN_BITS)?;
 
     // Write the lengths for the huffman table describing the huffman table
@@ -187,40 +277,4 @@ pub fn write_huffman_lengths<W: Write>(header: &DynamicBlockHeader,
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use super::calculate_block_length;
-
-    #[test]
-    fn block_length() {
-        let freqs = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 68, 0, 14, 0, 0, 0, 0, 3, 7, 6, 1, 0, 12, 14, 9, 2, 6,
-                     9, 4, 1, 1, 4, 1, 1, 0, 0, 1, 3, 0, 6, 0, 0, 0, 4, 4, 1, 2, 5, 3, 2, 2, 9, 0,
-                     0, 3, 1, 5, 5, 8, 0, 6, 10, 5, 2, 0, 0, 1, 2, 0, 8, 11, 4, 0, 1, 3, 31, 13,
-                     23, 22, 56, 22, 8, 11, 43, 0, 7, 33, 15, 45, 40, 16, 1, 28, 37, 35, 26, 3, 7,
-                     11, 9, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 1, 126, 114, 66, 31, 41, 25, 15, 21, 20, 16, 15, 10, 7,
-                     5, 1, 1];
-
-
-        let lens = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 4, 0, 7, 0, 0, 0, 0, 9, 8, 8, 10, 0, 7, 7, 7, 10, 8, 7, 8,
-                    10, 10, 8, 10, 10, 0, 0, 10, 9, 0, 8, 0, 0, 0, 8, 8, 10, 9, 8, 9, 9, 9, 7, 0,
-                    0, 9, 10, 8, 8, 7, 0, 8, 7, 8, 9, 0, 0, 10, 9, 0, 7, 7, 8, 0, 10, 9, 6, 7, 6,
-                    6, 5, 6, 7, 7, 5, 0, 8, 5, 7, 5, 5, 6, 10, 6, 5, 5, 6, 9, 8, 7, 7, 10, 10, 0,
-                    10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 10, 4, 4, 4, 5, 5, 6, 7, 6, 6, 6, 6, 7, 8, 8, 10, 10];
-
-        assert_eq!(calculate_block_length(&freqs, &lens), 7701);
-    }
 }

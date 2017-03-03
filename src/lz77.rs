@@ -92,11 +92,6 @@ impl LZ77State {
         self.is_last_block
     }
 
-    /// Is this the first window we are processing?
-    pub fn is_first_window(&self) -> bool {
-        self.is_first_window
-    }
-
     /// How many bytes of input the current block contains.
     pub fn current_block_input_bytes(&self) -> u64 {
         self.current_block_input_bytes
@@ -234,7 +229,7 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
             // Only lazy match if we have a match shorter than a set value
             // TODO: This should be cleaned up a bit
             let (match_len, match_dist) = if !ignore_next {
-                let (match_len, match_dist) = {
+                let (mut match_len, mut match_dist) = {
                     // If there already was a decent match at the previous byte
                     // and we are lazy matching, do less match checks in this step.
                     let max_hash_checks = if prev_length >= 32 {
@@ -248,6 +243,13 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                     longest_match(data, hash_table, position, prev_length, max_hash_checks)
                 };
 
+                // If the match is only 3 bytes long and very far back, it's probably not worth
+                // outputting.
+                if match_too_far(match_len, match_dist) {
+                    match_len = NO_LENGTH;
+                    match_dist = 0;
+                };
+
                 if match_len > lazy_if_less_than {
                     // We found a decent match, so we won't check for a better one at the next byte.
                     ignore_next = true;
@@ -258,8 +260,7 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                 (NO_LENGTH, 0)
             };
 
-            if prev_length >= match_len && prev_length >= MIN_MATCH as usize &&
-               prev_distance > 0 && !match_too_far(prev_length, prev_distance) {
+            if prev_length >= match_len && prev_length > NO_LENGTH && prev_distance > 0 {
                 // The previous match was better so we add it.
                 // Casting note: length and distance is already bounded by the longest match
                 // function. Usize is just used for convenience.
@@ -307,15 +308,29 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
         } else {
             let position = n + start;
 
+            // If there is a match at this point, it will not have been added, so we need to add it.
+            if prev_length > NO_LENGTH && prev_distance != 0 {
+                let b_status =
+                    writer.write_length_distance(prev_length as u16, prev_distance as u16);
+                // As this will be a 3-length match at the end of the input data, there can't be any
+                // overlap.
+                // TODO: Not sure if we need to signal that the buffer is full here.
+                // It's only needed in the case of syncing.
+                if let BufferStatus::Full = b_status {
+                    return (0, ProcessStatus::BufferFull(end));
+                } else {
+                    return (0, ProcessStatus::Ok);
+                }
+            };
+
             if add {
                 // We may still have a leftover byte at this point, so we add it here if needed.
-                // let b_status = writer.write_literal(prev_byte);
                 add = false;
 
                 // ADD
                 write_literal!(writer, prev_byte, position);
 
-            }
+            };
 
             // We are at the last two bytes we want to add, so there is no point
             // searching for matches here.

@@ -248,10 +248,8 @@ mod test {
 
     #[test]
     fn zlib_short() {
-        let test_data = [10, 20, 30, 40, 55];
+        let test_data = [10, 10, 10, 10, 10, 55];
         let compressed = deflate_bytes_zlib(&test_data);
-
-
 
         let result = decompress_zlib(&compressed);
         assert_eq!(&test_data, result.as_slice());
@@ -271,6 +269,17 @@ mod test {
 
         let result = decompress_zlib(&compressed);
         assert!(test_data == result);
+    }
+
+    #[test]
+    fn deflate_short() {
+        let test_data = [10, 10, 10, 10, 10, 55];
+        let compressed = deflate_bytes(&test_data);
+
+        let result = decompress_to_end(&compressed);
+        assert_eq!(&test_data, result.as_slice());
+        // If block type and compression is selected correctly, this should only take 5 bytes.
+        assert_eq!(compressed.len(), 5);
     }
 
     fn chunk_test(chunk_size: usize) {
