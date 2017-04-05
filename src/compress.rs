@@ -35,7 +35,7 @@ pub fn flush_to_bitstream<W: Write>(buffer: &[LZValue],
                                     state: &mut EncoderState<W>)
                                     -> io::Result<()> {
     for &b in buffer {
-        state.write_lzvalue2(b.value())?
+        state.write_lzvalue(b.value())?
     }
     state.write_end_of_block()
 }
@@ -108,6 +108,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
         // Bytes written in this call
         bytes_written += written;
         // Total bytes written since the compression process started
+        // TODO: Should we realistically have to worry about overflowing here?
         deflate_state.bytes_written += bytes_written as u64;
 
         if status == LZ77Status::NeedInput {

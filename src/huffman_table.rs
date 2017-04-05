@@ -274,8 +274,8 @@ fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), Hu
     for (n, &length) in table.iter().enumerate() {
         // TODO: Make sure we don't have more of one length than we can make
         // codes for
-        len_counts[usize::from(length)] += 1;
         if length > 0 {
+            len_counts[usize::from(length)] += 1;
             max_length_pos = n;
         }
     }
@@ -302,7 +302,7 @@ pub fn create_codes_in_place(code_table: &mut [HuffmanCode],
 
     for bits in 1..max_length + 1 {
         code = (code + lengths[bits - 1]) << 1;
-        next_code.push(code.into());
+        next_code.push(code);
     }
 
     for n in 0..max_length_pos + 1 {

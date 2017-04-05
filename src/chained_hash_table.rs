@@ -32,7 +32,7 @@ pub struct ChainedHashTable {
 }
 
 impl ChainedHashTable {
-    fn new() -> ChainedHashTable {
+    pub fn new() -> ChainedHashTable {
         let mut c = ChainedHashTable {
             current_hash: 0,
             head: Box::new([0; WINDOW_SIZE]),

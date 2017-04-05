@@ -342,7 +342,7 @@ pub fn huffman_lengths_from_frequency(frequencies: &[u16], max_len: usize) -> Ve
 mod in_place {
     type WeightType = u32;
 
-    fn validate_lengths(lengths: &[u8]) -> bool {
+    pub fn validate_lengths(lengths: &[u8]) -> bool {
         let v = lengths.iter().fold(0f64, |acc, &n| {
             acc + if n != 0 { 2f64.powi(-(n as i32)) } else { 0f64 }
         });
@@ -736,5 +736,4 @@ mod test {
         let num_bits = lens.iter().zip(freqs.iter()).fold(0, |a, (&f, &l)| a + (f as u16 * l));
         assert_eq!(num_bits, 7701);
     }
-
 }

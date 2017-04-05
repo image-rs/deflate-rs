@@ -47,8 +47,8 @@ impl<W: Write> EncoderState<W> {
         self.writer.write_bits(code.code, code.length)
     }
 
-    // Write a LDPair value to the contained writer, returning Err if the write operation fails
-    pub fn write_lzvalue2(&mut self, value: LZType) -> io::Result<()> {
+    /// Write a LZvalue to the contained writer, returning Err if the write operation fails
+    pub fn write_lzvalue(&mut self, value: LZType) -> io::Result<()> {
         match value {
             LZType::Literal(l) => self.write_literal(l),
             LZType::StoredLengthDistance(l, d) => {
@@ -88,7 +88,7 @@ impl<W: Write> EncoderState<W> {
         }
     }
 
-    // Write the end of block code
+    /// Write the end of block code
     pub fn write_end_of_block(&mut self) -> io::Result<()> {
         let code = self.huffman_table.get_end_of_block();
         self.writer.write_bits(code.code, code.length)

@@ -48,14 +48,13 @@ pub struct LZ77State {
 }
 
 impl LZ77State {
-    fn from_starting_values(b0: u8,
-                            b1: u8,
-                            max_hash_checks: u16,
-                            lazy_if_less_than: u16,
-                            matching_type: MatchingType)
-                            -> LZ77State {
+    /// Creates a new LZ77 state
+    pub fn new(max_hash_checks: u16,
+               lazy_if_less_than: u16,
+               matching_type: MatchingType)
+               -> LZ77State {
         LZ77State {
-            hash_table: ChainedHashTable::from_starting_values(b0, b1),
+            hash_table: ChainedHashTable::new(),
             is_first_window: true,
             is_last_block: false,
             overlap: 0,
@@ -64,14 +63,6 @@ impl LZ77State {
             lazy_if_less_than: lazy_if_less_than,
             matching_type: matching_type,
         }
-    }
-
-    /// Creates a new LZ77 state
-    pub fn new(max_hash_checks: u16,
-               lazy_if_less_than: u16,
-               matching_type: MatchingType)
-               -> LZ77State {
-        LZ77State::from_starting_values(55, 23, max_hash_checks, lazy_if_less_than, matching_type)
     }
 
     /// Resets the state excluding max_hash_checks and lazy_if_less_than
@@ -474,7 +465,7 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
 
     // The current status of the encoding.
     let mut status = LZ77Status::EndBlock;
-    // Add data to the input buffer and keep a reference to the slice of data no added yet.
+    // Add data to the input buffer and keep a reference to the slice of data not added yet.
     let mut remaining_data = buffer.add_data(data);
 
     loop {
