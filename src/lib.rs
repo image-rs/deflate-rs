@@ -67,7 +67,6 @@ use byteorder::BigEndian;
 
 use checksum::RollingChecksum;
 use deflate_state::DeflateState;
-use compress::compress_data_dynamic_n;
 
 #[doc(hidden)]
 pub use lz77::lz77_compress;
@@ -76,22 +75,25 @@ pub use compression_options::{CompressionOptions, SpecialOptions, Compression};
 use compress::Flush;
 pub use lz77::MatchingType;
 
+use writer::compress_until_done;
+
 /// Encoders implementing a `Write` interface.
 pub mod write {
     pub use writer::{DeflateEncoder, ZlibEncoder};
 }
 
+
 fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
                                                         writer: &mut W,
                                                         mut checksum: RC,
                                                         compression_options: CompressionOptions)
-                                                        -> io::Result<usize> {
+                                                        -> io::Result<()> {
     checksum.update_from_slice(input);
     // We use a box here to avoid putting the buffers on the stack
     // It's done here rather than in the structs themselves for now to
     // keep the data close in memory.
     let mut deflate_state = Box::new(DeflateState::new(compression_options, writer));
-    compress_data_dynamic_n(input, &mut deflate_state, Flush::Finish)
+    compress_until_done(input, &mut deflate_state, Flush::Finish)
 }
 
 /// Compress the given slice of bytes with DEFLATE compression.
@@ -112,7 +114,7 @@ pub fn deflate_bytes_conf<O: Into<CompressionOptions>>(input: &[u8], options: O)
                           &mut writer,
                           checksum::NoChecksum::new(),
                           options.into())
-        .expect("Write error!");
+            .expect("Write error!");
     writer
 }
 
@@ -160,7 +162,9 @@ pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], option
 
     let hash = checksum.current_hash();
 
-    writer.write_u32::<BigEndian>(hash).expect("Write error when writing checksum!");
+    writer
+        .write_u32::<BigEndian>(hash)
+        .expect("Write error when writing checksum!");
     writer
 }
 

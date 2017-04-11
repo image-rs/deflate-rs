@@ -198,10 +198,10 @@ mod bpm {
 
             // Add the new leaf node.
             nodes.push(ChainNode {
-                weight: new_weight,
-                count: next_count,
-                tail: None,
-            });
+                           weight: new_weight,
+                           count: next_count,
+                           tail: None,
+                       });
 
             return;
         }
@@ -223,20 +223,20 @@ mod bpm {
 
             // Add a leaf node.
             nodes.push(ChainNode {
-                weight: next_weight,
-                count: next_count,
-                tail: y,
-            });
+                           weight: next_weight,
+                           count: next_count,
+                           tail: y,
+                       });
         } else {
             {
                 advance_lookahead(lookahead_indexes, index, nodes.len());
 
                 // Add a package containing the sum of the lookaheads in the previous list.
                 nodes.push(ChainNode {
-                    weight: sum,
-                    count: count,
-                    tail: Some(lookahead_indexes[index - 1].1 as NodeIndex),
-                });
+                               weight: sum,
+                               count: count,
+                               tail: Some(lookahead_indexes[index - 1].1 as NodeIndex),
+                           });
             }
             if !last {
                 // If we add a package, we need to run boundary_pm on the previous lists to look for
@@ -258,16 +258,17 @@ mod bpm {
         // Create a vector of nodes used by the package merge algorithm
         // We start by adding a leaf node for each nonzero frequency, and subsequently
         // sorting them by weight.
-        let mut leaves: Vec<_> = frequencies.iter()
+        let mut leaves: Vec<_> = frequencies
+            .iter()
             .enumerate()
             .filter_map(|(n, f)| if *f > 0 {
-                Some(Leaf {
-                    weight: *f as WeightType,
-                    count: n as u16,
-                })
-            } else {
-                None
-            })
+                            Some(Leaf {
+                                     weight: *f as WeightType,
+                                     count: n as u16,
+                                 })
+                        } else {
+                            None
+                        })
             .collect();
         // NOTE: We might want to consider normalising the
         // frequencies if we are going to use very large blocks as large freq values
@@ -287,16 +288,17 @@ mod bpm {
         // We create the two first lookahead nodes from the two first leaves, with counts 1 and 2
         // TODO: Find an algorhithm to approximate the number of nodes we will get
         let mut nodes = Vec::with_capacity(8 * leaves.len());
-        nodes.extend(leaves.iter()
-            .take(2)
-            .enumerate()
-            .map(|(n, f)| {
-                ChainNode {
-                    weight: f.weight,
-                    count: n as u16 + 1,
-                    tail: None,
-                }
-            }));
+        nodes.extend(leaves
+                         .iter()
+                         .take(2)
+                         .enumerate()
+                         .map(|(n, f)| {
+                                  ChainNode {
+                                      weight: f.weight,
+                                      count: n as u16 + 1,
+                                      tail: None,
+                                  }
+                              }));
 
         // Indexes to the current lookahead nodes in each list.
         // The lookahead indexes in each list start out pointing to the first two leaves.
@@ -343,9 +345,10 @@ mod in_place {
     type WeightType = u32;
 
     pub fn validate_lengths(lengths: &[u8]) -> bool {
-        let v = lengths.iter().fold(0f64, |acc, &n| {
-            acc + if n != 0 { 2f64.powi(-(n as i32)) } else { 0f64 }
-        });
+        let v = lengths
+            .iter()
+            .fold(0f64,
+                  |acc, &n| acc + if n != 0 { 2f64.powi(-(n as i32)) } else { 0f64 });
         if v > 1.0 {
             println!("Sum greater than 1.0: ({})", v);
             false
@@ -485,16 +488,17 @@ mod in_place {
         // Discard zero length nodes as they won't be given a code and thus don't need to
         // participate in code length generation and create a new vec of the remaining
         // symbols and weights.
-        let mut leaves: Vec<Node> = frequencies.iter()
+        let mut leaves: Vec<Node> = frequencies
+            .iter()
             .enumerate()
             .filter_map(|(n, f)| if *f > 0 {
-                Some(Node {
-                    value: *f as WeightType,
-                    symbol: n as u16,
-                })
-            } else {
-                None
-            })
+                            Some(Node {
+                                     value: *f as WeightType,
+                                     symbol: n as u16,
+                                 })
+                        } else {
+                            None
+                        })
             .collect();
 
         let mut ret = vec![0u8; frequencies.len()];
@@ -529,7 +533,9 @@ mod in_place {
 
         // Output the actual lengths
         let mut leaf_it = leaves.iter().rev();
-        for (&n_codes, i) in num_codes[1..max_len + 1].iter().zip(1..(max_len as u8) + 1) {
+        for (&n_codes, i) in num_codes[1..max_len + 1]
+                .iter()
+                .zip(1..(max_len as u8) + 1) {
             for _ in 0..n_codes {
                 ret[leaf_it.next().unwrap().symbol as usize] = i;
             }
@@ -635,13 +641,19 @@ mod test {
         assert_eq!(enc, vec![lit(1), lit(1), lit(1), lit(2)]);
         let enc = encode_lengths([0, 0, 3].iter().cloned()).unwrap().0;
         assert_eq!(enc, vec![lit(0), lit(0), lit(3)]);
-        let enc = encode_lengths([0, 0, 0, 5, 2].iter().cloned()).unwrap().0;
+        let enc = encode_lengths([0, 0, 0, 5, 2].iter().cloned())
+            .unwrap()
+            .0;
         assert_eq!(enc, vec![zero(3), lit(5), lit(2)]);
 
-        let enc = encode_lengths([0, 0, 0, 5, 0].iter().cloned()).unwrap().0;
+        let enc = encode_lengths([0, 0, 0, 5, 0].iter().cloned())
+            .unwrap()
+            .0;
         assert!(*enc.last().unwrap() != lit(5));
 
-        let enc = encode_lengths([0, 4, 4, 4, 4, 0].iter().cloned()).unwrap().0;
+        let enc = encode_lengths([0, 4, 4, 4, 4, 0].iter().cloned())
+            .unwrap()
+            .0;
         assert_eq!(*enc.last().unwrap(), zero(0));
     }
 
@@ -733,7 +745,9 @@ mod test {
         //
 
 
-        let num_bits = lens.iter().zip(freqs.iter()).fold(0, |a, (&f, &l)| a + (f as u16 * l));
+        let num_bits = lens.iter()
+            .zip(freqs.iter())
+            .fold(0, |a, (&f, &l)| a + (f as u16 * l));
         assert_eq!(num_bits, 7701);
     }
 }

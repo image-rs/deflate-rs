@@ -9,6 +9,8 @@ use huffman_lengths::{gen_huffman_lengths, write_huffman_lengths, BlockType};
 use output_writer::OutputWriter;
 use stored_block::{compress_block_stored, write_stored_header, MAX_STORED_BLOCK_LENGTH};
 
+const LARGEST_OUTPUT_BUF_SIZE: usize = 1024 * 32;
+
 /// Flush mode to use when compressing input received in multiple steps.
 ///
 /// (The more obscure ZLIB flush modes are not implemented.)
@@ -53,7 +55,9 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
         let compressed = lz77_compress(input).unwrap();
 
         // We currently don't split blocks here(this function is just used for tests anyhow)
-        state.write_start_of_block(true, true).expect("Write error!");
+        state
+            .write_start_of_block(true, true)
+            .expect("Write error!");
         flush_to_bitstream(&compressed, &mut state).expect("Write error!");
 
         state.flush().expect("Write error!");
@@ -98,7 +102,41 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
     let mut bytes_written = 0;
 
     let mut slice = input;
+
     loop {
+        let output_buf_len = deflate_state.output_buf().len();
+        let output_buf_pos = deflate_state.output_buf_pos;
+        // If the output buffer has too much data in it already, flush it before doing anything
+        // else.
+        if output_buf_len > LARGEST_OUTPUT_BUF_SIZE {
+            let written = deflate_state
+                .inner
+                .write(&deflate_state.encoder_state.inner_vec()[output_buf_pos..])?;
+
+            if written < output_buf_len.checked_sub(output_buf_pos).unwrap() {
+                // Only some of the data was flushed, so keep track of where we were.
+                deflate_state.output_buf_pos += written;
+            } else {
+                // If we flushed all of the output, reset the output buffer.
+                deflate_state.output_buf_pos = 0;
+                deflate_state.output_buf().clear();
+            }
+
+            if bytes_written == 0 {
+                // If the buffer was already full when the function was called, this has to be
+                // returned rather than Ok(0) to indicate that we didn't write anything, but are
+                // not done yet.
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "Internal buffer full."));
+            } else {
+                return Ok(bytes_written);
+            }
+        }
+
+        if deflate_state.lz77_state.is_last_block() {
+            // The last block has already been written, so we don't ave anything to compress.
+            break;
+        }
+
         let (written, status, position) = lz77_compress_block(slice,
                                                               &mut deflate_state.lz77_state,
                                                               &mut deflate_state.input_buffer,
@@ -125,20 +163,20 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
         // slightly different to indicate this.
         let last_block = deflate_state.lz77_state.is_last_block();
 
-        let current_block_input_bytes = deflate_state.lz77_state
-            .current_block_input_bytes();
+        let current_block_input_bytes = deflate_state.lz77_state.current_block_input_bytes();
 
         let res = {
             let (l_freqs, d_freqs) = deflate_state.lz77_writer.get_frequencies();
             gen_huffman_lengths(l_freqs, d_freqs, current_block_input_bytes)
         };
 
-        // If the compressed representation is larger than the number of bytes
-        // we write a stored block to avoid making the output larger than needed.
+        // Check if we've actually managed to compress the input, and output a stored block
+        // if not.
         match res {
             BlockType::Dynamic(header) => {
                 // Write the block header.
-                deflate_state.encoder_state
+                deflate_state
+                    .encoder_state
                     .write_start_of_block(false, last_block)?;
 
                 // Output the lengths of the huffman codes used in this block.
@@ -146,7 +184,8 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
 
                 // Output update the huffman table that will be used to encode the
                 // lz77-compressed data.
-                deflate_state.encoder_state
+                deflate_state
+                    .encoder_state
                     .update_huffman_table(&header.l_lengths, &header.d_lengths)?;
 
 
@@ -156,7 +195,9 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
             }
             BlockType::Fixed => {
                 // Write the block header for fixed code blocks.
-                deflate_state.encoder_state.write_start_of_block(true, last_block)?;
+                deflate_state
+                    .encoder_state
+                    .write_start_of_block(true, last_block)?;
 
                 // Use the pre-defined static huffman codes.
                 deflate_state.encoder_state.set_huffman_to_fixed()?;
@@ -169,10 +210,8 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                 // Decompress the current lz77 encoded data to get back the
                 // uncompressd bytes.
                 // TODO: Avoid the temporary buffer here.
-                let data = decompress_lz77_with_backbuffer(deflate_state.lz77_writer
-                                                               .get_buffer(),
-                                                           deflate_state.back_buffer
-                                                               .get_buffer());
+                let data = decompress_lz77_with_backbuffer(deflate_state.lz77_writer.get_buffer(),
+                                                           deflate_state.back_buffer.get_buffer());
 
                 write_stored_block(&data, deflate_state, flush == Flush::Finish && last_block)?;
             }
@@ -189,24 +228,42 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
             deflate_state.lz77_state.reset_input_bytes();
 
             // Fill the back buffer.
-            deflate_state.back_buffer
+            deflate_state
+                .back_buffer
                 .fill_buffer(&deflate_state.input_buffer.get_buffer()[..position]);
 
         }
         // We are done for now.
         if status == LZ77Status::Finished {
+            // This flush mode means that there should be an empty stored block at the end.
+            if flush == Flush::Sync {
+                write_stored_block(&[], deflate_state, false)?;
+            }
             break;
         }
     }
 
-    // This flush mode means that there should be an empty stored block at the end.
-    if flush == Flush::Sync {
-        write_stored_block(&[], deflate_state, false)?;
-    }
-
+    // If we reach this point, the remaining data in the buffers is to be flushed.
+    deflate_state.encoder_state.flush()?;
     // Make sure we've output everything, and return the number of bytes written if everything
     // went well.
-    deflate_state.encoder_state.flush().map(|()| bytes_written)
+    let output_buf_pos = deflate_state.output_buf_pos;
+    let written_to_writer = deflate_state
+        .inner
+        .write(&deflate_state.encoder_state.inner_vec()[output_buf_pos..])?;
+    if written_to_writer <
+       deflate_state
+           .output_buf()
+           .len()
+           .checked_sub(output_buf_pos)
+           .unwrap() {
+        deflate_state.output_buf_pos += written_to_writer;
+    } else {
+        // If we sucessfully wrote all the data, we can clear the output buffer.
+        deflate_state.output_buf_pos = 0;
+        deflate_state.output_buf().clear();
+    }
+    Ok(bytes_written)
 }
 
 #[cfg(test)]

@@ -155,7 +155,8 @@ mod test {
 
         let current_bytes = &test_data[test_data.len() - super::HASH_BYTES..test_data.len()];
 
-        let num_iters = test_string.matches(str::from_utf8(current_bytes).unwrap())
+        let num_iters = test_string
+            .matches(str::from_utf8(current_bytes).unwrap())
             .count();
 
         let hash_table = filled_hash_table(test_data);

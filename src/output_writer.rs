@@ -84,7 +84,8 @@ impl OutputWriter for FixedWriter {
 
     fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
         debug_assert!(self.buffer.len() < MAX_BUFFER_LENGTH);
-        self.buffer.push(LZValue::length_distance(length, distance));
+        self.buffer
+            .push(LZValue::length_distance(length, distance));
         check_buffer_length(&self.buffer)
     }
 

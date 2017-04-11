@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::io;
+use std::{thread, io};
 
 use byteorder::{WriteBytesExt, BigEndian};
 
@@ -9,7 +9,46 @@ use compress::Flush;
 use deflate_state::DeflateState;
 use compression_options::CompressionOptions;
 use zlib::{write_zlib_header, CompressionLevel};
-use std::thread;
+
+/// Keep compressing until all the input has been compressed and output or the writer returns `Err`.
+pub fn compress_until_done<W: Write>(mut input: &[u8],
+                                     deflate_state: &mut DeflateState<W>,
+                                     flush_mode: Flush)
+                                     -> io::Result<()> {
+    // This should only be used for flushing.
+    assert_ne!(flush_mode, Flush::None);
+    loop {
+        match compress_data_dynamic_n(input, deflate_state, flush_mode) {
+            Ok(0) => {
+                if deflate_state.output_buf().is_empty() {
+                    break;
+                } else {
+                    // If the output buffer isn't empty, keep going until it is, as there is still
+                    // data to be flushed.
+                    input = &[];
+                }
+            }
+            Ok(n) => {
+                if n < input.len() {
+                    input = &input[n..]
+                } else {
+                    input = &[];
+                }
+            }
+            Err(e) => {
+                match e.kind() {
+                    // This error means that there may still be data to flush.
+                    // This could possibly get stuck if the underlying writer keeps returning this
+                    // error.
+                    io::ErrorKind::Interrupted => (),
+                    _ => return Err(e),
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
 
 /// A DEFLATE encoder/compressor.
 ///
@@ -47,36 +86,39 @@ impl<W: Write> DeflateEncoder<W> {
     /// Encode all pending data to the contained writer, consume this `ZlibEncoder`,
     /// and return the contained writer if writing succeeds.
     pub fn finish(mut self) -> io::Result<W> {
-        self.output_all().map(|_| ())?;
+        self.output_all()?;
         // We have to move the inner state out of the encoder, and replace it with `None`
         // to let the `DeflateEncoder` drop safely.
         let state = self.deflate_state.take();
-        Ok(state.unwrap().encoder_state.writer.w)
+        Ok(state.unwrap().inner)
     }
 
     /// Resets the encoder (except the compression options), replacing the current writer
     /// with a new one, returning the old one.
     pub fn reset(&mut self, w: W) -> io::Result<W> {
-        self.output_all().map(|_| ())?;
+        self.output_all()?;
         self.deflate_state.as_mut().unwrap().reset(w)
     }
 
     /// Output all pending data as if encoding is done, but without resetting anything
-    fn output_all(&mut self) -> io::Result<usize> {
-        compress_data_dynamic_n(&[],
-                                &mut self.deflate_state.as_mut().unwrap(),
-                                Flush::Finish)
+    fn output_all(&mut self) -> io::Result<()> {
+        compress_until_done(&[], self.deflate_state.as_mut().unwrap(), Flush::Finish)
     }
 }
 
 impl<W: Write> io::Write for DeflateEncoder<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        compress_data_dynamic_n(buf, &mut self.deflate_state.as_mut().unwrap(), Flush::None)
+        let flush_mode = self.deflate_state.as_ref().unwrap().flush_mode;
+        compress_data_dynamic_n(buf, &mut self.deflate_state.as_mut().unwrap(), flush_mode)
     }
 
+    /// Flush the encoder.
+    ///
+    /// This will flush the encoder, emulating the Sync flush method from Zlib.
+    /// This essentially finishes the current block, and sends an additional empty stored block to
+    /// the writer.
     fn flush(&mut self) -> io::Result<()> {
-        compress_data_dynamic_n(&[], &mut self.deflate_state.as_mut().unwrap(), Flush::Sync)
-            .map(|_| ())
+        compress_until_done(&[], self.deflate_state.as_mut().unwrap(), Flush::Sync)
     }
 }
 
@@ -136,13 +178,10 @@ impl<W: Write> ZlibEncoder<W> {
 
     /// Output all pending data ,including the trailer(checksum) as if encoding is done,
     /// but without resetting anything.
-    fn output_all(&mut self) -> io::Result<usize> {
+    fn output_all(&mut self) -> io::Result<()> {
         self.check_write_header()?;
-        let n = compress_data_dynamic_n(&[],
-                                        &mut self.deflate_state.as_mut().unwrap(),
-                                        Flush::Finish)?;
-        self.write_trailer()?;
-        Ok(n)
+        compress_until_done(&[], self.deflate_state.as_mut().unwrap(), Flush::Finish)?;
+        self.write_trailer()
     }
 
     /// Encode all pending data to the contained writer, consume this `ZlibEncoder`,
@@ -152,17 +191,13 @@ impl<W: Write> ZlibEncoder<W> {
         // We have to move the inner state out of the encoder, and replace it with `None`
         // to let the `DeflateEncoder` drop safely.
         let inner = self.deflate_state.take();
-        Ok(inner.unwrap().encoder_state.writer.w)
+        Ok(inner.unwrap().inner)
     }
 
     /// Resets the encoder (except the compression options), replacing the current writer
     /// with a new one, returning the old one.
     pub fn reset(&mut self, writer: W) -> io::Result<W> {
-        self.check_write_header()?;
-        compress_data_dynamic_n(&[],
-                                &mut self.deflate_state.as_mut().unwrap(),
-                                Flush::Finish)?;
-        self.write_trailer()?;
+        self.output_all()?;
         self.header_written = false;
         self.checksum = Adler32Checksum::new();
         self.deflate_state.as_mut().unwrap().reset(writer)
@@ -171,7 +206,7 @@ impl<W: Write> ZlibEncoder<W> {
     /// Check if a zlib header should be written.
     fn check_write_header(&mut self) -> io::Result<()> {
         if !self.header_written {
-            write_zlib_header(&mut self.deflate_state.as_mut().unwrap().encoder_state.writer,
+            write_zlib_header(&mut self.deflate_state.as_mut().unwrap().output_buf(),
                               CompressionLevel::Default)?;
             self.header_written = true;
         }
@@ -180,14 +215,12 @@ impl<W: Write> ZlibEncoder<W> {
 
     /// Write the trailer, which for zlib is the Adler32 checksum.
     fn write_trailer(&mut self) -> io::Result<()> {
-
         let hash = self.checksum.current_hash();
 
         self.deflate_state
             .as_mut()
             .unwrap()
-            .encoder_state
-            .writer
+            .inner
             .write_u32::<BigEndian>(hash)
     }
 }
@@ -195,8 +228,15 @@ impl<W: Write> ZlibEncoder<W> {
 impl<W: Write> io::Write for ZlibEncoder<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.check_write_header()?;
-        self.checksum.update_from_slice(buf);
-        compress_data_dynamic_n(buf, &mut self.deflate_state.as_mut().unwrap(), Flush::None)
+        let flush_mode = self.deflate_state.as_ref().unwrap().flush_mode;
+        let res =
+            compress_data_dynamic_n(buf, &mut self.deflate_state.as_mut().unwrap(), flush_mode);
+        match res {
+            Ok(0) => self.checksum.update_from_slice(buf),
+            Ok(n) => self.checksum.update_from_slice(&buf[0..n]),
+            _ => (),
+        };
+        res
     }
 
     /// Flush the encoder.
@@ -205,8 +245,7 @@ impl<W: Write> io::Write for ZlibEncoder<W> {
     /// This essentially finishes the current block, and sends an additional empty stored block to
     /// the writer.
     fn flush(&mut self) -> io::Result<()> {
-        compress_data_dynamic_n(&[], &mut self.deflate_state.as_mut().unwrap(), Flush::Sync)
-            .map(|_| ())
+        compress_until_done(&[], self.deflate_state.as_mut().unwrap(), Flush::Sync)
     }
 }
 
@@ -237,8 +276,8 @@ mod test {
             let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
                                                      CompressionOptions::high());
             // Write in multiple steps to see if this works as it's supposed to.
-            compressor.write(&data[0..data.len() / 2]).unwrap();
-            compressor.write(&data[data.len() / 2..]).unwrap();
+            compressor.write_all(&data[0..data.len() / 2]).unwrap();
+            compressor.write_all(&data[data.len() / 2..]).unwrap();
             compressor.finish().unwrap()
         };
 
@@ -252,8 +291,8 @@ mod test {
         let compressed = {
             let mut compressor = ZlibEncoder::new(Vec::with_capacity(data.len() / 3),
                                                   CompressionOptions::high());
-            compressor.write(&data[0..data.len() / 2]).unwrap();
-            compressor.write(&data[data.len() / 2..]).unwrap();
+            compressor.write_all(&data[0..data.len() / 2]).unwrap();
+            compressor.write_all(&data[data.len() / 2..]).unwrap();
             compressor.finish().unwrap()
         };
 
@@ -269,9 +308,11 @@ mod test {
         let data = get_test_data();
         let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
                                                  CompressionOptions::default());
-        compressor.write(&data).unwrap();
-        let res1 = compressor.reset(Vec::with_capacity(data.len() / 3)).unwrap();
-        compressor.write(&data).unwrap();
+        compressor.write_all(&data).unwrap();
+        let res1 = compressor
+            .reset(Vec::with_capacity(data.len() / 3))
+            .unwrap();
+        compressor.write_all(&data).unwrap();
         let res2 = compressor.finish().unwrap();
         assert!(res1 == res2);
     }
@@ -281,9 +322,11 @@ mod test {
         let data = get_test_data();
         let mut compressor = ZlibEncoder::new(Vec::with_capacity(data.len() / 3),
                                               CompressionOptions::default());
-        compressor.write(&data).unwrap();
-        let res1 = compressor.reset(Vec::with_capacity(data.len() / 3)).unwrap();
-        compressor.write(&data).unwrap();
+        compressor.write_all(&data).unwrap();
+        let res1 = compressor
+            .reset(Vec::with_capacity(data.len() / 3))
+            .unwrap();
+        compressor.write_all(&data).unwrap();
         let res2 = compressor.finish().unwrap();
         assert!(res1 == res2);
     }
@@ -295,9 +338,15 @@ mod test {
             let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
                                                      CompressionOptions::default());
             let split = data.len() / 2;
-            compressor.write(&data[..split]).unwrap();
+            compressor.write_all(&data[..split]).unwrap();
             compressor.flush().unwrap();
-            compressor.write(&data[split..]).unwrap();
+            {
+                let buf = &mut compressor.deflate_state.as_mut().unwrap().inner;
+                let buf_len = buf.len();
+                // Check for the sync marker.
+                assert_eq!(buf[buf_len - 5..], [0, 0, 0, 255, 255]);
+            }
+            compressor.write_all(&data[split..]).unwrap();
             compressor.finish().unwrap()
         };
 

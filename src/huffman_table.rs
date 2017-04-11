@@ -204,10 +204,10 @@ fn get_distance_code_and_extra_bits(distance: u16) -> Option<ExtraBits> {
         // FIXME: We should add 1 to the values in distance_base to avoid having to add one here
         let base = DISTANCE_BASE[distance_code as usize] + 1;
         Some(ExtraBits {
-            code_number: distance_code.into(),
-            num_bits: extra,
-            value: distance - base,
-        })
+                 code_number: distance_code.into(),
+                 num_bits: extra,
+                 value: distance - base,
+             })
     } else {
         None
     }
@@ -234,9 +234,9 @@ impl HuffmanCode {
     fn from_reversed_bits(code: u16, length: u8) -> Option<HuffmanCode> {
         if length <= 15 {
             Some(HuffmanCode {
-                code: reverse_bits(code, length),
-                length: length,
-            })
+                     code: reverse_bits(code, length),
+                     length: length,
+                 })
         } else {
             None
         }
@@ -331,14 +331,8 @@ pub struct HuffmanTable {
 impl HuffmanTable {
     pub fn empty() -> HuffmanTable {
         HuffmanTable {
-            codes: [HuffmanCode {
-                code: 0,
-                length: 0,
-            }; 288],
-            distance_codes: [HuffmanCode {
-                code: 0,
-                length: 0,
-            }; 32],
+            codes: [HuffmanCode { code: 0, length: 0 }; 288],
+            distance_codes: [HuffmanCode { code: 0, length: 0 }; 32],
         }
     }
 
@@ -437,11 +431,11 @@ impl HuffmanTable {
         let l_codes = self.get_length_huffman(StoredLength::from_actual_length(length));
         let d_codes = self.get_distance_huffman(distance).unwrap();
         Some(LengthAndDistanceBits {
-            length_code: l_codes.0,
-            length_extra_bits: l_codes.1,
-            distance_code: d_codes.0,
-            distance_extra_bits: d_codes.1,
-        })
+                 length_code: l_codes.0,
+                 length_extra_bits: l_codes.1,
+                 distance_code: d_codes.0,
+                 distance_extra_bits: d_codes.1,
+             })
     }
 }
 

@@ -86,7 +86,7 @@ mod test {
     fn no_compression_string() {
         let test_data = String::from("This is some text, this is some more text, this is even \
                                       more text, lots of text here.")
-            .into_bytes();
+                .into_bytes();
         let compressed = compress_data_stored(&test_data);
         let result = decompress_to_end(&compressed);
         assert_eq!(test_data, result);

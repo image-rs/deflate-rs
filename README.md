@@ -1,6 +1,6 @@
 # deflate-rs
 
-[![Build Status](https://travis-ci.org/oyvindln/deflate-rs.svg?branch=master)](https://travis-ci.org/oyvindln/deflate-rs) [![Crates.io](https://img.shields.io/crates/v/deflate.svg)](https://crates.io/crates/deflate)
+[![Build Status](https://travis-ci.org/oyvindln/deflate-rs.svg)](https://travis-ci.org/oyvindln/deflate-rs) [![Crates.io](https://img.shields.io/crates/v/deflate.svg)](https://crates.io/crates/deflate)
 
 [![Docs](https://docs.rs/deflate/badge.svg)](https://docs.rs/deflate)
 

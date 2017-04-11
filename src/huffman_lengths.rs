@@ -1,9 +1,9 @@
 use length_encode::EncodedLength;
 use length_encode::{encode_lengths, huffman_lengths_from_frequency, COPY_PREVIOUS,
                     REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS};
-use huffman_table::{create_codes, num_extra_bits_for_length_code, num_extra_bits_for_distance_code,
-                    NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, MAX_CODE_LENGTH,
-                    FIXED_CODE_LENGTHS, LENGTH_BITS_START};
+use huffman_table::{create_codes, num_extra_bits_for_length_code,
+                    num_extra_bits_for_distance_code, NUM_LITERALS_AND_LENGTHS,
+                    NUM_DISTANCE_CODES, MAX_CODE_LENGTH, FIXED_CODE_LENGTHS, LENGTH_BITS_START};
 use bitstream::{BitWriter, LsbWriter};
 use output_writer::FrequencyType;
 
@@ -34,7 +34,11 @@ const STORED_BLOCK_HEADER_LENGTH: u64 = 4;
 
 /// Creates a new slice from the input slice that stops at the final non-zero value
 pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T], min_length: usize) -> &[T] {
-    let num_zeroes = input.iter().rev().take_while(|&a| *a == T::from(0)).count();
+    let num_zeroes = input
+        .iter()
+        .rev()
+        .take_while(|&a| *a == T::from(0))
+        .count();
     &input[0..cmp::max(input.len() - num_zeroes, min_length)]
 }
 
@@ -49,7 +53,8 @@ fn extra_bits_for_huffman_length_code(code: u8) -> u8 {
 
 /// Calculate how many bits the huffman-encoded huffman lengths will use.
 fn calculate_huffman_length(frequencies: &[FrequencyType], code_lengths: &[u8]) -> u64 {
-    frequencies.iter()
+    frequencies
+        .iter()
         .zip(code_lengths)
         .enumerate()
         .fold(0, |acc, (n, (&f, &l))| {
@@ -75,8 +80,10 @@ fn calculate_block_length<F>(frequencies: &[FrequencyType],
     // length of data represented by static codes.
     let mut s_ll_length = 0u64;
 
-    let iter =
-        frequencies.iter().zip(dyn_code_lengths.iter().zip(FIXED_CODE_LENGTHS.iter())).enumerate();
+    let iter = frequencies
+        .iter()
+        .zip(dyn_code_lengths.iter().zip(FIXED_CODE_LENGTHS.iter()))
+        .enumerate();
 
     // This could maybe be optimised a bit by splitting the iteration of codes using extra bits and
     // codes not using extra bits, but the extra complexity may not be worth it.
@@ -149,10 +156,11 @@ pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
 
     // Count how many of these lengths we use.
     let used_hclens = HUFFMAN_LENGTH_ORDER.len() -
-                      HUFFMAN_LENGTH_ORDER.iter()
-        .rev()
-        .take_while(|&&n| huffman_table_lengths[n as usize] == 0)
-        .count();
+                      HUFFMAN_LENGTH_ORDER
+                          .iter()
+                          .rev()
+                          .take_while(|&&n| huffman_table_lengths[n as usize] == 0)
+                          .count();
 
     // There has to be at least 4 hclens, so if there isn't, something went wrong.
     debug_assert!(used_hclens >= 4);
@@ -198,12 +206,12 @@ pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
         BlockType::Stored
     } else {
         BlockType::Dynamic(DynamicBlockHeader {
-            l_lengths: l_lengths,
-            d_lengths: d_lengths,
-            encoded_lengths: encoded,
-            huffman_table_lengths: huffman_table_lengths,
-            used_hclens: used_hclens,
-        })
+                               l_lengths: l_lengths,
+                               d_lengths: d_lengths,
+                               encoded_lengths: encoded,
+                               huffman_table_lengths: huffman_table_lengths,
+                               used_hclens: used_hclens,
+                           })
     }
 }
 
@@ -241,7 +249,8 @@ pub fn write_huffman_lengths<W: Write>(header: &DynamicBlockHeader,
     // Write the lengths for the huffman table describing the huffman table
     // Each length is 3 bits
     for n in &HUFFMAN_LENGTH_ORDER[..used_hclens] {
-        writer.write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3)?;
+        writer
+            .write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3)?;
     }
 
     // Generate codes for the main huffman table using the lengths we just wrote
