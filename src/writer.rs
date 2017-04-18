@@ -343,8 +343,9 @@ mod test {
             {
                 let buf = &mut compressor.deflate_state.as_mut().unwrap().inner;
                 let buf_len = buf.len();
-                // Check for the sync marker.
-                assert_eq!(buf[buf_len - 5..], [0, 0, 0, 255, 255]);
+                // Check for the sync marker. (excluding the header as it might not line
+                // up with the byte boundary.)
+                assert_eq!(buf[buf_len - 4..], [0, 0, 255, 255]);
             }
             compressor.write_all(&data[split..]).unwrap();
             compressor.finish().unwrap()
