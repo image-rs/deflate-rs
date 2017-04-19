@@ -5,7 +5,7 @@ extern crate test;
 extern crate flate2;
 use test::Bencher;
 use flate2::Compression;
-use deflate::{CompressionOptions, deflate_bytes_zlib_conf, deflate_bytes_zlib, lz77_compress};
+use deflate::{CompressionOptions, deflate_bytes_zlib_conf, deflate_bytes_zlib};
 
 fn load_from_file(name: &str) -> Vec<u8> {
     use std::fs::File;
@@ -21,12 +21,6 @@ fn get_test_data() -> Vec<u8> {
     use std::env;
     let path = env::var("TEST_FILE").unwrap_or_else(|_| "tests/pg11.txt".to_string());
     load_from_file(&path)
-}
-
-#[bench]
-fn test_file_zlib_lz77_only(b: &mut Bencher) {
-    let test_data = get_test_data();
-    b.iter(|| lz77_compress(&test_data));
 }
 
 #[bench]

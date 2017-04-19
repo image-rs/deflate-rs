@@ -1,4 +1,5 @@
 //! This module contains functionality for doing lz77 compression of data.
+
 use std::cmp;
 use std::ops::Range;
 use std::iter::{Iterator, Enumerate};
@@ -430,6 +431,7 @@ pub enum LZ77Status {
     Finished,
 }
 
+#[cfg(test)]
 pub fn lz77_compress_block_finish<W: OutputWriter>(data: &[u8],
                                                    state: &mut LZ77State,
                                                    buffer: &mut InputBuffer,
@@ -693,6 +695,7 @@ impl TestStruct {
     }
 }
 
+#[cfg(test)]
 pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
     lz77_compress_conf(data,
                        HIGH_MAX_HASH_CHECKS,
@@ -704,7 +707,7 @@ pub fn lz77_compress(data: &[u8]) -> Option<Vec<LZValue>> {
 ///
 /// This is a convenience function for compression with fixed huffman values
 /// Only used in tests for now
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn lz77_compress_conf(data: &[u8],
                           max_hash_checks: u16,
                           lazy_if_less_than: u16,
@@ -1045,4 +1048,16 @@ mod test {
         assert!(dec == [2, 4, 5, 5, 5, 5, 1, 1, 5, 5, 2, 4, 5]);
     }
 
+}
+
+#[cfg(all(test, feature = "benchmarks"))]
+mod bench {
+    use test_std::Bencher;
+    use test_utils::get_test_data;
+    use super::lz77_compress;
+    #[bench]
+    fn test_file_zlib_lz77_only(b: &mut Bencher) {
+        let test_data = get_test_data();
+        b.iter(|| lz77_compress(&test_data));
+    }
 }

@@ -30,6 +30,11 @@
 //! # let _ = compressed_data;
 //! ```
 
+#![cfg_attr(all(feature = "benchmarks", test), feature(test))]
+
+#[cfg(all(test, feature = "benchmarks"))]
+extern crate test as test_std;
+
 #[cfg(test)]
 extern crate flate2;
 // #[cfg(test)]
@@ -67,9 +72,6 @@ use byteorder::BigEndian;
 
 use checksum::RollingChecksum;
 use deflate_state::DeflateState;
-
-#[doc(hidden)]
-pub use lz77::lz77_compress;
 
 pub use compression_options::{CompressionOptions, SpecialOptions, Compression};
 use compress::Flush;
