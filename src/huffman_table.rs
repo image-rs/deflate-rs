@@ -166,8 +166,8 @@ pub fn get_length_code(length: u16) -> Option<usize> {
 
 /// Get the code for the huffman table and the extra bits for the requested length.
 fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
-    // The minimun match length is 3, but length code table starts at 0,
-    // so we need to subtract 3 to get the correct code.
+    // Length values are stored as unsigned bytes, where the actual length is the value - 3
+    // The `StoredLength` struct takes care of this conversion for us.
     let n = LENGTH_CODE[length.stored_length() as usize];
 
     // We can then get the base length from the base length table,
@@ -186,6 +186,7 @@ fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
 /// Returns none if the distance is 0, or above 32768
 pub fn get_distance_code(distance: u16) -> Option<u8> {
     let distance = distance as usize;
+
     match distance {
         // Since the array starts at 0, we need to subtract 1 to get the correct code number.
         1...256 => Some(DISTANCE_CODES[distance - 1]),
@@ -483,6 +484,8 @@ mod test {
         assert_eq!(get_distance_code(50000), None);
         assert_eq!(get_distance_code(6146).unwrap(), 25);
         assert_eq!(get_distance_code(256).unwrap(), 15);
+        assert_eq!(get_distance_code(4733).unwrap(), 24);
+        assert_eq!(get_distance_code(257).unwrap(), 16);
     }
 
     #[test]
@@ -494,6 +497,9 @@ mod test {
         let extra = get_distance_code_and_extra_bits(256).unwrap();
         assert_eq!(extra.code_number, 15);
         assert_eq!(extra.num_bits, 6);
+        let extra = get_distance_code_and_extra_bits(4733).unwrap();
+        assert_eq!(extra.code_number, 24);
+        assert_eq!(extra.num_bits, 11);
     }
 
     #[test]

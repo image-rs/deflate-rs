@@ -4,7 +4,6 @@ use chained_hash_table::{ChainedHashTable, WINDOW_SIZE};
 use huffman_table;
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
-#[cfg(test)]
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 
 /// Get the length of the checked match
@@ -74,7 +73,7 @@ pub fn longest_match(data: &[u8],
     // If we are at the start, we already have a match at the maximum length,
     // or we can't grow further, we stop here.
     if position == 0 || prev_length >= MAX_MATCH || position + prev_length >= data.len() {
-        return (2, 0);
+        return (0, 0);
     }
 
     let limit = if position > WINDOW_SIZE {
@@ -82,6 +81,10 @@ pub fn longest_match(data: &[u8],
     } else {
         0
     };
+
+    // Make sure the length is at least one to simplify the matching code, as
+    // otherwise the matching code might underflow.
+    let prev_length = if prev_length < 1 { 1 } else { prev_length };
 
     let max_length = cmp::min((data.len() - position), MAX_MATCH);
 
@@ -95,36 +98,51 @@ pub fn longest_match(data: &[u8],
     // The position of the previous value in the hash chain.
     let mut prev_head;
 
-    for _ in 0..max_hash_checks {
-        prev_head = current_head;
-        current_head = hash_table.get_prev(current_head) as usize;
-        if current_head >= prev_head || current_head < limit {
-            // If the current hash chain value refers to itself, or is referring to
-            // a value that's higher (we only move backwars through the chain),
-            // we are at the end and can stop.
-            break;
-        }
+    let max_hash_checks = (max_hash_checks + 2) / 3;
 
-        // We only check further if the match length can actually increase
-        if data[position + best_length - 1..position + best_length + 1] ==
-           data[current_head + best_length - 1..current_head + best_length + 1] {
-            let length = get_match_length(data, position, current_head);
-            if length > best_length {
-                best_length = length;
-                best_distance = position - current_head;
-                if length == max_length {
-                    // We are at the max length, so there is no point
-                    // searching any longer
-                    break;
-                }
+    'outer: for _ in 0..max_hash_checks {
+        'inner: for _ in 0..3 {
+            prev_head = current_head;
+            current_head = hash_table.get_prev(current_head) as usize;
+            if current_head >= prev_head || current_head < limit {
+                // If the current hash chain value refers to itself, or is referring to
+                // a value that's higher (we only move backwars through the chain),
+                // we are at the end and can stop.
+                break 'outer;
             }
-           }
+
+            // We only check further if the match length can actually increase
+            // Checking if the end byte and the potential next byte matches is generally
+            // more likely to give a quick answer rather than checking from the start first, given
+            // that the hashes match.
+            // If there is no previous match, best_length will be 1 and the two first bytes will
+            // be checked instead.
+            // Since we've made sure best_length is always at least 1, this shouldn't underflow.
+            if data[position + best_length - 1..position + best_length + 1] ==
+               data[current_head + best_length - 1..current_head + best_length + 1] {
+                // Actually check how many bytes match.
+                // At the moment this will check the two bytes we just checked again,
+                // though adding code for skipping these bytes may not result in any speed
+                // gain due to the added complexity.
+                let length = get_match_length(data, position, current_head);
+                if length > best_length && length >= MIN_MATCH {
+                    best_length = length;
+                    best_distance = position - current_head;
+                    if length == max_length {
+                        // We are at the max length, so there is no point
+                        // searching any longer
+                        break 'outer;
+                    }
+                }
+                //break;
+            }
+        }
     }
 
     let r = if best_length > prev_length {
         best_length
     } else {
-        2
+        0
     };
 
     (r, best_distance)
@@ -137,7 +155,7 @@ pub fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usi
     use compression_options::MAX_HASH_CHECKS;
     longest_match(data,
                   hash_table,
-                  hash_table.current_position(),
+                  hash_table.current_head() as usize,
                   MIN_MATCH as usize - 1,
                   MAX_HASH_CHECKS)
 }

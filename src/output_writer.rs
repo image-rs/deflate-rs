@@ -15,7 +15,7 @@ pub type FrequencyType = u16;
 /// overflowing (which would degrade, or in the worst case break compression).
 pub const MAX_BUFFER_LENGTH: usize = u16::MAX as usize;
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum BufferStatus {
     NotFull,
     Full,
@@ -121,6 +121,7 @@ impl OutputWriter for DynamicWriter {
     fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
         let ret = self.fixed_writer.write_length_distance(length, distance);
         let l_code_num = get_length_code(length).expect("Invalid length!");
+        // As we limit the buffer to 2^16 values, this should be safe from overflowing.
         self.frequencies[l_code_num] += 1;
         let d_code_num = get_distance_code(distance)
             .expect("Tried to get a distance code which was out of range!");

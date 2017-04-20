@@ -47,6 +47,9 @@ pub fn compress_until_done<W: Write>(mut input: &[u8],
         }
     }
 
+    debug_assert_eq!(deflate_state.bytes_written,
+                     deflate_state.bytes_written_control);
+
     Ok(())
 }
 
@@ -351,8 +354,55 @@ mod test {
             compressor.finish().unwrap()
         };
 
+        let decompressed = decompress_to_end(&compressed);
 
-        let res = decompress_to_end(&compressed);
-        assert!(res == data);
+        assert!(decompressed == data);
+    }
+
+    #[test]
+    fn writer_sync_multiple() {
+        use std::cmp;
+        let data = get_test_data();
+        let compressed = {
+            let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
+                                                     CompressionOptions::default());
+            let split = data.len() / 2;
+            compressor.write_all(&data[..split]).unwrap();
+            compressor.flush().unwrap();
+            compressor.flush().unwrap();
+            {
+                let buf = &mut compressor.deflate_state.as_mut().unwrap().inner;
+                let buf_len = buf.len();
+                // Check for the sync marker. (excluding the header as it might not line
+                // up with the byte boundary.)
+                assert_eq!(buf[buf_len - 4..], [0, 0, 255, 255]);
+            }
+            compressor
+                .write_all(&data[split..cmp::min(split + 2, data.len())])
+                .unwrap();
+            compressor.flush().unwrap();
+            compressor
+                .write_all(&data[cmp::min(split + 2, data.len())..])
+                .unwrap();
+            compressor.finish().unwrap()
+        };
+
+        let decompressed = decompress_to_end(&compressed);
+
+        assert!(decompressed == data);
+
+        let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
+                                                 CompressionOptions::default());
+
+        compressor.flush().unwrap();
+        compressor.write_all(&[1, 2]).unwrap();
+        compressor.flush().unwrap();
+        compressor.write_all(&[3]).unwrap();
+        compressor.flush().unwrap();
+        let compressed = compressor.finish().unwrap();
+
+        let decompressed = decompress_to_end(&compressed);
+
+        assert_eq!(decompressed, [1, 2, 3]);
     }
 }

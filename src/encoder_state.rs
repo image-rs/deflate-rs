@@ -50,6 +50,7 @@ impl<W: Write> EncoderState<W> {
     /// Encodes a literal value to the writer
     fn write_literal(&mut self, value: u8) -> io::Result<()> {
         let code = self.huffman_table.get_literal(value);
+        debug_assert!(code.length > 0);
         self.writer.write_bits(code.code, code.length)
     }
 

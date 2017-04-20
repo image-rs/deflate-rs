@@ -147,7 +147,7 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
         bytes_written += written;
         // Total bytes written since the compression process started
         // TODO: Should we realistically have to worry about overflowing here?
-        deflate_state.bytes_written += bytes_written as u64;
+        deflate_state.bytes_written += written as u64;
 
         if status == LZ77Status::NeedInput {
             // If we've consumed all the data input so far, and we're not
@@ -165,12 +165,18 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
 
         let current_block_input_bytes = deflate_state.lz77_state.current_block_input_bytes();
 
+        if cfg!(debug_assertions) {
+            deflate_state.bytes_written_control += current_block_input_bytes;
+        }
+
+        let partial_bits = deflate_state.encoder_state.writer.pending_bits();
+
         let res = {
             let (l_freqs, d_freqs) = deflate_state.lz77_writer.get_frequencies();
-            gen_huffman_lengths(l_freqs, d_freqs, current_block_input_bytes)
+            gen_huffman_lengths(l_freqs, d_freqs, current_block_input_bytes, partial_bits)
         };
 
-        // Check if we've actually managed to compress the input, and output a stored block
+        // Check if we've actually managed to compress the input, and output stored blocks
         // if not.
         match res {
             BlockType::Dynamic(header) => {
@@ -210,6 +216,9 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                 // Decompress the current lz77 encoded data to get back the
                 // uncompressd bytes.
                 // TODO: Avoid the temporary buffer here.
+                // TODO: Currently this may end up writing 3 stored blocks where the last one
+                // is very short. When that occurs, we should avoid the last one and merge it
+                // with the next block instead.
                 let data = decompress_lz77_with_backbuffer(deflate_state.lz77_writer.get_buffer(),
                                                            deflate_state.back_buffer.get_buffer());
 
@@ -227,10 +236,17 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
             // for the next one.
             deflate_state.lz77_state.reset_input_bytes();
 
+            // The byte at position may not have been output yet.
+            let end_pos = if deflate_state.lz77_state.pending_byte() {
+                position.saturating_sub(1)
+            } else {
+                position
+            };
+
             // Fill the back buffer.
             deflate_state
                 .back_buffer
-                .fill_buffer(&deflate_state.input_buffer.get_buffer()[..position]);
+                .fill_buffer(&deflate_state.input_buffer.get_buffer()[..end_pos]);
 
         }
         // We are done for now.

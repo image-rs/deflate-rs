@@ -29,6 +29,9 @@ pub struct ChainedHashTable {
     head: Box<[u16; WINDOW_SIZE]>,
     // link to previous occurence of this hash value
     prev: Box<[u16; WINDOW_SIZE]>,
+    // Used for testing
+    // Didn't find an easy way for it not to exist when debug_assertions are disabled.
+    pub count: u64,
 }
 
 impl ChainedHashTable {
@@ -37,6 +40,7 @@ impl ChainedHashTable {
             current_hash: 0,
             head: Box::new([0; WINDOW_SIZE]),
             prev: Box::new([0; WINDOW_SIZE]),
+            count: 0,
         };
         init_array(&mut c.head);
         init_array(&mut c.prev);
@@ -62,6 +66,11 @@ impl ChainedHashTable {
 
     // Insert a byte into the hash table
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
+        // Check that all bytes are input in order and at the correct positions.
+        debug_assert_eq!(position & WINDOW_MASK, self.count as usize & WINDOW_MASK);
+        debug_assert!(position < WINDOW_SIZE * 2,
+                      "Position is larger than 2 * window size! {}",
+                      position);
         // Storing the hash in a temporary variable here makes the compiler avoid the
         // bounds checks in this function.
         let new_hash = update_hash(self.current_hash, value);
@@ -74,6 +83,10 @@ impl ChainedHashTable {
 
         // Update the stored hash value with the new hash.
         self.current_hash = new_hash;
+
+        if cfg!(debug_assertions) {
+            self.count += 1;
+        }
     }
 
     // Get the head of the hash chain for the current hash value
@@ -89,19 +102,13 @@ impl ChainedHashTable {
         self.current_hash
     }
 
-    #[cfg(test)]
-    #[inline]
-    pub fn current_position(&self) -> usize {
-        self.current_head() as usize
-    }
-
     #[inline]
     pub fn get_prev(&self, bytes: usize) -> u16 {
         self.prev[bytes & WINDOW_MASK]
     }
 
     fn slide_value(b: u16, pos: u16, bytes: u16) -> u16 {
-        if b > bytes { b - bytes } else { pos }
+        if b >= bytes { b - bytes } else { pos }
     }
 
     fn slide_table(table: &mut [u16], bytes: u16) {
@@ -111,6 +118,14 @@ impl ChainedHashTable {
     }
 
     pub fn slide(&mut self, bytes: usize) {
+        if cfg!(debug_assertions) {
+            if bytes != WINDOW_SIZE {
+                // This should only happen in tests in this file.
+                self.count = 0;
+            } else {
+                assert_eq!(self.count & WINDOW_MASK as u64, 0);
+            }
+        }
         ChainedHashTable::slide_table(&mut self.head[..], bytes as u16);
         ChainedHashTable::slide_table(&mut self.prev[..], bytes as u16);
     }
@@ -202,8 +217,9 @@ mod test {
 
         f.read_to_end(&mut input).unwrap();
 
-        let mut hash_table = filled_hash_table(&input[..window_size]);
-        for (n, b) in input[..window_size].iter().enumerate() {
+        let mut hash_table = filled_hash_table(&input[..window_size + 2]);
+
+        for (n, b) in input[2..window_size + 2].iter().enumerate() {
             hash_table.add_hash_value(n + window_size, *b);
         }
 
@@ -221,7 +237,7 @@ mod test {
             assert!(pos > 0);
         }
 
-        for (n, b) in input[..(window_size / 2)].iter().enumerate() {
+        for (n, b) in input[2..(window_size / 2)].iter().enumerate() {
             hash_table.add_hash_value(n + window_size, *b);
         }
 
@@ -233,7 +249,7 @@ mod test {
         let mut pos = hash_table.current_head();
         // There should be a previous occurence since we inserted the data 3 times
         assert!(pos > window_size16);
-        let end_byte = input[(window_size / 2) - 1];
+        let end_byte = input[(window_size / 2) - 1 - 2];
         let mut iterations = 0;
         while pos > window_size16 && iterations < 5000 {
             assert_eq!(input[pos as usize & window_size - 1], end_byte);

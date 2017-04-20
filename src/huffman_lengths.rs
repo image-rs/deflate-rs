@@ -6,6 +6,7 @@ use huffman_table::{create_codes, num_extra_bits_for_length_code,
                     NUM_DISTANCE_CODES, MAX_CODE_LENGTH, FIXED_CODE_LENGTHS, LENGTH_BITS_START};
 use bitstream::{BitWriter, LsbWriter};
 use output_writer::FrequencyType;
+use stored_block::MAX_STORED_BLOCK_LENGTH;
 
 use std::io::{Write, Result};
 use std::cmp;
@@ -31,6 +32,7 @@ const MAX_HUFFMAN_CODE_LENGTH: usize = 7;
 
 // How many bytes (not including padding and the 3-bit block type) the stored block header takes up.
 const STORED_BLOCK_HEADER_LENGTH: u64 = 4;
+const BLOCK_MARKER_LENGTH: u8 = 3;
 
 /// Creates a new slice from the input slice that stops at the final non-zero value
 pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T], min_length: usize) -> &[T] {
@@ -101,6 +103,41 @@ fn calculate_block_length<F>(frequencies: &[FrequencyType],
     (d_ll_length, s_ll_length)
 }
 
+/// Get how extra padding bits after a block start header a stored block would use.
+///
+/// # Panics
+/// Panics if `pending_bits > 8`
+fn stored_padding(pending_bits: u8) -> u64 {
+    assert!(pending_bits <= 8);
+    let free_space = 8 - pending_bits;
+    if free_space >= BLOCK_MARKER_LENGTH {
+            // There is space in the current byte for the header.
+            free_space - BLOCK_MARKER_LENGTH
+        } else {
+            // The header will require an extra byte.
+            8 - (BLOCK_MARKER_LENGTH - free_space)
+        }
+        .into()
+}
+
+/// Calculate the number of bits storing the data in stored blocks will take up, excluding the
+/// first block start code and potential padding bits. As stored blocks have a maximum length,
+/// (as opposed to fixed and dynamic ones), multiple blocks may have to be utilised.
+///
+/// # Panics
+/// Panics if input_bytes is 0.
+fn stored_length(input_bytes: u64) -> u64 {
+    // Check how many stored blocks these bytes would take up.
+    // (Integer divison rounding up.)
+    let num_blocks = (input_bytes
+                          .checked_sub(1)
+                          .expect("Underflow calculating stored block length!") /
+                      MAX_STORED_BLOCK_LENGTH as u64) + 1;
+    // The length will be the input length and the headers for each block. (Excluding the start
+    // of block code for the first one)
+    (input_bytes + (STORED_BLOCK_HEADER_LENGTH as u64 * num_blocks) + (num_blocks - 1)) * 8
+}
+
 pub enum BlockType {
     Stored,
     Fixed,
@@ -128,8 +165,14 @@ pub struct DynamicBlockHeader {
 /// TODO: This needs a test
 pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
                            d_freqs: &[FrequencyType],
-                           num_input_bytes: u64)
+                           num_input_bytes: u64,
+                           pending_bits: u8)
                            -> BlockType {
+    // Avoid corner cases and issues if this is called for an empty block.
+    // For empty blocks, a fixed block will be the shortest.
+    if num_input_bytes == 0 {
+        return BlockType::Fixed;
+    };
 
     // The huffman spec allows us to exclude zeroes at the end of the
     // table of huffman lengths.
@@ -189,9 +232,8 @@ pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
     // Static blocks don't have any extra header data.
     let static_length = s_ll_length + s_dist_length;
 
-    // For stored blocks, the length is simply the number of input bytes + 2 bytes that are used to
-    // represent the block length.
-    let stored_length = (num_input_bytes + STORED_BLOCK_HEADER_LENGTH) * 8;
+    // Calculate how many bits it will take to store the data in uncompressed (stored) block(s).
+    let stored_length = stored_length(num_input_bytes) + stored_padding(pending_bits);
 
     let used_length = cmp::min(cmp::min(dynamic_length, static_length), stored_length);
 
@@ -199,7 +241,6 @@ pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
     // increases the length of the block (for instance if the input data is mostly random or
     // already compressed), we want to output a stored(uncompressed) block instead to avoid wasting
     // space.
-
     if used_length == static_length {
         BlockType::Fixed
     } else if used_length == stored_length {
@@ -286,4 +327,21 @@ pub fn write_huffman_lengths<W: Write>(header: &DynamicBlockHeader,
         }
     }
     Ok(())
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::stored_padding;
+    #[test]
+    fn padding() {
+        assert_eq!(stored_padding(0), 5);
+        assert_eq!(stored_padding(1), 4);
+        assert_eq!(stored_padding(2), 3);
+        assert_eq!(stored_padding(3), 2);
+        assert_eq!(stored_padding(4), 1);
+        assert_eq!(stored_padding(5), 0);
+        assert_eq!(stored_padding(6), 7);
+        assert_eq!(stored_padding(7), 6);
+    }
 }

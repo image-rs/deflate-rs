@@ -20,6 +20,9 @@ pub struct DeflateState<W: Write> {
     pub inner: W,
     pub output_buf_pos: usize,
     pub flush_mode: Flush,
+    /// Number of bytes written as calculated by sum of block input lengths.
+    /// Used to check that they are correct when `debug_assertions` are enabled.
+    pub bytes_written_control: u64,
 }
 
 impl<W: Write> DeflateState<W> {
@@ -37,6 +40,7 @@ impl<W: Write> DeflateState<W> {
             inner: writer,
             output_buf_pos: 0,
             flush_mode: Flush::None,
+            bytes_written_control: 0,
         }
     }
 
@@ -62,6 +66,9 @@ impl<W: Write> DeflateState<W> {
         self.back_buffer.clear();
         self.output_buf_pos = 0;
         self.flush_mode = Flush::None;
+        if cfg!(debug_assertions) {
+            self.bytes_written_control = 0;
+        }
         Ok(mem::replace(&mut self.inner, writer))
     }
 }

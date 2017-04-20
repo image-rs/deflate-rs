@@ -56,22 +56,25 @@ impl InputBuffer {
     /// Returns a slice containing the data that did not fit, or None if all data was consumed.
     pub fn slide<'a>(&mut self, data: &'a [u8]) -> Option<&'a [u8]> {
         // This should only be used when the buffer is full
-        assert_eq!(self.current_end, BUFFER_SIZE);
+        assert!(self.current_end > WINDOW_SIZE * 2);
         // Split into lower window and upper window + lookahead
-        let (lower, upper) = self.buffer[..].split_at_mut(WINDOW_SIZE);
+        let (lower, upper) = self.buffer[..self.current_end].split_at_mut(WINDOW_SIZE);
         // Copy the upper window to the lower window
         lower.copy_from_slice(&upper[..WINDOW_SIZE]);
-        {
+        let lookahead_len = {
             // Copy the lookahead to the start of the upper window
             let (upper_2, lookahead) = upper.split_at_mut(WINDOW_SIZE);
-            upper_2[..MAX_MATCH].copy_from_slice(lookahead);
-        }
+            let lookahead_len = lookahead.len();
+            assert!(lookahead_len <= MAX_MATCH);
+            upper_2[..lookahead_len].copy_from_slice(lookahead);
+            lookahead_len
+        };
 
         // Length of the upper window minus the lookahead bytes
-        let upper_len = upper.len() - MAX_MATCH;
+        let upper_len = upper.len() - lookahead_len;
         let end = cmp::min(data.len(), upper_len);
-        upper[MAX_MATCH..MAX_MATCH + end].copy_from_slice(&data[..end]);
-        self.current_end = lower.len() + MAX_MATCH + end;
+        upper[lookahead_len..lookahead_len + end].copy_from_slice(&data[..end]);
+        self.current_end = lower.len() + lookahead_len + end;
 
         if data.len() > upper_len {
             // Return a slice of the data that was not added
@@ -79,25 +82,6 @@ impl InputBuffer {
         } else {
             None
         }
-    }
-
-
-    /// Slide the buffer such that the current end of the buffer (including lookahead) is moved to
-    /// the position of WINDOW_SIZE, and return the number of bytes slid.
-    pub fn move_down(&mut self) -> usize {
-        assert!(self.current_end >= WINDOW_SIZE);
-        // Avoid doing anything if the end is already at WINDOW_SIZE.
-        if self.current_end == WINDOW_SIZE {
-            return 0;
-        }
-        // We use a naive sliding implementation for now. This may be suboptimal due to using
-        // indexing.
-        for i in 0..WINDOW_SIZE {
-            self.buffer[i] = self.buffer[self.current_end - WINDOW_SIZE + i];
-        }
-        let ret = self.current_end - WINDOW_SIZE;
-        self.current_end = WINDOW_SIZE;
-        ret
     }
 
     pub fn get_buffer(&mut self) -> &mut [u8] {
@@ -110,8 +94,8 @@ impl InputBuffer {
 ///
 /// This is used so we can derive a output a stored block when compression fails from the
 /// lz77-compressed data instead of keeping a very long buffer. Keeping this backlog is needed
-/// in this case since there might be matches in the current block that may refer to data in the
-/// previous block.
+/// in this case since there might be matches in the current block that refer to data in
+/// previous blocks.
 pub struct BackBuffer {
     buffer: Vec<u8>,
 }
@@ -121,13 +105,16 @@ impl BackBuffer {
         BackBuffer { buffer: Vec::with_capacity(MAX_DISTANCE) }
     }
 
-    /// Fill the buffer with up to 2^15 (`MAX_DISTANCE`) data from the end of the input slice.
-    ///
-    /// This will erase the current buffer data.
+    /// Fill the buffer with up to 2^15 (`MAX_DISTANCE`) data from the end of the input slice, and
+    /// discard any unneeded existing data from the beginning of the buffer.
     pub fn fill_buffer(&mut self, data: &[u8]) {
         let start = data.len().saturating_sub(MAX_DISTANCE);
-        self.buffer.clear();
+        let src = &data[start..];
+        let buffer_len = self.buffer.len();
+        // Remove the existing data we don't need.
+        self.buffer.drain(..cmp::min(src.len(), buffer_len));
         self.buffer.extend_from_slice(&data[start..]);
+        assert!(self.buffer.len() <= MAX_DISTANCE);
     }
 
     /// Borrow a slice of the currently buffered data.
@@ -185,15 +172,5 @@ mod test {
                        to_add);
         }
         assert_eq!(buf.current_end(), WINDOW_SIZE + MAX_MATCH + to_add.len());
-    }
-
-    #[test]
-    fn move_down() {
-        let mut data = [10u8; BUFFER_SIZE - 300];
-        *(data.last_mut().unwrap()) = 5;
-        let (mut buf, extra) = InputBuffer::new(&data[..]);
-        assert_eq!(extra, None);
-        buf.move_down();
-        assert_eq!(*buf.get_buffer().last().unwrap(), 5);
     }
 }

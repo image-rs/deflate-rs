@@ -95,7 +95,8 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
     // It's done here rather than in the structs themselves for now to
     // keep the data close in memory.
     let mut deflate_state = Box::new(DeflateState::new(compression_options, writer));
-    compress_until_done(input, &mut deflate_state, Flush::Finish)
+    let ret = compress_until_done(input, &mut deflate_state, Flush::Finish);
+    ret
 }
 
 /// Compress the given slice of bytes with DEFLATE compression.
@@ -219,13 +220,20 @@ mod test {
     #[test]
     fn dynamic_string_file() {
         use std::str;
+
         let input = get_test_data();
         let compressed = deflate_bytes(&input);
 
-        println!("dynamic_string_file compressed(default) len: {}",
-                 compressed.len());
-
         let result = decompress_to_end(&compressed);
+        for (n, (&a, &b)) in input.iter().zip(result.iter()).enumerate() {
+            if a != b {
+                println!("First difference at {}, input: {}, output: {}", n, a, b);
+                println!("input: {:?}, output: {:?}",
+                         &input[n - 3..n + 3],
+                         &result[n - 3..n + 3]);
+                break;
+            }
+        }
         // Not using assert_eq here deliberately to avoid massive amounts of output spam
         assert!(input == result);
         // Check that we actually managed to compress the input
@@ -316,5 +324,11 @@ mod test {
         chunk_test(BUFFER_SIZE);
         chunk_test(50000);
         chunk_test((32768 * 2) + 258);
+    }
+
+    ///
+    #[test]
+    fn frequency_overflow() {
+        let res = deflate_bytes_conf(&vec![5; 100000], compression_options::HUFFMAN_ONLY);
     }
 }

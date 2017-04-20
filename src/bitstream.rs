@@ -150,6 +150,10 @@ impl<W: Write> $name<W> {
             acc: 0,
         }
     }
+
+    pub fn pending_bits(&self) -> u8 {
+        self.bits
+    }
 }
 
 impl<W: Write> Write for $name<W> {
