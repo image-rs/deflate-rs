@@ -203,7 +203,7 @@ fn add_to_hash_table(bytes_to_add: usize,
 /// Write the specified literal `byte` to the writer `w`, and return
 /// `ProcessStatus::BufferFull($pos)` if the buffer is full after writing.
 ///
-/// `pos` should indicate the byte to start at in the next call to process_chunk,
+/// `pos` should indicate the byte to start at in the next call to `process_chunk`,
 /// `is_hashed` should be set to true of the byte at pos has been added to the hash chain.
 macro_rules! write_literal{
     ($w:ident, $byte:expr, $pos:expr) => {
@@ -263,12 +263,8 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
 
     // Set to true if we found a match that is equal to or longer than `lazy_if_less_than`,
     // indicating that we won't lazy match (check for a better match at the next byte).
-    let mut ignore_next = if prev_length as usize >= lazy_if_less_than {
-        // If we had a good match, carry this over from the previous call.
-        true
-    } else {
-        false
-    };
+    // If we had a good match, carry this over from the previous call.
+    let mut ignore_next = prev_length as usize >= lazy_if_less_than;
 
     // This is to output the correct byte in case there is one pending to be output
     // from the previous call.
@@ -749,8 +745,8 @@ pub fn decompress_lz77_with_backbuffer(input: &[LZValue], back_buffer: &[u8]) ->
                     let into_back_buffer = d - output.len();
 
                     assert!(into_back_buffer <= back_buffer.len(),
-                            "FATAL ERROR: Attempted to refer to a match in non-existing data!" +
-                            "into_back_buffer: {}, back_buffer len {}, d {}, l {:?}",
+                            "FATAL ERROR: Attempted to refer to a match in non-existing data!\
+                            into_back_buffer: {}, back_buffer len {}, d {}, l {:?}",
                             into_back_buffer,
                             back_buffer.len(),
                             d,
@@ -1094,7 +1090,7 @@ mod test {
 
         assert!(data[..out.len()] == out[..]);
 
-        let (bytes_consumed, _, position) = state.compress_block(&data[bytes_consumed..], false);
+        let (bytes_consumed, _, _) = state.compress_block(&data[bytes_consumed..], false);
         // Now that the buffer has been cleared, we should have consumed more data.
         assert!(bytes_consumed > 0);
         // We should have some new data in the buffer at this point.

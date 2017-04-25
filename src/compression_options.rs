@@ -55,6 +55,7 @@ pub const DEFAULT_OPTIONS: CompressionOptions = CompressionOptions {
 //
 
 /// This won't do any checks in the hash chain, and thus only compress using huffman encoding.
+#[cfg(test)]
 pub const HUFFMAN_ONLY: CompressionOptions = CompressionOptions {
     max_hash_checks: 0,
     lazy_if_less_than: 0,

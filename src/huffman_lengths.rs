@@ -125,7 +125,7 @@ fn stored_padding(pending_bits: u8) -> u64 {
 /// (as opposed to fixed and dynamic ones), multiple blocks may have to be utilised.
 ///
 /// # Panics
-/// Panics if input_bytes is 0.
+/// Panics if `input_bytes` is 0.
 fn stored_length(input_bytes: u64) -> u64 {
     // Check how many stored blocks these bytes would take up.
     // (Integer divison rounding up.)

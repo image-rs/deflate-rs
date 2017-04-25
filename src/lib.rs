@@ -95,8 +95,7 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
     // It's done here rather than in the structs themselves for now to
     // keep the data close in memory.
     let mut deflate_state = Box::new(DeflateState::new(compression_options, writer));
-    let ret = compress_until_done(input, &mut deflate_state, Flush::Finish);
-    ret
+    compress_until_done(input, &mut deflate_state, Flush::Finish)
 }
 
 /// Compress the given slice of bytes with DEFLATE compression.
@@ -326,9 +325,9 @@ mod test {
         chunk_test((32768 * 2) + 258);
     }
 
-    ///
+    /// Check that the frequency values don't overflow.
     #[test]
     fn frequency_overflow() {
-        let res = deflate_bytes_conf(&vec![5; 100000], compression_options::HUFFMAN_ONLY);
+        let _ = deflate_bytes_conf(&vec![5; 100000], compression_options::HUFFMAN_ONLY);
     }
 }
