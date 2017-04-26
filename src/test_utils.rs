@@ -1,4 +1,8 @@
 #![cfg(test)]
+
+#[cfg(gzip)]
+use flate2::GzHeader;
+
 fn get_test_file_data(name: &str) -> Vec<u8> {
     use std::fs::File;
     use std::io::Read;
@@ -51,6 +55,17 @@ pub fn decompress_to_end(input: &[u8]) -> Vec<u8> {
         println!("result size: {}", result.len());
         res.unwrap();
     }
+    result
+}
+
+#[cfg(feature= "gzip")]
+pub fn decompress_gzip(compressed: &[u8]) -> Vec<u8> {
+    use std::io::Read;
+    use flate2::read::GzDecoder;
+    let mut e = GzDecoder::new(&compressed[..]).unwrap();
+
+    let mut result = Vec::new();
+    e.read_to_end(&mut result).unwrap();
     result
 }
 

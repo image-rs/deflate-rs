@@ -2,7 +2,8 @@
 //! compression algorightm in pure rust.
 //!
 //! This library provides functions to compress data using the DEFLATE algorithm,
-//! both with and without a [zlib](https://tools.ietf.org/html/rfc1950) header/trailer.
+//! optionally wrapped using the [zlib](https://tools.ietf.org/html/rfc1950) or
+//! [gzip](http://www.gzip.org/zlib/rfc-gzip.html) formats.
 //! The current implementation is still a bit lacking speed-wise compared to C-libraries
 //! like zlib and miniz.
 //!
@@ -42,6 +43,8 @@ extern crate flate2;
 
 extern crate adler32;
 extern crate byteorder;
+#[cfg(feature = "gzip")]
+extern crate gzip_header;
 
 mod compression_options;
 mod huffman_table;
@@ -69,6 +72,10 @@ use std::io::Write;
 use std::io;
 
 use byteorder::BigEndian;
+#[cfg(feature = "gzip")]
+pub use gzip_header::{Crc, GzBuilder};
+#[cfg(feature = "gzip")]
+use byteorder::LittleEndian;
 
 use checksum::RollingChecksum;
 use deflate_state::DeflateState;
@@ -82,6 +89,8 @@ use writer::compress_until_done;
 /// Encoders implementing a `Write` interface.
 pub mod write {
     pub use writer::{DeflateEncoder, ZlibEncoder};
+    #[cfg(feature = "gzip")]
+    pub use writer::gzip::GzEncoder;
 }
 
 
@@ -189,12 +198,75 @@ pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
     deflate_bytes_zlib_conf(input, Compression::Default)
 }
 
+/// Compress the given slice of bytes with DEFLATE compression, including a gzip header and trailer
+/// using the given gzip header and compression options.
+///
+/// Returns a Vec<u8> of the compressed data.
+///
+///
+/// # Examples
+///
+/// ```
+/// use deflate::{deflate_bytes_gzip_conf, Compression, GzBuilder};
+/// let data = b"This is some test data";
+/// let compressed_data = deflate_bytes_gzip_conf(data, Compression::Best, GzBuilder::new());
+/// # let _ = compressed_data;
+/// ```
+#[cfg(feature = "gzip")]
+pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(input: &[u8],
+                                                            options: O,
+                                                            gzip_header: GzBuilder)
+                                                            -> Vec<u8> {
+    use byteorder::WriteBytesExt;
+    let mut writer = Vec::with_capacity(input.len() / 3);
+
+    // Write header
+    writer
+        .write_all(&gzip_header.into_header())
+        .expect("Write error when writing header!");
+    let mut checksum = checksum::NoChecksum::new();
+    compress_data_dynamic(input, &mut writer, &mut checksum, options.into())
+        .expect("Write error when writing compressed data!");
+
+    let mut crc = Crc::new();
+    crc.update(input);
+
+    writer
+        .write_u32::<LittleEndian>(crc.sum())
+        .expect("Write error when writing checksum!");
+    writer
+        .write_u32::<LittleEndian>(crc.amt_as_u32())
+        .expect("Write error when writing amt!");
+    writer
+}
+
+/// Compress the given slice of bytes with DEFLATE compression, including a gzip header and trailer,
+/// using the default compression level, and a gzip header with default values.
+///
+/// Returns a Vec<u8> of the compressed data.
+///
+///
+/// # Examples
+///
+/// ```
+/// use deflate::deflate_bytes_gzip;
+/// let data = b"This is some test data";
+/// let compressed_data = deflate_bytes_gzip(data);
+/// # let _ = compressed_data;
+/// ```
+#[cfg(feature = "gzip")]
+pub fn deflate_bytes_gzip(input: &[u8]) -> Vec<u8> {
+    deflate_bytes_gzip_conf(input, Compression::Default, GzBuilder::new())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use std::io::Write;
 
     use test_utils::{get_test_data, decompress_to_end, decompress_zlib};
+    #[cfg(feature= "gzip")]
+    use test_utils::decompress_gzip;
 
     /// Write data to the writer in chunks of chunk_size.
     fn chunked_write<W: Write>(mut writer: W, data: &[u8], chunk_size: usize) {
@@ -295,6 +367,17 @@ mod test {
         assert_eq!(compressed.len(), 5);
     }
 
+    #[cfg(feature = "gzip")]
+    #[test]
+    fn gzip() {
+        let data = get_test_data();
+        let compressed = deflate_bytes_gzip_conf(&data,
+                                                 Compression::Default,
+                                                 GzBuilder::new().comment("Test"));
+        let decompressed = decompress_gzip(&compressed);
+        assert!(data == decompressed);
+    }
+
     fn chunk_test(chunk_size: usize) {
         let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
@@ -329,5 +412,13 @@ mod test {
     #[test]
     fn frequency_overflow() {
         let _ = deflate_bytes_conf(&vec![5; 100000], compression_options::HUFFMAN_ONLY);
+    }
+
+    /// Compress with an empty slice.
+    #[test]
+    fn empty() {
+        let compressed = deflate_bytes_zlib(&[]);
+        let res = decompress_zlib(&compressed);
+        assert_eq!(res.len(), 0);
     }
 }
