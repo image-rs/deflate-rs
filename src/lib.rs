@@ -7,6 +7,13 @@
 //! The current implementation is still a bit lacking speed-wise compared to C-libraries
 //! like zlib and miniz.
 //!
+//! Support for the gzip wrapper is disabled by default, but can be enabled with the `gzip`
+//! feature.
+//!
+//! As this library is still in development, the compression output may change slightly
+//! between versions.
+//!
+//!
 //! # Examples:
 //! ## Simple compression function:
 //! ``` rust
@@ -73,7 +80,9 @@ use std::io;
 
 use byteorder::BigEndian;
 #[cfg(feature = "gzip")]
-pub use gzip_header::{Crc, GzBuilder};
+use gzip_header::GzBuilder;
+#[cfg(feature = "gzip")]
+use gzip_header::Crc;
 #[cfg(feature = "gzip")]
 use byteorder::LittleEndian;
 
@@ -109,12 +118,13 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
 
 /// Compress the given slice of bytes with DEFLATE compression.
 ///
-/// Returns a Vec<u8> of the compressed data.
+/// Returns a `Vec<u8>` of the compressed data.
 ///
 /// # Examples
 ///
 /// ```
 /// use deflate::{deflate_bytes_conf, Compression};
+///
 /// let data = b"This is some test data";
 /// let compressed_data = deflate_bytes_conf(data, Compression::Best);
 /// # let _ = compressed_data;
@@ -132,12 +142,13 @@ pub fn deflate_bytes_conf<O: Into<CompressionOptions>>(input: &[u8], options: O)
 /// Compress the given slice of bytes with DEFLATE compression using the default compression
 /// level.
 ///
-/// Returns a Vec<u8> of the compressed data.
+/// Returns a `Vec<u8>` of the compressed data.
 ///
 /// # Examples
 ///
 /// ```
 /// use deflate::deflate_bytes;
+///
 /// let data = b"This is some test data";
 /// let compressed_data = deflate_bytes(data);
 /// # let _ = compressed_data;
@@ -148,7 +159,7 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 
 /// Compress the given slice of bytes with DEFLATE compression, including a zlib header and trailer.
 ///
-/// Returns a Vec<u8> of the compressed data.
+/// Returns a `Vec<u8>` of the compressed data.
 ///
 /// Zlib dictionaries are not yet suppored.
 ///
@@ -156,6 +167,7 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 ///
 /// ```
 /// use deflate::{deflate_bytes_zlib_conf, Compression};
+///
 /// let data = b"This is some test data";
 /// let compressed_data = deflate_bytes_zlib_conf(data, Compression::Best);
 /// # let _ = compressed_data;
@@ -190,6 +202,7 @@ pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], option
 ///
 /// ```
 /// use deflate::deflate_bytes_zlib;
+///
 /// let data = b"This is some test data";
 /// let compressed_data = deflate_bytes_zlib(data);
 /// # let _ = compressed_data;
@@ -201,16 +214,23 @@ pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
 /// Compress the given slice of bytes with DEFLATE compression, including a gzip header and trailer
 /// using the given gzip header and compression options.
 ///
-/// Returns a Vec<u8> of the compressed data.
+/// Returns a `Vec<u8>` of the compressed data.
 ///
 ///
 /// # Examples
 ///
 /// ```
-/// use deflate::{deflate_bytes_gzip_conf, Compression, GzBuilder};
+/// extern crate gzip_header;
+/// extern crate deflate;
+///
+/// # fn main() {
+/// use deflate::{deflate_bytes_gzip_conf, Compression};
+/// use gzip_header::GzBuilder;
+///
 /// let data = b"This is some test data";
 /// let compressed_data = deflate_bytes_gzip_conf(data, Compression::Best, GzBuilder::new());
 /// # let _ = compressed_data;
+/// # }
 /// ```
 #[cfg(feature = "gzip")]
 pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(input: &[u8],
@@ -243,7 +263,7 @@ pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(input: &[u8],
 /// Compress the given slice of bytes with DEFLATE compression, including a gzip header and trailer,
 /// using the default compression level, and a gzip header with default values.
 ///
-/// Returns a Vec<u8> of the compressed data.
+/// Returns a `Vec<u8>` of the compressed data.
 ///
 ///
 /// # Examples

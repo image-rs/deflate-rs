@@ -55,7 +55,7 @@ pub fn compress_until_done<W: Write>(mut input: &[u8],
 
 /// A DEFLATE encoder/compressor.
 ///
-/// A struct implementing a `Write` interface that takes unencoded data and compresses it to
+/// A struct implementing a [`Write`] interface that takes unencoded data and compresses it to
 /// the provided writer using DEFLATE compression.
 ///
 /// # Examples
@@ -72,6 +72,7 @@ pub fn compress_until_done<W: Write>(mut input: &[u8],
 /// let compressed_data = encoder.finish().unwrap();
 /// # let _ = compressed_data;
 /// ```
+/// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 pub struct DeflateEncoder<W: Write> {
     // We use a box here to avoid putting the buffers on the stack
     // It's done here rather than in the structs themselves for now to
@@ -86,7 +87,7 @@ impl<W: Write> DeflateEncoder<W> {
         DeflateEncoder { deflate_state: Some(Box::new(DeflateState::new(options.into(), writer))) }
     }
 
-    /// Encode all pending data to the contained writer, consume this `ZlibEncoder`,
+    /// Encode all pending data to the contained writer, consume this `DeflateEncoder`,
     /// and return the contained writer if writing succeeds.
     pub fn finish(mut self) -> io::Result<W> {
         self.output_all()?;
@@ -129,7 +130,7 @@ impl<W: Write> Drop for DeflateEncoder<W> {
     /// When the encoder is dropped, output the rest of the data.
     ///
     /// WARNING: This may silently fail if writing fails, so using this to finish encoding
-    /// for writers where writing might fail is not recommended, for that call finish() instead.
+    /// for writers where writing might fail is not recommended, for that call [`finish()`](#method.finish) instead.
     fn drop(&mut self) {
         // Not sure if implementing drop is a good idea or not, but we follow flate2 for now.
         // We only do this if we are not panicking, to avoid a double panic.
@@ -142,7 +143,7 @@ impl<W: Write> Drop for DeflateEncoder<W> {
 
 /// A Zlib encoder/compressor.
 ///
-/// A struct implementing a `Write` interface that takes unencoded data and compresses it to
+/// A struct implementing a [`Write`] interface that takes unencoded data and compresses it to
 /// the provided writer using DEFLATE compression with Zlib headers and trailers.
 ///
 /// # Examples
@@ -159,6 +160,7 @@ impl<W: Write> Drop for DeflateEncoder<W> {
 /// let compressed_data = encoder.finish().unwrap();
 /// # let _ = compressed_data;
 /// ```
+/// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 pub struct ZlibEncoder<W: Write> {
     // We use a box here to avoid putting the buffers on the stack
     // It's done here rather than in the structs themselves for now to
@@ -261,7 +263,7 @@ impl<W: Write> Drop for ZlibEncoder<W> {
     /// When the encoder is dropped, output the rest of the data.
     ///
     /// WARNING: This may silently fail if writing fails, so using this to finish encoding
-    /// for writers where writing might fail is not recommended, for that call finish() instead.
+    /// for writers where writing might fail is not recommended, for that call [`finish()`](#method.finish) instead.
     fn drop(&mut self) {
         if self.deflate_state.is_some() && !thread::panicking() {
             let _ = self.output_all();
@@ -282,7 +284,7 @@ pub mod gzip {
 
     /// A Gzip encoder/compressor.
     ///
-    /// A struct implementing a `Write` interface that takes unencoded data and compresses it to
+    /// A struct implementing a [`Write`] interface that takes unencoded data and compresses it to
     /// the provided writer using DEFLATE compression with Gzip headers and trailers.
     ///
     /// # Examples
@@ -299,6 +301,7 @@ pub mod gzip {
     /// let compressed_data = encoder.finish().unwrap();
     /// # let _ = compressed_data;
     /// ```
+    /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     pub struct GzEncoder<W: Write> {
         inner: DeflateEncoder<W>,
         checksum: Crc,
@@ -420,7 +423,7 @@ pub mod gzip {
         /// When the encoder is dropped, output the rest of the data.
         ///
         /// WARNING: This may silently fail if writing fails, so using this to finish encoding
-        /// for writers where writing might fail is not recommended, for that call finish() instead.
+        /// for writers where writing might fail is not recommended, for that call [`finish()`](#method.finish) instead.
         fn drop(&mut self) {
             if self.inner.deflate_state.is_some() && !thread::panicking() {
                 let _ = self.output_all();
