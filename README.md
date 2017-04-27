@@ -1,11 +1,11 @@
 # deflate-rs
 
-[![Build Status](https://travis-ci.org/oyvindln/deflate-rs.svg)](https://travis-ci.org/oyvindln/deflate-rs) [![Crates.io](https://img.shields.io/crates/v/deflate.svg)](https://crates.io/crates/deflate) [![Docs](https://docs.rs/deflate/badge.svg)](https://docs.rs/deflate)
+[![Build Status](https://travis-ci.org/oyvindln/deflate-rs.svg)](https://travis-ci.org/oyvindln/deflate-rs)[![Crates.io](https://img.shields.io/crates/v/deflate.svg)](https://crates.io/crates/deflate)[![Docs](https://docs.rs/deflate/badge.svg)](https://docs.rs/deflate)
 
 
-An rust implementation of a [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) encoder. Not a direct port, but does take some inspiration from [zlib](http://www.zlib.net/), [miniz](https://github.com/richgel999/miniz) and [zopfli](https://github.com/google/zopfli).
+An implementation of a [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) encoder in pure rust. Not a direct port, but does take some inspiration from [zlib](http://www.zlib.net/), [miniz](https://github.com/richgel999/miniz) and [zopfli](https://github.com/google/zopfli). The API is based on the one in the [flate2](https://crates.io/crates/flate2) crate that contains bindings to zlib and miniz.
 
-So far, deflate encoding with and without zlib and gzip metadata (no zlib dictionary or gzip support yet) has been is implemented. No unsafe code has been used. Speed-wise it's not quite up to miniz-levels yet.
+So far, deflate encoding with and without zlib and gzip metadata (zlib dictionaryies are not supported yet) has been is implemented. No unsafe code has been used. Speed-wise it's not quite up to miniz-levels yet (between 10% and twice as slow for most files, for large uncompressible files it can be slower).
 # Usage:
 ## Simple compression function:
 ``` rust
