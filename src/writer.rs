@@ -130,7 +130,8 @@ impl<W: Write> Drop for DeflateEncoder<W> {
     /// When the encoder is dropped, output the rest of the data.
     ///
     /// WARNING: This may silently fail if writing fails, so using this to finish encoding
-    /// for writers where writing might fail is not recommended, for that call [`finish()`](#method.finish) instead.
+    /// for writers where writing might fail is not recommended, for that call
+    /// [`finish()`](#method.finish) instead.
     fn drop(&mut self) {
         // Not sure if implementing drop is a good idea or not, but we follow flate2 for now.
         // We only do this if we are not panicking, to avoid a double panic.
@@ -263,7 +264,8 @@ impl<W: Write> Drop for ZlibEncoder<W> {
     /// When the encoder is dropped, output the rest of the data.
     ///
     /// WARNING: This may silently fail if writing fails, so using this to finish encoding
-    /// for writers where writing might fail is not recommended, for that call [`finish()`](#method.finish) instead.
+    /// for writers where writing might fail is not recommended, for that call
+    /// [`finish()`](#method.finish) instead.
     fn drop(&mut self) {
         if self.deflate_state.is_some() && !thread::panicking() {
             let _ = self.output_all();
@@ -423,7 +425,8 @@ pub mod gzip {
         /// When the encoder is dropped, output the rest of the data.
         ///
         /// WARNING: This may silently fail if writing fails, so using this to finish encoding
-        /// for writers where writing might fail is not recommended, for that call [`finish()`](#method.finish) instead.
+        /// for writers where writing might fail is not recommended, for that call
+        /// [`finish()`](#method.finish) instead.
         fn drop(&mut self) {
             if self.inner.deflate_state.is_some() && !thread::panicking() {
                 let _ = self.output_all();

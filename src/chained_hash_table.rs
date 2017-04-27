@@ -122,8 +122,6 @@ impl ChainedHashTable {
             if bytes != WINDOW_SIZE {
                 // This should only happen in tests in this file.
                 self.count = 0;
-            } else {
-                assert_eq!(self.count & WINDOW_MASK as u64, 0);
             }
         }
         ChainedHashTable::slide_table(&mut self.head[..], bytes as u16);
