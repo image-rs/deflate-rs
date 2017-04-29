@@ -361,17 +361,31 @@ pub mod gzip {
             Ok(inner.unwrap().inner)
         }
 
-        /// Resets the encoder (except the compression options), replacing the current writer
-        /// with a new one, returning the old one.
-        pub fn reset(&mut self, writer: W) -> io::Result<W> {
+        fn reset_no_header(&mut self, writer: W) -> io::Result<W> {
             self.output_all()?;
-            self.header = GzBuilder::new().into_header();
             self.checksum = Crc::new();
             self.inner
                 .deflate_state
                 .as_mut()
                 .unwrap()
                 .reset(writer)
+        }
+
+        /// Resets the encoder (except the compression options), replacing the current writer
+        /// with a new one, returning the old one. (Using a blank header).
+        pub fn reset(&mut self, writer: W) -> io::Result<W> {
+            let w = self.reset_no_header(writer);
+            self.header = GzBuilder::new().into_header();
+            w
+        }
+
+        /// Resets the encoder (excelt the compression options), replacing the current writer
+        /// with a new one, returning the old one, and using the provided `GzBuilder` to
+        /// create the header.
+        pub fn reset_with_builder(&mut self, writer: W, builder: GzBuilder) -> io::Result<W> {
+            let w = self.reset_no_header(writer);
+            self.header = builder.into_header();
+            w
         }
 
         /// Write the checksum and number of bytes mod 2^32 to the output writer.
@@ -544,6 +558,20 @@ mod test {
 
         let decompressed = decompress_to_end(&compressed);
 
+        assert!(decompressed == data);
+    }
+
+    #[test]
+    /// Make sure compression works with the writer when the input is between 1 and 2 window sizes.
+    fn issue_18() {
+        use compression_options::Compression;
+        let data = vec![0;61000];
+        let compressed = {
+            let mut compressor = ZlibEncoder::new(Vec::new(), Compression::Default);
+            compressor.write_all(&data[..]).unwrap();
+            compressor.finish().unwrap()
+        };
+        let decompressed = decompress_zlib(&compressed);
         assert!(decompressed == data);
     }
 

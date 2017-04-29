@@ -612,7 +612,7 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
 
                 // We are at the first window so we don't need to slide the hash table yet.
                 // If finishing or syncing, we stop here.
-                if first_chunk_end >= data.len() && finish {
+                if first_chunk_end >= buffer.current_end() && finish {
                     if !sync {
                         state.set_last();
                         state.is_first_window = false;
