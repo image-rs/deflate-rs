@@ -1,6 +1,6 @@
 [package]
 name = "deflate"
-version = "0.7.8"
+version = "0.7.9"
 license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
 readme = "README.md"
@@ -19,7 +19,7 @@ byteorder = "1.0.0"
 gzip-header = { version = "0.1", optional = true }
 
 [dev-dependencies]
-flate2 = "0.2.18"
+flate2 = "0.2.19"
 #inflate = "*"
 
 [features]
