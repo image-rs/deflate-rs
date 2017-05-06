@@ -60,7 +60,6 @@ fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usi
 /// `position`: The position in the data to match against.
 /// `prev_length`: The length of the previous `longest_match` check to compare against.
 /// `max_hash_checks`: The maximum number of matching hash chain positions to check.
-#[allow(unused_assignments)]
 pub fn longest_match(data: &[u8],
                      hash_table: &ChainedHashTable,
                      position: usize,
@@ -98,43 +97,38 @@ pub fn longest_match(data: &[u8],
     // The position of the previous value in the hash chain.
     let mut prev_head;
 
-    let max_hash_checks = (max_hash_checks + 2) / 3;
+    for _ in 0..max_hash_checks {
+        prev_head = current_head;
+        current_head = hash_table.get_prev(current_head) as usize;
+        if current_head >= prev_head || current_head < limit {
+            // If the current hash chain value refers to itself, or is referring to
+            // a value that's higher (we only move backwars through the chain),
+            // we are at the end and can stop.
+            break;
+        }
 
-    'outer: for _ in 0..max_hash_checks {
-        'inner: for _ in 0..3 {
-            prev_head = current_head;
-            current_head = hash_table.get_prev(current_head) as usize;
-            if current_head >= prev_head || current_head < limit {
-                // If the current hash chain value refers to itself, or is referring to
-                // a value that's higher (we only move backwars through the chain),
-                // we are at the end and can stop.
-                break 'outer;
-            }
-
-            // We only check further if the match length can actually increase
-            // Checking if the end byte and the potential next byte matches is generally
-            // more likely to give a quick answer rather than checking from the start first, given
-            // that the hashes match.
-            // If there is no previous match, best_length will be 1 and the two first bytes will
-            // be checked instead.
-            // Since we've made sure best_length is always at least 1, this shouldn't underflow.
-            if data[position + best_length - 1..position + best_length + 1] ==
-               data[current_head + best_length - 1..current_head + best_length + 1] {
-                // Actually check how many bytes match.
-                // At the moment this will check the two bytes we just checked again,
-                // though adding code for skipping these bytes may not result in any speed
-                // gain due to the added complexity.
-                let length = get_match_length(data, position, current_head);
-                if length > best_length && length >= MIN_MATCH {
-                    best_length = length;
-                    best_distance = position - current_head;
-                    if length == max_length {
-                        // We are at the max length, so there is no point
-                        // searching any longer
-                        break 'outer;
-                    }
+        // We only check further if the match length can actually increase
+        // Checking if the end byte and the potential next byte matches is generally
+        // more likely to give a quick answer rather than checking from the start first, given
+        // that the hashes match.
+        // If there is no previous match, best_length will be 1 and the two first bytes will
+        // be checked instead.
+        // Since we've made sure best_length is always at least 1, this shouldn't underflow.
+        if data[position + best_length - 1..position + best_length + 1] ==
+           data[current_head + best_length - 1..current_head + best_length + 1] {
+            // Actually check how many bytes match.
+            // At the moment this will check the two bytes we just checked again,
+            // though adding code for skipping these bytes may not result in any speed
+            // gain due to the added complexity.
+            let length = get_match_length(data, position, current_head);
+            if length > best_length && length >= MIN_MATCH {
+                best_length = length;
+                best_distance = position - current_head;
+                if length == max_length {
+                    // We are at the max length, so there is no point
+                    // searching any longer
+                    break;
                 }
-                //break;
             }
         }
     }

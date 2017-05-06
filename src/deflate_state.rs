@@ -2,22 +2,31 @@ use std::io::Write;
 use lz77::LZ77State;
 use output_writer::DynamicWriter;
 use encoder_state::EncoderState;
-use input_buffer::{InputBuffer, BackBuffer};
+use input_buffer::InputBuffer;
 use compression_options::CompressionOptions;
 use huffman_table::HuffmanTable;
 use std::{io, mem};
 use compress::Flush;
 pub use huffman_table::MAX_MATCH;
 
+
+/// A struct containing all the stored state used for the encoder.
 pub struct DeflateState<W: Write> {
+    /// State of lz77 compression.
     pub lz77_state: LZ77State,
     pub input_buffer: InputBuffer,
     pub compression_options: CompressionOptions,
+    /// State the huffman part of the compression and the output buffer.
     pub encoder_state: EncoderState<Vec<u8>>,
+    /// The buffer containing the raw output of the lz77-encoding.
     pub lz77_writer: DynamicWriter,
+    /// Total number of bytes consumed/written to the input buffer.
     pub bytes_written: u64,
-    pub back_buffer: BackBuffer,
+    /// Wrapped writer.
     pub inner: W,
+    /// The position in the output buffer where data should be flushed from, to keep track of
+    /// what data has been output in case not all data is output when writing to the wrapped
+    /// writer.
     pub output_buf_pos: usize,
     pub flush_mode: Flush,
     /// Number of bytes written as calculated by sum of block input lengths.
@@ -36,7 +45,6 @@ impl<W: Write> DeflateState<W> {
             lz77_writer: DynamicWriter::new(),
             compression_options: compression_options,
             bytes_written: 0,
-            back_buffer: BackBuffer::new(),
             inner: writer,
             output_buf_pos: 0,
             flush_mode: Flush::None,
@@ -63,7 +71,6 @@ impl<W: Write> DeflateState<W> {
         self.lz77_writer.clear();
         self.lz77_state.reset();
         self.bytes_written = 0;
-        self.back_buffer.clear();
         self.output_buf_pos = 0;
         self.flush_mode = Flush::None;
         if cfg!(debug_assertions) {

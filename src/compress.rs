@@ -4,9 +4,10 @@ use std::io;
 use deflate_state::DeflateState;
 use encoder_state::EncoderState;
 use lzvalue::LZValue;
-use lz77::{lz77_compress_block, LZ77Status, decompress_lz77_with_backbuffer};
+use lz77::{lz77_compress_block, LZ77Status};
 use huffman_lengths::{gen_huffman_lengths, write_huffman_lengths, BlockType};
 use output_writer::OutputWriter;
+use bitstream::LsbWriter;
 use stored_block::{compress_block_stored, write_stored_header, MAX_STORED_BLOCK_LENGTH};
 
 const LARGEST_OUTPUT_BUF_SIZE: usize = 1024 * 32;
@@ -66,10 +67,10 @@ pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     writer
 }
 
-fn write_stored_block<W: Write>(input: &[u8],
-                                deflate_state: &mut DeflateState<W>,
-                                final_block: bool)
-                                -> io::Result<usize> {
+fn write_stored_block(input: &[u8],
+                      mut writer: &mut LsbWriter<Vec<u8>>,
+                      final_block: bool)
+                      -> io::Result<usize> {
 
     // If the input is not zero, we write stored blocks for the input data.
     if !input.is_empty() {
@@ -79,18 +80,17 @@ fn write_stored_block<W: Write>(input: &[u8],
         while let Some(chunk) = i.next() {
             let last_chunk = i.peek().is_none();
             // Write the block header
-            write_stored_header(&mut deflate_state.encoder_state.writer,
-                                final_block && last_chunk)?;
+            write_stored_header(writer, final_block && last_chunk)?;
 
             // Write the actual data.
-            written += compress_block_stored(chunk, &mut deflate_state.encoder_state.writer)?;
+            written += compress_block_stored(chunk, &mut writer)?;
 
         }
         Ok(written)
     } else {
         // If the input length is zero, we output an empty block. This is used for syncing.
-        write_stored_header(&mut deflate_state.encoder_state.writer, final_block)?;
-        compress_block_stored(&[], &mut deflate_state.encoder_state.writer)
+        write_stored_header(writer, final_block)?;
+        compress_block_stored(&[], &mut writer)
     }
 }
 
@@ -213,16 +213,18 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                                    &mut deflate_state.encoder_state)?;
             }
             BlockType::Stored => {
-                // Decompress the current lz77 encoded data to get back the
-                // uncompressd bytes.
-                // TODO: Avoid the temporary buffer here.
-                // TODO: Currently this may end up writing 3 stored blocks where the last one
-                // is very short. When that occurs, we should avoid the last one and merge it
-                // with the next block instead.
-                let data = decompress_lz77_with_backbuffer(deflate_state.lz77_writer.get_buffer(),
-                                                           deflate_state.back_buffer.get_buffer());
+                // If compression fails, output a stored block instead.
 
-                write_stored_block(&data, deflate_state, flush == Flush::Finish && last_block)?;
+
+                let start_pos = position.saturating_sub(current_block_input_bytes as usize);
+
+                assert!(position >= current_block_input_bytes as usize,
+                        "Error! Trying to output a stored block with forgotten data!\
+                         if you encounter this error, please file an issue!");
+
+                write_stored_block(&deflate_state.input_buffer.get_buffer()[start_pos..position],
+                                   &mut deflate_state.encoder_state.writer,
+                                   flush == Flush::Finish && last_block)?;
             }
         };
 
@@ -235,25 +237,21 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
             // We are done with the block, so we reset the number of bytes taken
             // for the next one.
             deflate_state.lz77_state.reset_input_bytes();
-
-            // The byte at position may not have been output yet.
-            let end_pos = if deflate_state.lz77_state.pending_byte() {
-                position.saturating_sub(1)
-            } else {
-                position
-            };
-
-            // Fill the back buffer.
-            deflate_state
-                .back_buffer
-                .fill_buffer(&deflate_state.input_buffer.get_buffer()[..end_pos]);
-
         }
         // We are done for now.
         if status == LZ77Status::Finished {
             // This flush mode means that there should be an empty stored block at the end.
             if flush == Flush::Sync {
-                write_stored_block(&[], deflate_state, false)?;
+                write_stored_block(&[], &mut deflate_state.encoder_state.writer, false)?;
+            } else if !deflate_state.lz77_state.is_last_block() {
+                // Make sure a block with the last block header has been output.
+                // Not sure this can actually happen, but we make sure to finish properly
+                // if it somehow does.
+                // An empty fixed block is the shortest.
+                let es = &mut deflate_state.encoder_state;
+                es.set_huffman_to_fixed()?;
+                es.write_start_of_block(true, true)?;
+                es.write_end_of_block()?;
             }
             break;
         }

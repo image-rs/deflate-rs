@@ -9,11 +9,12 @@ use huffman_table::{NUM_LITERALS_AND_LENGTHS, NUM_DISTANCE_CODES, END_OF_BLOCK_P
 /// As we are limiting the blocks to be at most 2^16 bytes long, we can represent frequencies using
 /// 16-bit values.
 pub type FrequencyType = u16;
+
 /// The maximum number of literals/lengths in the buffer, which in practice also means the maximum
 /// number of literals/lengths output before a new block is started.
 /// This should not be larger than the maximum value `FrequencyType` can represent to prevent
 /// overflowing (which would degrade, or in the worst case break compression).
-pub const MAX_BUFFER_LENGTH: usize = u16::MAX as usize;
+pub const MAX_BUFFER_LENGTH: usize = 1024 * 31;
 
 #[derive(Debug, PartialEq)]
 pub enum BufferStatus {

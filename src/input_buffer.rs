@@ -4,6 +4,7 @@ use chained_hash_table::WINDOW_SIZE;
 use huffman_table;
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
+#[cfg(not_in_use)]
 const MAX_DISTANCE: usize = huffman_table::MAX_DISTANCE as usize;
 pub const BUFFER_SIZE: usize = (WINDOW_SIZE * 2) + MAX_MATCH;
 
@@ -84,49 +85,12 @@ impl InputBuffer {
         }
     }
 
+    /// Get a mutable slice of the used part of the buffer.
     pub fn get_buffer(&mut self) -> &mut [u8] {
         &mut self.buffer[..self.current_end]
     }
 }
 
-/// A buffer used to keep a backlog of the last 2^15 (maximum match distance) of bytes of the
-/// previous block.
-///
-/// This is used so we can derive a output a stored block when compression fails from the
-/// lz77-compressed data instead of keeping a very long buffer. Keeping this backlog is needed
-/// in this case since there might be matches in the current block that refer to data in
-/// previous blocks.
-pub struct BackBuffer {
-    buffer: Vec<u8>,
-}
-
-impl BackBuffer {
-    pub fn new() -> BackBuffer {
-        BackBuffer { buffer: Vec::with_capacity(MAX_DISTANCE) }
-    }
-
-    /// Fill the buffer with up to 2^15 (`MAX_DISTANCE`) data from the end of the input slice, and
-    /// discard any unneeded existing data from the beginning of the buffer.
-    pub fn fill_buffer(&mut self, data: &[u8]) {
-        let start = data.len().saturating_sub(MAX_DISTANCE);
-        let src = &data[start..];
-        let buffer_len = self.buffer.len();
-        // Remove the existing data we don't need.
-        self.buffer.drain(..cmp::min(src.len(), buffer_len));
-        self.buffer.extend_from_slice(&data[start..]);
-        assert!(self.buffer.len() <= MAX_DISTANCE);
-    }
-
-    /// Borrow a slice of the currently buffered data.
-    pub fn get_buffer(&self) -> &[u8] {
-        self.buffer.as_slice()
-    }
-
-    /// Clear the internal buffer.
-    pub fn clear(&mut self) {
-        self.buffer.clear();
-    }
-}
 #[cfg(test)]
 mod test {
     use super::MAX_MATCH;

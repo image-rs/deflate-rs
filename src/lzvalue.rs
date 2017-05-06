@@ -22,6 +22,7 @@ impl StoredLength {
         self.length
     }
 
+    #[cfg(test)]
     pub fn actual_length(&self) -> u16 {
         u16::from(self.length) + MIN_MATCH
     }

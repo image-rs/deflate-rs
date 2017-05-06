@@ -404,7 +404,7 @@ pub mod gzip {
                 .as_mut()
                 .unwrap()
                 .inner
-                .write_all(&temp.into_inner())
+                .write_all(temp.into_inner())
         }
 
         /// Get the crc32 checksum of the data comsumed so far.
