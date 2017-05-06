@@ -4,12 +4,13 @@
 // This should probably be made into a separate crate
 
 //! This module provides bit readers and writers
-#![allow(dead_code)]
+//#![allow(dead_code)]
 
 use std::io::{self, Write};
 
 /// Containes either the consumed bytes and reconstructed bits or
 /// only the consumed bytes if the supplied buffer was not bit enough
+#[cfg(test)]
 pub enum Bits {
     /// Consumed bytes, reconstructed bits
     Some(usize, u16),
@@ -18,6 +19,7 @@ pub enum Bits {
 }
 
 /// A bit reader.
+#[cfg(test)]
 pub trait BitReader {
     /// Returns the next `n` bits.
     fn read_bits(&mut self, buf: &[u8], n: u8) -> Bits;
@@ -65,7 +67,6 @@ impl $name {
 #[cfg(test)]
 define_bit_readers!{
     LsbReader, #[doc = "Reads bits from a byte stream, LSB first."];
-    MsbReader, #[doc = "Reads bits from a byte stream, MSB first."];
 }
 
 #[cfg(test)]
@@ -91,34 +92,6 @@ impl BitReader for LsbReader {
         }
         let res = self.acc & ((1 << n) - 1);
         self.acc >>= n;
-        self.bits -= n;
-        Bits::Some(consumed, res as u16)
-    }
-}
-
-#[cfg(test)]
-impl BitReader for MsbReader {
-    fn read_bits(&mut self, mut buf: &[u8], n: u8) -> Bits {
-        if n > 16 {
-            // This is a logic error the program should have prevented this
-            // Ideally we would used bounded a integer value instead of u8
-            panic!("Cannot read more than 16 bits")
-        }
-        let mut consumed = 0;
-        while self.bits < n {
-            let byte = if buf.len() > 0 {
-                let byte = buf[0];
-                buf = &buf[1..];
-                byte
-            } else {
-                return Bits::None(consumed);
-            };
-            self.acc |= (byte as u32) << (24 - self.bits);
-            self.bits += 8;
-            consumed += 1;
-        }
-        let res = self.acc >> (32 - n);
-        self.acc <<= n;
         self.bits -= n;
         Bits::Some(consumed, res as u16)
     }
@@ -187,7 +160,6 @@ impl<W: Write> Write for $name<W> {
 
 define_bit_writers!{
     LsbWriter, #[doc = "Writes bits to a byte stream, LSB first."];
-    MsbWriter, #[doc = "Writes bits to a byte stream, MSB first."];
 }
 
 impl<W: Write> BitWriter for LsbWriter<W> {
@@ -198,20 +170,6 @@ impl<W: Write> BitWriter for LsbWriter<W> {
         while self.bits >= 8 {
             self.w.write_all(&[self.acc as u8])?;
             self.acc >>= 8;
-            self.bits -= 8
-
-        }
-        Ok(())
-    }
-}
-
-impl<W: Write> BitWriter for MsbWriter<W> {
-    fn write_bits(&mut self, v: u16, n: u8) -> io::Result<()> {
-        self.acc |= (v as u32) << (32 - n - self.bits);
-        self.bits += n;
-        while self.bits >= 8 {
-            self.w.write_all(&[(self.acc >> 24) as u8])?;
-            self.acc <<= 8;
             self.bits -= 8
 
         }
