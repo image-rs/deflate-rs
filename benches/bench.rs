@@ -3,9 +3,15 @@
 extern crate deflate;
 extern crate test;
 extern crate flate2;
+
+use std::io::Write;
+use std::io;
+
 use test::Bencher;
 use flate2::Compression;
+use flate2::write;
 use deflate::{CompressionOptions, deflate_bytes_zlib_conf, deflate_bytes_zlib};
+use deflate::write::DeflateEncoder;
 
 fn load_from_file(name: &str) -> Vec<u8> {
     use std::fs::File;
@@ -70,4 +76,29 @@ fn test_file_zlib_flate2_best(b: &mut Bencher) {
 fn test_file_zlib_flate2_fast(b: &mut Bencher) {
     let test_data = get_test_data();
     b.iter(|| deflate_bytes_flate2_zlib(Compression::Fast, &test_data));
+}
+
+#[derive(Copy, Clone)]
+struct Dummy {
+
+}
+
+impl Write for Dummy {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[bench]
+fn writer_create(b: &mut Bencher) {
+    b.iter(|| DeflateEncoder::new(Dummy{}, CompressionOptions::fast()));
+}
+
+#[bench]
+fn writer_create_flate2(b: &mut Bencher) {
+    b.iter(|| write::DeflateEncoder::new(Dummy{}, Compression::Fast));
 }

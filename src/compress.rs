@@ -111,6 +111,8 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
         if output_buf_len > LARGEST_OUTPUT_BUF_SIZE {
             let written = deflate_state
                 .inner
+                .as_mut()
+                .expect("Missing writer!")
                 .write(&deflate_state.encoder_state.inner_vec()[output_buf_pos..])?;
 
             if written < output_buf_len.checked_sub(output_buf_pos).unwrap() {
@@ -264,6 +266,8 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
     let output_buf_pos = deflate_state.output_buf_pos;
     let written_to_writer = deflate_state
         .inner
+        .as_mut()
+        .expect("Missing writer!")
         .write(&deflate_state.encoder_state.inner_vec()[output_buf_pos..])?;
     if written_to_writer <
        deflate_state

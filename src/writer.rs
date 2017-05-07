@@ -10,6 +10,8 @@ use deflate_state::DeflateState;
 use compression_options::CompressionOptions;
 use zlib::{write_zlib_header, CompressionLevel};
 
+const ERR_STR: &'static str = "Error! The wrapped writer is missing. This is a bug, please file an issue.";
+
 /// Keep compressing until all the input has been compressed and output or the writer returns `Err`.
 pub fn compress_until_done<W: Write>(mut input: &[u8],
                                      deflate_state: &mut DeflateState<W>,
@@ -77,43 +79,41 @@ pub struct DeflateEncoder<W: Write> {
     // We use a box here to avoid putting the buffers on the stack
     // It's done here rather than in the structs themselves for now to
     // keep the data close in memory.
-    // Option is used to allow us to implement `Drop` and `finish()` at the same time.
-    deflate_state: Option<Box<DeflateState<W>>>,
+    deflate_state: Box<DeflateState<W>>,
 }
 
 impl<W: Write> DeflateEncoder<W> {
     /// Creates a new encoder using the provided compression options.
     pub fn new<O: Into<CompressionOptions>>(writer: W, options: O) -> DeflateEncoder<W> {
-        DeflateEncoder { deflate_state: Some(Box::new(DeflateState::new(options.into(), writer))) }
+        DeflateEncoder { deflate_state: Box::new(DeflateState::new(options.into(), writer)) }
     }
 
     /// Encode all pending data to the contained writer, consume this `DeflateEncoder`,
     /// and return the contained writer if writing succeeds.
     pub fn finish(mut self) -> io::Result<W> {
         self.output_all()?;
-        // We have to move the inner state out of the encoder, and replace it with `None`
+        // We have to move the inner writer out of the encoder, and replace it with `None`
         // to let the `DeflateEncoder` drop safely.
-        let state = self.deflate_state.take();
-        Ok(state.unwrap().inner)
+        Ok(self.deflate_state.inner.take().expect(ERR_STR))
     }
 
     /// Resets the encoder (except the compression options), replacing the current writer
     /// with a new one, returning the old one.
     pub fn reset(&mut self, w: W) -> io::Result<W> {
         self.output_all()?;
-        self.deflate_state.as_mut().unwrap().reset(w)
+        self.deflate_state.reset(w)
     }
 
     /// Output all pending data as if encoding is done, but without resetting anything
     fn output_all(&mut self) -> io::Result<()> {
-        compress_until_done(&[], self.deflate_state.as_mut().unwrap(), Flush::Finish)
+        compress_until_done(&[], &mut self.deflate_state, Flush::Finish)
     }
 }
 
 impl<W: Write> io::Write for DeflateEncoder<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let flush_mode = self.deflate_state.as_ref().unwrap().flush_mode;
-        compress_data_dynamic_n(buf, &mut self.deflate_state.as_mut().unwrap(), flush_mode)
+        let flush_mode = self.deflate_state.flush_mode;
+        compress_data_dynamic_n(buf, &mut self.deflate_state, flush_mode)
     }
 
     /// Flush the encoder.
@@ -122,7 +122,7 @@ impl<W: Write> io::Write for DeflateEncoder<W> {
     /// This essentially finishes the current block, and sends an additional empty stored block to
     /// the writer.
     fn flush(&mut self) -> io::Result<()> {
-        compress_until_done(&[], self.deflate_state.as_mut().unwrap(), Flush::Sync)
+        compress_until_done(&[], &mut self.deflate_state, Flush::Sync)
     }
 }
 
@@ -135,7 +135,7 @@ impl<W: Write> Drop for DeflateEncoder<W> {
     fn drop(&mut self) {
         // Not sure if implementing drop is a good idea or not, but we follow flate2 for now.
         // We only do this if we are not panicking, to avoid a double panic.
-        if self.deflate_state.is_some() && !thread::panicking() {
+        if self.deflate_state.inner.is_some() && !thread::panicking() {
             let _ = self.output_all();
         }
     }
@@ -166,8 +166,7 @@ pub struct ZlibEncoder<W: Write> {
     // We use a box here to avoid putting the buffers on the stack
     // It's done here rather than in the structs themselves for now to
     // keep the data close in memory.
-    // Option is used to allow us to implement `Drop` and `finish()` at the same time.
-    deflate_state: Option<Box<DeflateState<W>>>,
+    deflate_state: Box<DeflateState<W>>,
     checksum: Adler32Checksum,
     header_written: bool,
 }
@@ -176,7 +175,7 @@ impl<W: Write> ZlibEncoder<W> {
     /// Create a new `ZlibEncoder` using the provided compression options.
     pub fn new<O: Into<CompressionOptions>>(writer: W, options: O) -> ZlibEncoder<W> {
         ZlibEncoder {
-            deflate_state: Some(Box::new(DeflateState::new(options.into(), writer))),
+            deflate_state: Box::new(DeflateState::new(options.into(), writer)),
             checksum: Adler32Checksum::new(),
             header_written: false,
         }
@@ -186,7 +185,7 @@ impl<W: Write> ZlibEncoder<W> {
     /// but without resetting anything.
     fn output_all(&mut self) -> io::Result<()> {
         self.check_write_header()?;
-        compress_until_done(&[], self.deflate_state.as_mut().unwrap(), Flush::Finish)?;
+        compress_until_done(&[], &mut self.deflate_state, Flush::Finish)?;
         self.write_trailer()
     }
 
@@ -194,10 +193,9 @@ impl<W: Write> ZlibEncoder<W> {
     /// and return the contained writer if writing succeeds.
     pub fn finish(mut self) -> io::Result<W> {
         self.output_all()?;
-        // We have to move the inner state out of the encoder, and replace it with `None`
+        // We have to move the inner writer out of the encoder, and replace it with `None`
         // to let the `DeflateEncoder` drop safely.
-        let inner = self.deflate_state.take();
-        Ok(inner.unwrap().inner)
+        Ok(self.deflate_state.inner.take().expect(ERR_STR))
     }
 
     /// Resets the encoder (except the compression options), replacing the current writer
@@ -206,13 +204,13 @@ impl<W: Write> ZlibEncoder<W> {
         self.output_all()?;
         self.header_written = false;
         self.checksum = Adler32Checksum::new();
-        self.deflate_state.as_mut().unwrap().reset(writer)
+        self.deflate_state.reset(writer)
     }
 
     /// Check if a zlib header should be written.
     fn check_write_header(&mut self) -> io::Result<()> {
         if !self.header_written {
-            write_zlib_header(&mut self.deflate_state.as_mut().unwrap().output_buf(),
+            write_zlib_header(self.deflate_state.output_buf(),
                               CompressionLevel::Default)?;
             self.header_written = true;
         }
@@ -224,9 +222,9 @@ impl<W: Write> ZlibEncoder<W> {
         let hash = self.checksum.current_hash();
 
         self.deflate_state
-            .as_mut()
-            .unwrap()
             .inner
+            .as_mut()
+            .expect(ERR_STR)
             .write_u32::<BigEndian>(hash)
     }
 
@@ -239,9 +237,9 @@ impl<W: Write> ZlibEncoder<W> {
 impl<W: Write> io::Write for ZlibEncoder<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.check_write_header()?;
-        let flush_mode = self.deflate_state.as_ref().unwrap().flush_mode;
+        let flush_mode = self.deflate_state.flush_mode;
         let res =
-            compress_data_dynamic_n(buf, &mut self.deflate_state.as_mut().unwrap(), flush_mode);
+            compress_data_dynamic_n(buf, &mut self.deflate_state, flush_mode);
         match res {
             Ok(0) => self.checksum.update_from_slice(buf),
             Ok(n) => self.checksum.update_from_slice(&buf[0..n]),
@@ -256,7 +254,7 @@ impl<W: Write> io::Write for ZlibEncoder<W> {
     /// This essentially finishes the current block, and sends an additional empty stored block to
     /// the writer.
     fn flush(&mut self) -> io::Result<()> {
-        compress_until_done(&[], self.deflate_state.as_mut().unwrap(), Flush::Sync)
+        compress_until_done(&[], &mut self.deflate_state, Flush::Sync)
     }
 }
 
@@ -267,7 +265,7 @@ impl<W: Write> Drop for ZlibEncoder<W> {
     /// for writers where writing might fail is not recommended, for that call
     /// [`finish()`](#method.finish) instead.
     fn drop(&mut self) {
-        if self.deflate_state.is_some() && !thread::panicking() {
+        if self.deflate_state.inner.is_some() && !thread::panicking() {
             let _ = self.output_all();
         }
     }
@@ -335,8 +333,6 @@ pub mod gzip {
             if !self.header.is_empty() {
                 self.inner
                     .deflate_state
-                    .as_mut()
-                    .unwrap()
                     .output_buf()
                     .extend_from_slice(&self.header);
                 self.header.clear();
@@ -355,10 +351,9 @@ pub mod gzip {
         /// and return the contained writer if writing succeeds.
         pub fn finish(mut self) -> io::Result<W> {
             self.output_all()?;
-            // We have to move the inner state out of the encoder, and replace it with `None`
+            // We have to move the inner writer out of the encoder, and replace it with `None`
             // to let the `DeflateEncoder` drop safely.
-            let inner = self.inner.deflate_state.take();
-            Ok(inner.unwrap().inner)
+            Ok(self.inner.deflate_state.inner.take().expect(ERR_STR))
         }
 
         fn reset_no_header(&mut self, writer: W) -> io::Result<W> {
@@ -366,8 +361,6 @@ pub mod gzip {
             self.checksum = Crc::new();
             self.inner
                 .deflate_state
-                .as_mut()
-                .unwrap()
                 .reset(writer)
         }
 
@@ -401,9 +394,9 @@ pub mod gzip {
             temp.write_u32::<LittleEndian>(amount).unwrap();
             self.inner
                 .deflate_state
-                .as_mut()
-                .unwrap()
                 .inner
+                .as_mut()
+                .expect(ERR_STR)
                 .write_all(temp.into_inner())
         }
 
@@ -442,7 +435,7 @@ pub mod gzip {
         /// for writers where writing might fail is not recommended, for that call
         /// [`finish()`](#method.finish) instead.
         fn drop(&mut self) {
-            if self.inner.deflate_state.is_some() && !thread::panicking() {
+            if self.inner.deflate_state.inner.is_some() && !thread::panicking() {
                 let _ = self.output_all();
             }
         }
@@ -546,7 +539,7 @@ mod test {
             compressor.write_all(&data[..split]).unwrap();
             compressor.flush().unwrap();
             {
-                let buf = &mut compressor.deflate_state.as_mut().unwrap().inner;
+                let buf = &mut compressor.deflate_state.inner.as_mut().unwrap();
                 let buf_len = buf.len();
                 // Check for the sync marker. (excluding the header as it might not line
                 // up with the byte boundary.)
@@ -587,7 +580,7 @@ mod test {
             compressor.flush().unwrap();
             compressor.flush().unwrap();
             {
-                let buf = &mut compressor.deflate_state.as_mut().unwrap().inner;
+                let buf = &mut compressor.deflate_state.inner.as_mut().unwrap();
                 let buf_len = buf.len();
                 // Check for the sync marker. (excluding the header as it might not line
                 // up with the byte boundary.)

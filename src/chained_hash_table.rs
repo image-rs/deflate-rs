@@ -16,10 +16,17 @@ fn update_hash_conf(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> 
     ((current_hash << shift) ^ (to_insert as u16)) & mask
 }
 
+#[inline]
 fn init_array(arr: &mut [u16; WINDOW_SIZE]) {
     for (n, mut b) in arr.iter_mut().enumerate() {
         *b = n as u16;
     }
+}
+
+fn new_array() -> Box<[u16; WINDOW_SIZE]> {
+    let mut arr = Box::new([0; WINDOW_SIZE]);
+    init_array(&mut arr);
+    arr
 }
 
 pub struct ChainedHashTable {
@@ -36,17 +43,15 @@ pub struct ChainedHashTable {
 
 impl ChainedHashTable {
     pub fn new() -> ChainedHashTable {
-        let mut c = ChainedHashTable {
+        ChainedHashTable {
             current_hash: 0,
-            head: Box::new([0; WINDOW_SIZE]),
-            prev: Box::new([0; WINDOW_SIZE]),
+            head: new_array(),
+            prev: new_array(),
             count: 0,
-        };
-        init_array(&mut c.head);
-        init_array(&mut c.prev);
-        c
+        }
     }
 
+    #[cfg(test)]
     pub fn from_starting_values(v1: u8, v2: u8) -> ChainedHashTable {
         let mut t = ChainedHashTable::new();
         t.current_hash = update_hash(t.current_hash, v1);
@@ -56,7 +61,12 @@ impl ChainedHashTable {
 
     /// Resets the hash value and hash chains
     pub fn reset(&mut self) {
-        *self = ChainedHashTable::from_starting_values(55, 77);
+        self.current_hash = 0;
+        init_array(&mut self.head);
+        init_array(&mut self.prev);
+        if cfg!(debug_assertions) {
+            self.count = 0;
+        }
     }
 
     pub fn add_initial_hash_values(&mut self, v1: u8, v2: u8) {

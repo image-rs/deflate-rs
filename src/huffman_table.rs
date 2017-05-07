@@ -299,7 +299,8 @@ pub fn create_codes_in_place(code_table: &mut [HuffmanCode],
     let (max_length, max_length_pos, lengths) = build_length_count_table(length_table)?;
 
     let mut code = 0u16;
-    let mut next_code = vec![0u16];
+    let mut next_code = Vec::with_capacity(length_table.len());
+    next_code.push(code);
 
     for bits in 1..max_length + 1 {
         code = (code + lengths[bits - 1]) << 1;

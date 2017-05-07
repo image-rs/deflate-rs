@@ -23,7 +23,9 @@ pub struct DeflateState<W: Write> {
     /// Total number of bytes consumed/written to the input buffer.
     pub bytes_written: u64,
     /// Wrapped writer.
-    pub inner: W,
+    /// Option is used to allow us to implement `Drop` and `finish()` at the same time for the
+    /// writer structs.
+    pub inner: Option<W>,
     /// The position in the output buffer where data should be flushed from, to keep track of
     /// what data has been output in case not all data is output when writing to the wrapped
     /// writer.
@@ -45,7 +47,7 @@ impl<W: Write> DeflateState<W> {
             lz77_writer: DynamicWriter::new(),
             compression_options: compression_options,
             bytes_written: 0,
-            inner: writer,
+            inner: Some(writer),
             output_buf_pos: 0,
             flush_mode: Flush::None,
             bytes_written_control: 0,
@@ -65,7 +67,7 @@ impl<W: Write> DeflateState<W> {
     /// If flushing fails, the rest of the writer is not cleared.
     pub fn reset(&mut self, writer: W) -> io::Result<W> {
         self.encoder_state.flush()?;
-        self.inner.write_all(self.encoder_state.inner_vec())?;
+        self.inner.as_mut().expect("Missing writer!").write_all(self.encoder_state.inner_vec())?;
         self.encoder_state.inner_vec().clear();
         self.input_buffer = InputBuffer::empty();
         self.lz77_writer.clear();
@@ -76,6 +78,6 @@ impl<W: Write> DeflateState<W> {
         if cfg!(debug_assertions) {
             self.bytes_written_control = 0;
         }
-        Ok(mem::replace(&mut self.inner, writer))
+        mem::replace(&mut self.inner, Some(writer)).ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Missing writer"))
     }
 }
