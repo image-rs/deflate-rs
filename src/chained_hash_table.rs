@@ -17,25 +17,27 @@ fn update_hash_conf(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> 
 }
 
 #[inline]
-fn init_array(arr: &mut [u16; WINDOW_SIZE]) {
+fn init_array(arr: &mut [u16]) {
     for (n, mut b) in arr.iter_mut().enumerate() {
         *b = n as u16;
     }
 }
 
-fn new_array() -> Box<[u16; WINDOW_SIZE]> {
-    let mut arr = Box::new([0; WINDOW_SIZE]);
+fn new_array() -> Box<[u16]> {
+    // Create the vector with the elements initialised as using collect or extend ends
+    // up being significantly slower for some reason.
+    let mut arr = vec![0;WINDOW_SIZE];
     init_array(&mut arr);
-    arr
+    arr.into_boxed_slice()
 }
 
 pub struct ChainedHashTable {
     // Current running hash value of the last 3 bytes
     current_hash: u16,
     // Starts of hash chains (in prev)
-    head: Box<[u16; WINDOW_SIZE]>,
+    head: Box<[u16]>,
     // link to previous occurence of this hash value
-    prev: Box<[u16; WINDOW_SIZE]>,
+    prev: Box<[u16]>,
     // Used for testing
     // Didn't find an easy way for it not to exist when debug_assertions are disabled.
     pub count: u64,

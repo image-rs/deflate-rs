@@ -9,7 +9,7 @@ const MAX_DISTANCE: usize = huffman_table::MAX_DISTANCE as usize;
 pub const BUFFER_SIZE: usize = (WINDOW_SIZE * 2) + MAX_MATCH;
 
 pub struct InputBuffer {
-    buffer: Box<[u8; BUFFER_SIZE]>,
+    buffer: Box<[u8]>,
     current_end: usize,
 }
 
@@ -23,7 +23,7 @@ impl InputBuffer {
 
     pub fn empty() -> InputBuffer {
         InputBuffer {
-            buffer: Box::new([0; BUFFER_SIZE]),
+            buffer: vec![0; BUFFER_SIZE].into_boxed_slice(),
             current_end: 0,
         }
     }

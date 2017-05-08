@@ -76,16 +76,13 @@ pub fn compress_until_done<W: Write>(mut input: &[u8],
 /// ```
 /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 pub struct DeflateEncoder<W: Write> {
-    // We use a box here to avoid putting the buffers on the stack
-    // It's done here rather than in the structs themselves for now to
-    // keep the data close in memory.
-    deflate_state: Box<DeflateState<W>>,
+    deflate_state: DeflateState<W>,
 }
 
 impl<W: Write> DeflateEncoder<W> {
     /// Creates a new encoder using the provided compression options.
     pub fn new<O: Into<CompressionOptions>>(writer: W, options: O) -> DeflateEncoder<W> {
-        DeflateEncoder { deflate_state: Box::new(DeflateState::new(options.into(), writer)) }
+        DeflateEncoder { deflate_state: DeflateState::new(options.into(), writer) }
     }
 
     /// Encode all pending data to the contained writer, consume this `DeflateEncoder`,
@@ -163,10 +160,7 @@ impl<W: Write> Drop for DeflateEncoder<W> {
 /// ```
 /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 pub struct ZlibEncoder<W: Write> {
-    // We use a box here to avoid putting the buffers on the stack
-    // It's done here rather than in the structs themselves for now to
-    // keep the data close in memory.
-    deflate_state: Box<DeflateState<W>>,
+    deflate_state: DeflateState<W>,
     checksum: Adler32Checksum,
     header_written: bool,
 }
@@ -175,7 +169,7 @@ impl<W: Write> ZlibEncoder<W> {
     /// Create a new `ZlibEncoder` using the provided compression options.
     pub fn new<O: Into<CompressionOptions>>(writer: W, options: O) -> ZlibEncoder<W> {
         ZlibEncoder {
-            deflate_state: Box::new(DeflateState::new(options.into(), writer)),
+            deflate_state: DeflateState::new(options.into(), writer),
             checksum: Adler32Checksum::new(),
             header_written: false,
         }
