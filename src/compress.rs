@@ -217,7 +217,6 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
             BlockType::Stored => {
                 // If compression fails, output a stored block instead.
 
-
                 let start_pos = position.saturating_sub(current_block_input_bytes as usize);
 
                 assert!(position >= current_block_input_bytes as usize,
@@ -230,16 +229,12 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
             }
         };
 
-        // If we are not done (or we are done but syncing), prepare for the next
-        // block.
-        if !(flush == Flush::Finish && status == LZ77Status::Finished) {
+        // Clear the current lz77 data in the writer for the next call.
+        deflate_state.lz77_writer.clear();
+        // We are done with the block, so we reset the number of bytes taken
+        // for the next one.
+        deflate_state.lz77_state.reset_input_bytes();
 
-            // Clear the current lz77 data in the writer for the next call.
-            deflate_state.lz77_writer.clear();
-            // We are done with the block, so we reset the number of bytes taken
-            // for the next one.
-            deflate_state.lz77_state.reset_input_bytes();
-        }
         // We are done for now.
         if status == LZ77Status::Finished {
             // This flush mode means that there should be an empty stored block at the end.

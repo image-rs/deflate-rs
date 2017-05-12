@@ -10,7 +10,8 @@ use deflate_state::DeflateState;
 use compression_options::CompressionOptions;
 use zlib::{write_zlib_header, CompressionLevel};
 
-const ERR_STR: &'static str = "Error! The wrapped writer is missing. This is a bug, please file an issue.";
+const ERR_STR: &'static str = "Error! The wrapped writer is missing.\
+                               This is a bug, please file an issue.";
 
 /// Keep compressing until all the input has been compressed and output or the writer returns `Err`.
 pub fn compress_until_done<W: Write>(mut input: &[u8],
@@ -204,8 +205,7 @@ impl<W: Write> ZlibEncoder<W> {
     /// Check if a zlib header should be written.
     fn check_write_header(&mut self) -> io::Result<()> {
         if !self.header_written {
-            write_zlib_header(self.deflate_state.output_buf(),
-                              CompressionLevel::Default)?;
+            write_zlib_header(self.deflate_state.output_buf(), CompressionLevel::Default)?;
             self.header_written = true;
         }
         Ok(())
@@ -232,8 +232,7 @@ impl<W: Write> io::Write for ZlibEncoder<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.check_write_header()?;
         let flush_mode = self.deflate_state.flush_mode;
-        let res =
-            compress_data_dynamic_n(buf, &mut self.deflate_state, flush_mode);
+        let res = compress_data_dynamic_n(buf, &mut self.deflate_state, flush_mode);
         match res {
             Ok(0) => self.checksum.update_from_slice(buf),
             Ok(n) => self.checksum.update_from_slice(&buf[0..n]),
@@ -353,9 +352,7 @@ pub mod gzip {
         fn reset_no_header(&mut self, writer: W) -> io::Result<W> {
             self.output_all()?;
             self.checksum = Crc::new();
-            self.inner
-                .deflate_state
-                .reset(writer)
+            self.inner.deflate_state.reset(writer)
         }
 
         /// Resets the encoder (except the compression options), replacing the current writer

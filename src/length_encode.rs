@@ -153,11 +153,7 @@ mod in_place {
             .iter()
             .fold(0f64,
                   |acc, &n| acc + if n != 0 { 2f64.powi(-(n as i32)) } else { 0f64 });
-        if v > 1.0 {
-            false
-        } else {
-            true
-        }
+        if v > 1.0 { false } else { true }
     }
 
     #[derive(Eq, Ord, PartialEq, PartialOrd, Debug, Clone, Copy, Default)]
@@ -335,9 +331,7 @@ mod in_place {
 
         // Output the actual lengths
         let mut leaf_it = leaves.iter().rev();
-        for (&n_codes, i) in num_codes[1..max_len + 1]
-                .iter()
-                .zip(1..(max_len as u8) + 1) {
+        for (&n_codes, i) in num_codes[1..max_len + 1].iter().zip(1..(max_len as u8) + 1) {
             for _ in 0..n_codes {
                 ret[leaf_it.next().unwrap().symbol as usize] = i;
             }
@@ -443,14 +437,10 @@ mod test {
         assert_eq!(enc, vec![lit(1), lit(1), lit(1), lit(2)]);
         let enc = encode_lengths([0, 0, 3].iter().cloned()).unwrap().0;
         assert_eq!(enc, vec![lit(0), lit(0), lit(3)]);
-        let enc = encode_lengths([0, 0, 0, 5, 2].iter().cloned())
-            .unwrap()
-            .0;
+        let enc = encode_lengths([0, 0, 0, 5, 2].iter().cloned()).unwrap().0;
         assert_eq!(enc, vec![zero(3), lit(5), lit(2)]);
 
-        let enc = encode_lengths([0, 0, 0, 5, 0].iter().cloned())
-            .unwrap()
-            .0;
+        let enc = encode_lengths([0, 0, 0, 5, 0].iter().cloned()).unwrap().0;
         assert!(*enc.last().unwrap() != lit(5));
 
         let enc = encode_lengths([0, 4, 4, 4, 4, 0].iter().cloned())

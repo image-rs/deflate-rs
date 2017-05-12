@@ -79,9 +79,7 @@ fn test_file_zlib_flate2_fast(b: &mut Bencher) {
 }
 
 #[derive(Copy, Clone)]
-struct Dummy {
-
-}
+struct Dummy {}
 
 impl Write for Dummy {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -95,10 +93,10 @@ impl Write for Dummy {
 
 #[bench]
 fn writer_create(b: &mut Bencher) {
-    b.iter(|| DeflateEncoder::new(Dummy{}, CompressionOptions::fast()));
+    b.iter(|| DeflateEncoder::new(Dummy {}, CompressionOptions::fast()));
 }
 
 #[bench]
 fn writer_create_flate2(b: &mut Bencher) {
-    b.iter(|| write::DeflateEncoder::new(Dummy{}, Compression::Fast));
+    b.iter(|| write::DeflateEncoder::new(Dummy {}, Compression::Fast));
 }

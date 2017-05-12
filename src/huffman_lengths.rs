@@ -36,11 +36,7 @@ const BLOCK_MARKER_LENGTH: u8 = 3;
 
 /// Creates a new slice from the input slice that stops at the final non-zero value
 pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T], min_length: usize) -> &[T] {
-    let num_zeroes = input
-        .iter()
-        .rev()
-        .take_while(|&a| *a == T::from(0))
-        .count();
+    let num_zeroes = input.iter().rev().take_while(|&a| *a == T::from(0)).count();
     &input[0..cmp::max(input.len() - num_zeroes, min_length)]
 }
 

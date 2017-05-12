@@ -337,8 +337,8 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                 // The previous match was better so we add it.
                 // Casting note: length and distance is already bounded by the longest match
                 // function. Usize is just used for convenience.
-                let b_status = writer.write_length_distance(prev_length as u16,
-                                                            prev_distance as u16);
+                let b_status = writer
+                    .write_length_distance(prev_length as u16, prev_distance as u16);
 
                 // We add the bytes to the hash table and checksum.
                 // Since we've already added two of them, we need to add two less than
@@ -392,8 +392,8 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
 
             // If there is a match at this point, it will not have been added, so we need to add it.
             if prev_length >= MIN_MATCH as u16 && prev_distance != 0 {
-                let b_status = writer.write_length_distance(prev_length as u16,
-                                                            prev_distance as u16);
+                let b_status = writer
+                    .write_length_distance(prev_length as u16, prev_distance as u16);
 
                 state.current_length = 0;
                 state.current_distance = 0;
@@ -741,13 +741,6 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 // We only need to remember 2^15 bytes back (the maximum distance allowed by the
                 // deflate spec).
                 state.hash_table.slide(window_size);
-                // Also slide the start position, setting it to None if it should happen to be
-                // outside the buffer. (Which shouldn't happen when the lz77 buffer is limited to a
-                // bit less than 32768.)
-/*                state.set_block_start(state
-                                          .current_block_start()
-                                          .unwrap_or(0)
-                                          .checked_sub(window_size));*/
 
                 // Also slide the buffer, discarding data we no longer need and adding new data.
                 remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
@@ -1189,6 +1182,10 @@ mod test {
         assert!(dec.len() > 0);
         assert!(dec[..] == data[..dec.len()]);
          */
+
+
+
+
 
 
 
