@@ -594,11 +594,12 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
             // data.
             if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
 
-                if buffer.get_buffer().len() >= 2 && add_initial {
+                if buffer.get_buffer().len() >= 2 && add_initial && state.current_block_input_bytes == 0 {
                     let b = buffer.get_buffer();
                     // Warm up the hash with the two first values, so we can find  matches at
                     // index 0.
                     state.hash_table.add_initial_hash_values(b[0], b[1]);
+                    add_initial = false;
                 }
 
                 let first_chunk_end = cmp::min(window_size, buffer.current_end());
@@ -696,12 +697,17 @@ pub fn lz77_compress_block<W: OutputWriter>(data: &[u8],
                 // otherwise we have to skip to the point in the buffer where we stopped in the
                 // next call.
                 state.overlap = if overlap > 0 {
+                    // If we are at the end of the window, make sure we slide the buffer and the
+                    // hash table.
+                    state.hash_table.slide(window_size);
+                    remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
                     overlap
                 } else {
                     written - window_size
                 };
 
                 current_position = written - state.pending_byte_as_num();
+
 
                 // Status is already EndBlock at this point.
                 // status = LZ77Status::EndBlock;
@@ -1156,6 +1162,8 @@ mod test {
 
     /// Test buffer fill when buffer is full at a match.
     fn buffer_test_match(matching_type: MatchingType) {
+        // TODO: Also test this for the second block to make sure
+        // buffer is slid.
         let mut state = TestStruct::with_config(1, 0, matching_type);
         for _ in 0..MAX_BUFFER_LENGTH - 4 {
             assert!(state.writer.write_literal(0) == BufferStatus::NotFull);
