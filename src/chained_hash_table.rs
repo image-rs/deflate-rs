@@ -45,10 +45,11 @@ pub struct ChainedHashTable {
 
 impl ChainedHashTable {
     pub fn new() -> ChainedHashTable {
+        let chain = new_array();
         ChainedHashTable {
             current_hash: 0,
-            head: new_array(),
-            prev: new_array(),
+            head: chain.clone(),
+            prev: chain,
             count: 0,
         }
     }
