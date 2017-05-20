@@ -15,7 +15,7 @@ pub const DEFAULT_LAZY_IF_LESS_THAN: u16 = 32;
 /// This is a simplified interface to specify a compression level.
 ///
 /// [See also `CompressionOptions`](./struct.CompressionOptions.html)
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Compression {
     /// Fast minimal compression (`CompressionOptions::fast()`).
     Fast,
@@ -29,8 +29,14 @@ pub enum Compression {
     Best,
 }
 
+impl Default for Compression {
+    fn default() -> Compression {
+        Compression::Default
+    }
+}
+
 /// Enum allowing some special options (not implemented yet)!
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum SpecialOptions {
     /// Compress normally.
     Normal,
@@ -40,19 +46,18 @@ pub enum SpecialOptions {
     _ForceStored,
 }
 
+impl Default for SpecialOptions {
+    fn default() -> SpecialOptions {
+        SpecialOptions::Normal
+    }
+}
+
 pub const DEFAULT_OPTIONS: CompressionOptions = CompressionOptions {
     max_hash_checks: DEFAULT_MAX_HASH_CHECKS,
     lazy_if_less_than: DEFAULT_LAZY_IF_LESS_THAN,
     matching_type: MatchingType::Lazy,
     special: SpecialOptions::Normal,
 };
-
-// const RLE_ONLY: CompressionOptions {
-// max_hash_checks: 1,
-// window_size: 1,
-// special: SpecialOptions::Normal,
-// }
-//
 
 /// This won't do any checks in the hash chain, and thus only compress using huffman encoding.
 #[cfg(test)]
@@ -66,7 +71,7 @@ pub const HUFFMAN_ONLY: CompressionOptions = CompressionOptions {
 /// A struct describing the options for a compressor or compression function.
 ///
 /// These values are not stable and still subject to change!
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct CompressionOptions {
     /// The maximum number of checks to make in the hash table for matches.
     ///
@@ -102,6 +107,8 @@ pub struct CompressionOptions {
     pub special: SpecialOptions,
 }
 
+// Some standard profiles for the compression options.
+// Ord should be implemented at some point, but won't yet until the struct is stabilised.
 impl CompressionOptions {
     /// Returns compression settings rouhgly corresponding to the `HIGH(9)` setting in miniz.
     pub fn high() -> CompressionOptions {

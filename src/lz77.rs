@@ -4,6 +4,7 @@ use std::cmp;
 use std::ops::Range;
 use std::iter::{Iterator, Enumerate};
 use std::slice::Iter;
+use std::fmt;
 
 use input_buffer::InputBuffer;
 use matching::longest_match;
@@ -22,14 +23,27 @@ const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 
 /// An enum describing whether we use lazy or greedy matching.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum MatchingType {
-    /// Use lazy matching: after finding a match, the next input byte is checked, to see
-    /// if there is a better match starting at that byte.
-    Lazy,
     /// Use greedy matching: the matching algorithm simply uses a match right away
     /// if found.
     Greedy,
+    /// Use lazy matching: after finding a match, the next input byte is checked, to see
+    /// if there is a better match starting at that byte.
+    Lazy,
+}
+
+impl fmt::Display for MatchingType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            MatchingType::Greedy => {
+                write!(f, "Greedy matching")
+            },
+            MatchingType::Lazy => {
+                write!(f, "Lazy matching")
+            },
+        }
+    }
 }
 
 /// A struct that contains the hash table, and keeps track of where we are in the input data
