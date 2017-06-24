@@ -1,11 +1,12 @@
 use std::io::Write;
+use std::{io, mem, cmp};
+
 use lz77::LZ77State;
 use output_writer::DynamicWriter;
 use encoder_state::EncoderState;
 use input_buffer::InputBuffer;
-use compression_options::CompressionOptions;
+use compression_options::{CompressionOptions, MAX_HASH_CHECKS};
 use huffman_table::HuffmanTable;
-use std::{io, mem};
 use compress::Flush;
 pub use huffman_table::MAX_MATCH;
 
@@ -41,7 +42,8 @@ impl<W: Write> DeflateState<W> {
         DeflateState {
             input_buffer: InputBuffer::empty(),
             lz77_state: LZ77State::new(compression_options.max_hash_checks,
-                                       compression_options.lazy_if_less_than,
+                                       cmp::min(compression_options.lazy_if_less_than,
+                                                MAX_HASH_CHECKS),
                                        compression_options.matching_type),
             encoder_state: EncoderState::new(HuffmanTable::empty(), Vec::with_capacity(1024 * 32)),
             lz77_writer: DynamicWriter::new(),

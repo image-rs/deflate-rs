@@ -9,7 +9,7 @@ const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 /// Get the length of the checked match
 /// The function returns number of bytes at and including `current_pos` that are the same as the
 /// ones at `pos_to_check`
-fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usize {
+pub fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usize {
     // Unsafe version for comparison
     // This doesn't actually make it much faster
 

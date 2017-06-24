@@ -71,6 +71,7 @@ mod matching;
 mod input_buffer;
 mod deflate_state;
 mod compress;
+mod rle;
 mod writer;
 #[cfg(test)]
 mod test_utils;
@@ -332,6 +333,14 @@ mod test {
     }
 
     #[test]
+    fn file_rle() {
+        let input = get_test_data();
+        let compressed = deflate_bytes_conf(&input, CompressionOptions::rle());
+        let result = decompress_to_end(&compressed);
+        assert!(input == result);
+    }
+
+    #[test]
     fn file_zlib() {
         let test_data = get_test_data();
 
@@ -431,7 +440,8 @@ mod test {
     /// Check that the frequency values don't overflow.
     #[test]
     fn frequency_overflow() {
-        let _ = deflate_bytes_conf(&vec![5; 100000], compression_options::HUFFMAN_ONLY);
+        let _ = deflate_bytes_conf(&vec![5; 100000],
+                                   compression_options::CompressionOptions::default());
     }
 
     /// Compress with an empty slice.

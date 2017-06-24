@@ -70,6 +70,16 @@ impl LZValue {
 }
 
 #[cfg(test)]
+pub fn lit(l: u8) -> LZValue {
+    LZValue::literal(l)
+}
+
+#[cfg(test)]
+pub fn ld(l: u16, d: u16) -> LZValue {
+    LZValue::length_distance(l, d)
+}
+
+#[cfg(test)]
 mod test {
     use super::*;
     use huffman_table::{MIN_MATCH, MIN_DISTANCE, MAX_MATCH, MAX_DISTANCE};

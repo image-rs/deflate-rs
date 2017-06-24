@@ -1,5 +1,5 @@
 //! This module contains functionality for doing lz77 compression of data.
-
+#![macro_use]
 use std::cmp;
 use std::ops::Range;
 use std::iter::{Iterator, Enumerate};
@@ -18,9 +18,12 @@ use output_writer::{OutputWriter, BufferStatus};
 #[cfg(test)]
 use output_writer::FixedWriter;
 use compress::Flush;
+use rle::process_chunk_greedy_rle;
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
+
+const NO_RLE: u16 = 43212;
 
 /// An enum describing whether we use lazy or greedy matching.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -30,6 +33,9 @@ pub enum MatchingType {
     Greedy,
     /// Use lazy matching: after finding a match, the next input byte is checked, to see
     /// if there is a better match starting at that byte.
+    ///
+    /// As a special case, if max_hash_checks is set to 0, compression using only run-length
+    /// (i.e maximum match distance of 1) is performed instead.
     Lazy,
 }
 
@@ -142,7 +148,7 @@ const DEFAULT_WINDOW_SIZE: usize = 32768;
 
 #[derive(Debug)]
 /// Status after calling `process_chunk`.
-enum ProcessStatus {
+pub enum ProcessStatus {
     /// All the input data was processed.
     Ok,
     /// The output buffer was full.
@@ -169,7 +175,7 @@ pub struct ChunkState {
 }
 
 impl ChunkState {
-    fn new() -> ChunkState {
+    pub fn new() -> ChunkState {
         ChunkState {
             current_length: 0,
             current_distance: 0,
@@ -180,7 +186,7 @@ impl ChunkState {
     }
 }
 
-fn buffer_full(position: usize) -> ProcessStatus {
+pub fn buffer_full(position: usize) -> ProcessStatus {
     ProcessStatus::BufferFull(position)
 }
 
@@ -193,18 +199,34 @@ fn process_chunk<W: OutputWriter>(data: &[u8],
                                   lazy_if_less_than: usize,
                                   matching_type: MatchingType)
                                   -> (usize, ProcessStatus) {
+    let avoid_rle = if cfg!(test) {
+        // Avoid RLE if lazy_if_less than is a specific value.
+        // This is used in some tests, ideally we should probably do this in a less clunky way,
+        // but we use a value here that is higher than the maximum sensible one anyhow, and will
+        // be truncated by deflate_state for calls from outside the library.
+        lazy_if_less_than == NO_RLE as usize
+    } else {
+        false
+    };
     match matching_type {
         MatchingType::Greedy => {
             process_chunk_greedy(data, iterated_data, hash_table, writer, max_hash_checks)
         }
         MatchingType::Lazy => {
-            process_chunk_lazy(data,
+            if max_hash_checks > 0 || avoid_rle {
+                process_chunk_lazy(data,
                                iterated_data,
                                &mut match_state,
                                hash_table,
                                writer,
                                max_hash_checks,
                                lazy_if_less_than)
+            } else {
+                // Use the RLE method if max_hash_checks is set to 0.
+                process_chunk_greedy_rle(data,
+                                         iterated_data,
+                                         writer)
+            }
         }
     }
 }
@@ -250,6 +272,24 @@ fn match_too_far(match_len: usize, match_dist: usize) -> bool {
     match_len == MIN_MATCH && match_dist > TOO_FAR
 }
 
+///Create the iterators used when processing through a chunk of data.
+fn create_iterators<'a>(data: &'a[u8], iterated_data: &Range<usize>) -> (usize,usize,Enumerate<Iter<'a,u8>>,Iter<'a,u8>) {
+    let end = cmp::min(data.len(), iterated_data.end);
+    let start = iterated_data.start;
+    let current_chunk = &data[start..end];
+
+    let insert_it = current_chunk.iter().enumerate();
+    let hash_it = {
+        let hash_start = if data.len() - start > 2 {
+            start + 2
+        } else {
+            data.len()
+        };
+        (&data[hash_start..]).iter()
+    };
+    (start,end,insert_it,hash_it)
+}
+
 fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                                        iterated_data: &Range<usize>,
                                        state: &mut ChunkState,
@@ -259,19 +299,7 @@ fn process_chunk_lazy<W: OutputWriter>(data: &[u8],
                                        lazy_if_less_than: usize)
                                        -> (usize, ProcessStatus) {
 
-    let end = cmp::min(data.len(), iterated_data.end);
-    let start = iterated_data.start;
-    let current_chunk = &data[start..end];
-
-    let mut insert_it = current_chunk.iter().enumerate();
-    let mut hash_it = {
-        let hash_start = if data.len() - start > 2 {
-            start + 2
-        } else {
-            data.len()
-        };
-        (&data[hash_start..]).iter()
-    };
+    let (start,end,mut insert_it,mut hash_it) = create_iterators(data,iterated_data);
 
     const NO_LENGTH: u16 = 0;
 
@@ -451,19 +479,8 @@ fn process_chunk_greedy<W: OutputWriter>(data: &[u8],
                                          writer: &mut W,
                                          max_hash_checks: u16)
                                          -> (usize, ProcessStatus) {
-    let end = cmp::min(data.len(), iterated_data.end);
-    let start = iterated_data.start;
-    let current_chunk = &data[start..end];
 
-    let mut insert_it = current_chunk.iter().enumerate();
-    let mut hash_it = {
-        let hash_start = if data.len() - start > 2 {
-            start + 2
-        } else {
-            data.len()
-        };
-        (&data[hash_start..]).iter()
-    };
+    let (start,end,mut insert_it,mut hash_it) = create_iterators(data,iterated_data);
 
     const NO_LENGTH: usize = 0;
 
@@ -906,14 +923,11 @@ pub fn lz77_compress_conf(data: &[u8],
 mod test {
     use super::*;
 
-    use lzvalue::{LZValue, LZType};
+    use lzvalue::{LZValue, LZType, lit, ld};
     use chained_hash_table::WINDOW_SIZE;
     use compression_options::DEFAULT_LAZY_IF_LESS_THAN;
     use test_utils::get_test_data;
     use output_writer::MAX_BUFFER_LENGTH;
-
-
-
 
     /// Helper function to print the output from the lz77 compression function
     fn print_output(input: &[LZValue]) {
@@ -1124,7 +1138,7 @@ mod test {
 
     /// Test buffer fill when a byte is added due to no match being found.
     fn buffer_test_literals(data: &[u8]) {
-        let mut state = TestStruct::with_config(0, 0, MatchingType::Lazy);
+        let mut state = TestStruct::with_config(0, NO_RLE, MatchingType::Lazy);
         let (bytes_consumed, status, position) = state.compress_block(&data, false);
 
         // There should be enough data for the block to have ended.
@@ -1162,13 +1176,13 @@ mod test {
     fn buffer_test_last_bytes(matching_type: MatchingType, data: &[u8]) {
         const BYTES_USED: usize = MAX_BUFFER_LENGTH;
         assert!(&data[..BYTES_USED] ==
-                &decompress_lz77(&lz77_compress_conf(&data[..BYTES_USED], 0, 0, matching_type)
+                &decompress_lz77(&lz77_compress_conf(&data[..BYTES_USED], 0, NO_RLE, matching_type)
                                       .unwrap())
                      [..]);
         assert!(&data[..BYTES_USED + 1] ==
                 &decompress_lz77(&lz77_compress_conf(&data[..BYTES_USED + 1],
                                                      0,
-                                                     0,
+                                                     NO_RLE,
                                                      matching_type)
                                           .unwrap())
                      [..]);
@@ -1204,23 +1218,6 @@ mod test {
         assert!(dec.len() > 0);
         assert!(dec[..] == data[..dec.len()]);
          */
-
-
-
-
-
-
-
-
-
-    }
-
-    fn lit(l: u8) -> LZValue {
-        LZValue::literal(l)
-    }
-
-    fn ld(l: u16, d: u16) -> LZValue {
-        LZValue::length_distance(l, d)
     }
 
     /// Check that decompressing lz77-data that refers to the back-buffer works.
