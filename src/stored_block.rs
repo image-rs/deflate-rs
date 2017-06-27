@@ -27,7 +27,10 @@ pub fn write_stored_header<W: BitWriter>(writer: &mut W, final_block: bool) -> i
 // Compress one stored block (excluding the header)
 pub fn compress_block_stored<W: Write>(input: &[u8], writer: &mut W) -> io::Result<usize> {
     if input.len() > u16::max_value() as usize {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Stored block too long!"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Stored block too long!",
+        ));
     };
     // The header is written before this function.
     // The next two bytes indicates the length
@@ -84,9 +87,10 @@ mod test {
 
     #[test]
     fn no_compression_string() {
-        let test_data = String::from("This is some text, this is some more text, this is even \
-                                      more text, lots of text here.")
-                .into_bytes();
+        let test_data = String::from(
+            "This is some text, this is some more text, this is even \
+                                      more text, lots of text here.",
+        ).into_bytes();
         let compressed = compress_data_stored(&test_data);
         let result = decompress_to_end(&compressed);
         assert_eq!(test_data, result);

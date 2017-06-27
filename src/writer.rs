@@ -14,10 +14,11 @@ const ERR_STR: &'static str = "Error! The wrapped writer is missing.\
                                This is a bug, please file an issue.";
 
 /// Keep compressing until all the input has been compressed and output or the writer returns `Err`.
-pub fn compress_until_done<W: Write>(mut input: &[u8],
-                                     deflate_state: &mut DeflateState<W>,
-                                     flush_mode: Flush)
-                                     -> io::Result<()> {
+pub fn compress_until_done<W: Write>(
+    mut input: &[u8],
+    deflate_state: &mut DeflateState<W>,
+    flush_mode: Flush,
+) -> io::Result<()> {
     // This should only be used for flushing.
     assert!(flush_mode != Flush::None);
     loop {
@@ -50,8 +51,10 @@ pub fn compress_until_done<W: Write>(mut input: &[u8],
         }
     }
 
-    debug_assert_eq!(deflate_state.bytes_written,
-                     deflate_state.bytes_written_control);
+    debug_assert_eq!(
+        deflate_state.bytes_written,
+        deflate_state.bytes_written_control
+    );
 
     Ok(())
 }
@@ -313,10 +316,11 @@ pub mod gzip {
 
         /// Create a new GzEncoder from the provided `GzBuilder`. This allows customising
         /// the detalis of the header, such as the filename and comment fields.
-        pub fn from_builder<O: Into<CompressionOptions>>(builder: GzBuilder,
-                                                         writer: W,
-                                                         options: O)
-                                                         -> GzEncoder<W> {
+        pub fn from_builder<O: Into<CompressionOptions>>(
+            builder: GzBuilder,
+            writer: W,
+            options: O,
+        ) -> GzEncoder<W> {
             GzEncoder {
                 inner: DeflateEncoder::new(writer, options),
                 checksum: Crc::new(),
@@ -327,10 +331,9 @@ pub mod gzip {
         /// Write header to the output buffer if it hasn't been done yet.
         fn check_write_header(&mut self) {
             if !self.header.is_empty() {
-                self.inner
-                    .deflate_state
-                    .output_buf()
-                    .extend_from_slice(&self.header);
+                self.inner.deflate_state.output_buf().extend_from_slice(
+                    &self.header,
+                );
                 self.header.clear();
             }
         }
@@ -443,8 +446,10 @@ pub mod gzip {
         fn gzip_writer() {
             let data = get_test_data();
             let compressed = {
-                let mut compressor = GzEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                    CompressionOptions::default());
+                let mut compressor = GzEncoder::new(
+                    Vec::with_capacity(data.len() / 3),
+                    CompressionOptions::default(),
+                );
                 compressor.write_all(&data[0..data.len() / 2]).unwrap();
                 compressor.write_all(&data[data.len() / 2..]).unwrap();
                 compressor.finish().unwrap()
@@ -467,8 +472,10 @@ mod test {
     fn deflate_writer() {
         let data = get_test_data();
         let compressed = {
-            let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                     CompressionOptions::high());
+            let mut compressor = DeflateEncoder::new(
+                Vec::with_capacity(data.len() / 3),
+                CompressionOptions::high(),
+            );
             // Write in multiple steps to see if this works as it's supposed to.
             compressor.write_all(&data[0..data.len() / 2]).unwrap();
             compressor.write_all(&data[data.len() / 2..]).unwrap();
@@ -483,8 +490,10 @@ mod test {
     fn zlib_writer() {
         let data = get_test_data();
         let compressed = {
-            let mut compressor = ZlibEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                  CompressionOptions::high());
+            let mut compressor = ZlibEncoder::new(
+                Vec::with_capacity(data.len() / 3),
+                CompressionOptions::high(),
+            );
             compressor.write_all(&data[0..data.len() / 2]).unwrap();
             compressor.write_all(&data[data.len() / 2..]).unwrap();
             compressor.finish().unwrap()
@@ -498,8 +507,10 @@ mod test {
     /// Check if the the result of compressing after resetting is the same as before.
     fn writer_reset() {
         let data = get_test_data();
-        let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                 CompressionOptions::default());
+        let mut compressor = DeflateEncoder::new(
+            Vec::with_capacity(data.len() / 3),
+            CompressionOptions::default(),
+        );
         compressor.write_all(&data).unwrap();
         let res1 = compressor
             .reset(Vec::with_capacity(data.len() / 3))
@@ -512,8 +523,10 @@ mod test {
     #[test]
     fn writer_reset_zlib() {
         let data = get_test_data();
-        let mut compressor = ZlibEncoder::new(Vec::with_capacity(data.len() / 3),
-                                              CompressionOptions::default());
+        let mut compressor = ZlibEncoder::new(
+            Vec::with_capacity(data.len() / 3),
+            CompressionOptions::default(),
+        );
         compressor.write_all(&data).unwrap();
         let res1 = compressor
             .reset(Vec::with_capacity(data.len() / 3))
@@ -527,8 +540,10 @@ mod test {
     fn writer_sync() {
         let data = get_test_data();
         let compressed = {
-            let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                     CompressionOptions::default());
+            let mut compressor = DeflateEncoder::new(
+                Vec::with_capacity(data.len() / 3),
+                CompressionOptions::default(),
+            );
             let split = data.len() / 2;
             compressor.write_all(&data[..split]).unwrap();
             compressor.flush().unwrap();
@@ -552,7 +567,7 @@ mod test {
     /// Make sure compression works with the writer when the input is between 1 and 2 window sizes.
     fn issue_18() {
         use compression_options::Compression;
-        let data = vec![0;61000];
+        let data = vec![0; 61000];
         let compressed = {
             let mut compressor = ZlibEncoder::new(Vec::new(), Compression::Default);
             compressor.write_all(&data[..]).unwrap();
@@ -567,8 +582,10 @@ mod test {
         use std::cmp;
         let data = get_test_data();
         let compressed = {
-            let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                     CompressionOptions::default());
+            let mut compressor = DeflateEncoder::new(
+                Vec::with_capacity(data.len() / 3),
+                CompressionOptions::default(),
+            );
             let split = data.len() / 2;
             compressor.write_all(&data[..split]).unwrap();
             compressor.flush().unwrap();
@@ -594,8 +611,10 @@ mod test {
 
         assert!(decompressed == data);
 
-        let mut compressor = DeflateEncoder::new(Vec::with_capacity(data.len() / 3),
-                                                 CompressionOptions::default());
+        let mut compressor = DeflateEncoder::new(
+            Vec::with_capacity(data.len() / 3),
+            CompressionOptions::default(),
+        );
 
         compressor.flush().unwrap();
         compressor.write_all(&[1, 2]).unwrap();

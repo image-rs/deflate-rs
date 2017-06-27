@@ -1,5 +1,5 @@
-use std::io;
-use std::io::{Write, ErrorKind};
+use std::io::{self, Write, ErrorKind};
+#[cfg(test)]
 use std::mem;
 use huffman_table::{HuffmanTable, HuffmanError};
 use bitstream::{LsbWriter, BitWriter};
@@ -21,20 +21,14 @@ pub enum BType {
 }
 
 /// A struct wrapping a writer that writes data compressed using the provided huffman table
-pub struct EncoderState<W: Write> {
+pub struct EncoderState {
     huffman_table: HuffmanTable,
-    pub writer: LsbWriter<W>,
+    pub writer: LsbWriter<Vec<u8>>,
 }
 
-impl EncoderState<Vec<u8>> {
-    pub fn inner_vec(&mut self) -> &mut Vec<u8> {
-        &mut self.writer.w
-    }
-}
-
-impl<W: Write> EncoderState<W> {
+impl EncoderState {
     /// Creates a new encoder state using the provided huffman table and writer
-    pub fn new(huffman_table: HuffmanTable, writer: W) -> EncoderState<W> {
+    pub fn new(huffman_table: HuffmanTable, writer: Vec<u8>) -> EncoderState {
         EncoderState {
             huffman_table: huffman_table,
             writer: LsbWriter::new(writer),
@@ -43,8 +37,12 @@ impl<W: Write> EncoderState<W> {
 
     #[cfg(test)]
     /// Creates a new encoder state using the fixed huffman table
-    pub fn fixed(writer: W) -> EncoderState<W> {
+    pub fn fixed(writer: Vec<u8>) -> EncoderState {
         EncoderState::new(HuffmanTable::fixed_table(), writer)
+    }
+
+    pub fn inner_vec(&mut self) -> &mut Vec<u8> {
+        &mut self.writer.w
     }
 
     /// Encodes a literal value to the writer
@@ -60,20 +58,30 @@ impl<W: Write> EncoderState<W> {
             LZType::Literal(l) => self.write_literal(l),
             LZType::StoredLengthDistance(l, d) => {
                 let (code, extra_bits_code) = self.huffman_table.get_length_huffman(l);
+                assert!(
+                    code.length != 0,
+                    format!("Code: {:?}, Value: {:?}", code, value)
+                );
                 self.writer.write_bits(code.code, code.length)?;
-                self.writer
-                    .write_bits(extra_bits_code.code, extra_bits_code.length)?;
+                self.writer.write_bits(
+                    extra_bits_code.code,
+                    extra_bits_code.length,
+                )?;
 
-                let (code, extra_bits_code) = self.huffman_table
-                    .get_distance_huffman(d)
-                    .ok_or_else(|| {
-                                    io::Error::new(ErrorKind::Other,
-                                                   "BUG!: Invalid huffman distance value!")
-                                })?;
+                let (code, extra_bits_code) =
+                    self.huffman_table.get_distance_huffman(d).ok_or_else(|| {
+                        io::Error::new(ErrorKind::Other, "BUG!: Invalid huffman distance value!")
+                    })?;
+                assert!(
+                    code.length != 0,
+                    format!("Code: {:?}, Value: {:?}", code, value)
+                );
 
                 self.writer.write_bits(code.code, code.length)?;
-                self.writer
-                    .write_bits(extra_bits_code.code, extra_bits_code.length)
+                self.writer.write_bits(
+                    extra_bits_code.code,
+                    extra_bits_code.length,
+                )
             }
         }
     }
@@ -108,12 +116,15 @@ impl<W: Write> EncoderState<W> {
 
     /// Update the huffman table by generating new huffman codes
     /// from length the length values from the provided tables.
-    pub fn update_huffman_table(&mut self,
-                                literals_and_lengths: &[u8],
-                                distances: &[u8])
-                                -> Result<(), HuffmanError> {
-        self.huffman_table
-            .update_from_length_tables(literals_and_lengths, distances)
+    pub fn update_huffman_table(
+        &mut self,
+        literals_and_lengths: &[u8],
+        distances: &[u8],
+    ) -> Result<(), HuffmanError> {
+        self.huffman_table.update_from_length_tables(
+            literals_and_lengths,
+            distances,
+        )
     }
 
     pub fn set_huffman_to_fixed(&mut self) -> Result<(), HuffmanError> {
@@ -122,7 +133,8 @@ impl<W: Write> EncoderState<W> {
 
     /// Reset the encoder state with a new writer, returning the old one if flushing
     /// succeeds.
-    pub fn _reset(&mut self, writer: W) -> io::Result<W> {
+    #[cfg(test)]
+    pub fn reset(&mut self, writer: Vec<u8>) -> io::Result<Vec<u8>> {
         // Make sure the writer is flushed
         // Ideally this should be done before this function is called, but we
         // do it here just in case.

@@ -60,12 +60,13 @@ pub fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) ->
 /// `position`: The position in the data to match against.
 /// `prev_length`: The length of the previous `longest_match` check to compare against.
 /// `max_hash_checks`: The maximum number of matching hash chain positions to check.
-pub fn longest_match(data: &[u8],
-                     hash_table: &ChainedHashTable,
-                     position: usize,
-                     prev_length: usize,
-                     max_hash_checks: u16)
-                     -> (usize, usize) {
+pub fn longest_match(
+    data: &[u8],
+    hash_table: &ChainedHashTable,
+    position: usize,
+    prev_length: usize,
+    max_hash_checks: u16,
+) -> (usize, usize) {
 
     // debug_assert_eq!(position, hash_table.current_head() as usize);
 
@@ -115,7 +116,8 @@ pub fn longest_match(data: &[u8],
         // be checked instead.
         // Since we've made sure best_length is always at least 1, this shouldn't underflow.
         if data[position + best_length - 1..position + best_length + 1] ==
-           data[current_head + best_length - 1..current_head + best_length + 1] {
+            data[current_head + best_length - 1..current_head + best_length + 1]
+        {
             // Actually check how many bytes match.
             // At the moment this will check the two bytes we just checked again,
             // though adding code for skipping these bytes may not result in any speed
@@ -147,11 +149,13 @@ pub fn longest_match(data: &[u8],
 #[cfg(test)]
 pub fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usize, usize) {
     use compression_options::MAX_HASH_CHECKS;
-    longest_match(data,
-                  hash_table,
-                  hash_table.current_head() as usize,
-                  MIN_MATCH as usize - 1,
-                  MAX_HASH_CHECKS)
+    longest_match(
+        data,
+        hash_table,
+        hash_table.current_head() as usize,
+        MIN_MATCH as usize - 1,
+        MAX_HASH_CHECKS,
+    )
 }
 
 #[cfg(test)]
@@ -182,7 +186,24 @@ mod test {
         // We check that we get the longest match, rather than the shorter, but closer one.
         assert_eq!(distance, 22);
         assert_eq!(length, 9);
-        let test_arr2 = [10u8, 10, 10, 10, 10, 10, 10, 10, 2, 3, 5, 10, 10, 10, 10, 10];
+        let test_arr2 = [
+            10u8,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+            2,
+            3,
+            5,
+            10,
+            10,
+            10,
+            10,
+            10,
+        ];
         let hash_table = filled_hash_table(&test_arr2[..HASH_BYTES + 1 + 1 + 2]);
         let (length, distance) = super::longest_match_current(&test_arr2, &hash_table);
 

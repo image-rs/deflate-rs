@@ -56,9 +56,11 @@ fn file_zlib_compare_output() {
     //     }
     // }
 
-    println!("flate2: {}, deflate: {}",
-             flate2_compressed.len(),
-             deflate_compressed.len());
+    println!(
+        "flate2: {}, deflate: {}",
+        flate2_compressed.len(),
+        deflate_compressed.len()
+    );
     let decompressed = {
         let mut d = flate2::read::ZlibDecoder::new(deflate_compressed.as_slice());
         let mut out = Vec::new();
@@ -85,7 +87,7 @@ fn issue_17() {
     // This is window size + 1 bytes long which made the hash table
     // slide when there was only the two end-bytes that don't need to be hashed left
     // and triggered an assertion.
-    let data = vec![0;65537];
+    let data = vec![0; 65537];
 
     roundtrip(&data);
 }

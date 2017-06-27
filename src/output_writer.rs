@@ -123,8 +123,9 @@ impl OutputWriter for DynamicWriter {
         let l_code_num = get_length_code(length).expect("Invalid length!");
         // As we limit the buffer to 2^16 values, this should be safe from overflowing.
         self.frequencies[l_code_num] += 1;
-        let d_code_num = get_distance_code(distance)
-            .expect("Tried to get a distance code which was out of range!");
+        let d_code_num = get_distance_code(distance).expect(
+            "Tried to get a distance code which was out of range!",
+        );
         self.distance_frequencies[usize::from(d_code_num)] += 1;
         ret
     }

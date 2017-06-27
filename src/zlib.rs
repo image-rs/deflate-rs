@@ -69,15 +69,19 @@ mod test {
     #[test]
     fn test_gen_fcheck() {
         let cmf = DEFAULT_CMF;
-        let flg = super::add_fcheck(DEFAULT_CMF,
-                                    CompressionLevel::Default as u8 | super::DEFAULT_FDICT);
+        let flg = super::add_fcheck(
+            DEFAULT_CMF,
+            CompressionLevel::Default as u8 | super::DEFAULT_FDICT,
+        );
         assert_eq!(((usize::from(cmf) * 256) + usize::from(flg)) % 31, 0);
     }
 
     #[test]
     fn test_header() {
         let header = get_zlib_header(CompressionLevel::Fastest);
-        assert_eq!(((usize::from(header[0]) * 256) + usize::from(header[1])) % 31,
-                   0);
+        assert_eq!(
+            ((usize::from(header[0]) * 256) + usize::from(header[1])) % 31,
+            0
+        );
     }
 }

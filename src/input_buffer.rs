@@ -132,8 +132,10 @@ mod test {
         {
             let slice = buf.get_buffer();
             assert!(slice[..WINDOW_SIZE + MAX_MATCH] == data[WINDOW_SIZE..]);
-            assert_eq!(slice[WINDOW_SIZE + MAX_MATCH..WINDOW_SIZE + MAX_MATCH + 5],
-                       to_add);
+            assert_eq!(
+                slice[WINDOW_SIZE + MAX_MATCH..WINDOW_SIZE + MAX_MATCH + 5],
+                to_add
+            );
         }
         assert_eq!(buf.current_end(), WINDOW_SIZE + MAX_MATCH + to_add.len());
     }

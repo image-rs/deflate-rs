@@ -26,7 +26,7 @@ fn init_array(arr: &mut [u16]) {
 fn new_array() -> Box<[u16]> {
     // Create the vector with the elements initialised as using collect or extend ends
     // up being significantly slower for some reason.
-    let mut arr = vec![0;WINDOW_SIZE];
+    let mut arr = vec![0; WINDOW_SIZE];
     init_array(&mut arr);
     arr.into_boxed_slice()
 }
@@ -81,9 +81,11 @@ impl ChainedHashTable {
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
         // Check that all bytes are input in order and at the correct positions.
         debug_assert_eq!(position & WINDOW_MASK, self.count as usize & WINDOW_MASK);
-        debug_assert!(position < WINDOW_SIZE * 2,
-                      "Position is larger than 2 * window size! {}",
-                      position);
+        debug_assert!(
+            position < WINDOW_SIZE * 2,
+            "Position is larger than 2 * window size! {}",
+            position
+        );
         // Storing the hash in a temporary variable here makes the compiler avoid the
         // bounds checks in this function.
         let new_hash = update_hash(self.current_hash, value);
@@ -131,11 +133,10 @@ impl ChainedHashTable {
     }
 
     pub fn slide(&mut self, bytes: usize) {
-        if cfg!(debug_assertions) {
-            if bytes != WINDOW_SIZE {
-                // This should only happen in tests in this file.
-                self.count = 0;
-            }
+        if cfg!(debug_assertions) && bytes != WINDOW_SIZE {
+            // This should only happen in tests in this file.
+            self.count = 0;
+
         }
         ChainedHashTable::slide_table(&mut self.head[..], bytes as u16);
         ChainedHashTable::slide_table(&mut self.prev[..], bytes as u16);

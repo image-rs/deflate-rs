@@ -19,8 +19,27 @@ pub const MIN_NUM_DISTANCES: usize = 1;
 // The output ordering of the lengths for the huffman codes used to encode the lengths
 // used to build the full huffman tree for length/literal codes.
 // http://www.gzip.org/zlib/rfc-deflate.html#dyn
-const HUFFMAN_LENGTH_ORDER: [u8; 19] = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14,
-                                        1, 15];
+const HUFFMAN_LENGTH_ORDER: [u8; 19] = [
+    16,
+    17,
+    18,
+    0,
+    8,
+    7,
+    9,
+    6,
+    10,
+    5,
+    11,
+    4,
+    12,
+    3,
+    13,
+    2,
+    14,
+    1,
+    15,
+];
 
 // Number of bits used for the values specifying the number of codes
 const HLIT_BITS: u8 = 5;
@@ -51,14 +70,17 @@ fn extra_bits_for_huffman_length_code(code: u8) -> u8 {
 
 /// Calculate how many bits the huffman-encoded huffman lengths will use.
 fn calculate_huffman_length(frequencies: &[FrequencyType], code_lengths: &[u8]) -> u64 {
-    frequencies
-        .iter()
-        .zip(code_lengths)
-        .enumerate()
-        .fold(0, |acc, (n, (&f, &l))| {
+    frequencies.iter().zip(code_lengths).enumerate().fold(
+        0,
+        |acc,
+         (n,
+          (&f,
+           &l))| {
             acc +
-            (u64::from(f) * (u64::from(l) + u64::from(extra_bits_for_huffman_length_code(n as u8))))
-        })
+                (u64::from(f) *
+                     (u64::from(l) + u64::from(extra_bits_for_huffman_length_code(n as u8))))
+        },
+    )
 }
 
 /// Calculate how many bits data with the given frequencies will use when compressed with dynamic
@@ -67,11 +89,13 @@ fn calculate_huffman_length(frequencies: &[FrequencyType], code_lengths: &[u8]) 
 /// Parameters:
 /// Frequencies, length of dynamic codes, and a function to get how many extra bits in addition
 /// to the length of the huffman code the symbol will use.
-fn calculate_block_length<F>(frequencies: &[FrequencyType],
-                             dyn_code_lengths: &[u8],
-                             get_num_extra_bits: F)
-                             -> (u64, u64)
-    where F: Fn(usize) -> u64
+fn calculate_block_length<F>(
+    frequencies: &[FrequencyType],
+    dyn_code_lengths: &[u8],
+    get_num_extra_bits: F,
+) -> (u64, u64)
+where
+    F: Fn(usize) -> u64,
 {
     // Length of data represented by dynamic codes.
     let mut d_ll_length = 0u64;
@@ -107,13 +131,12 @@ fn stored_padding(pending_bits: u8) -> u64 {
     assert!(pending_bits <= 8);
     let free_space = 8 - pending_bits;
     if free_space >= BLOCK_MARKER_LENGTH {
-            // There is space in the current byte for the header.
-            free_space - BLOCK_MARKER_LENGTH
-        } else {
-            // The header will require an extra byte.
-            8 - (BLOCK_MARKER_LENGTH - free_space)
-        }
-        .into()
+        // There is space in the current byte for the header.
+        free_space - BLOCK_MARKER_LENGTH
+    } else {
+        // The header will require an extra byte.
+        8 - (BLOCK_MARKER_LENGTH - free_space)
+    }.into()
 }
 
 /// Calculate the number of bits storing the data in stored blocks will take up, excluding the
@@ -125,10 +148,9 @@ fn stored_padding(pending_bits: u8) -> u64 {
 fn stored_length(input_bytes: u64) -> u64 {
     // Check how many stored blocks these bytes would take up.
     // (Integer divison rounding up.)
-    let num_blocks = (input_bytes
-                          .checked_sub(1)
-                          .expect("Underflow calculating stored block length!") /
-                      MAX_STORED_BLOCK_LENGTH as u64) + 1;
+    let num_blocks = (input_bytes.checked_sub(1).expect(
+        "Underflow calculating stored block length!",
+    ) / MAX_STORED_BLOCK_LENGTH as u64) + 1;
     // The length will be the input length and the headers for each block. (Excluding the start
     // of block code for the first one)
     (input_bytes + (STORED_BLOCK_HEADER_LENGTH as u64 * num_blocks) + (num_blocks - 1)) * 8
@@ -159,11 +181,12 @@ pub struct DynamicBlockHeader {
 /// frequency of the different symbols/lengths/distances, and determine what block type will give
 /// the shortest representation.
 /// TODO: This needs a test
-pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
-                           d_freqs: &[FrequencyType],
-                           num_input_bytes: u64,
-                           pending_bits: u8)
-                           -> BlockType {
+pub fn gen_huffman_lengths(
+    l_freqs: &[FrequencyType],
+    d_freqs: &[FrequencyType],
+    num_input_bytes: u64,
+    pending_bits: u8,
+) -> BlockType {
     // Avoid corner cases and issues if this is called for an empty block.
     // For empty blocks, a fixed block will be the shortest.
     if num_input_bytes == 0 {
@@ -177,13 +200,14 @@ pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
     // generating the lengths to save some work.
     // There is however a minimum number of values we have to keep
     // according to the deflate spec.
-    let l_lengths =
-        huffman_lengths_from_frequency(remove_trailing_zeroes(l_freqs,
-                                                              MIN_NUM_LITERALS_AND_LENGTHS),
-                                       MAX_CODE_LENGTH);
-    let d_lengths = huffman_lengths_from_frequency(remove_trailing_zeroes(d_freqs,
-                                                                          MIN_NUM_DISTANCES),
-                                                   MAX_CODE_LENGTH);
+    let l_lengths = huffman_lengths_from_frequency(
+        remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS),
+        MAX_CODE_LENGTH,
+    );
+    let d_lengths = huffman_lengths_from_frequency(
+        remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES),
+        MAX_CODE_LENGTH,
+    );
 
 
     // Encode length values
@@ -195,11 +219,11 @@ pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
 
     // Count how many of these lengths we use.
     let used_hclens = HUFFMAN_LENGTH_ORDER.len() -
-                      HUFFMAN_LENGTH_ORDER
-                          .iter()
-                          .rev()
-                          .take_while(|&&n| huffman_table_lengths[n as usize] == 0)
-                          .count();
+        HUFFMAN_LENGTH_ORDER
+            .iter()
+            .rev()
+            .take_while(|&&n| huffman_table_lengths[n as usize] == 0)
+            .count();
 
     // There has to be at least 4 hclens, so if there isn't, something went wrong.
     debug_assert!(used_hclens >= 4);
@@ -221,9 +245,9 @@ pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
     let huff_table_length = calculate_huffman_length(&freqs, &huffman_table_lengths);
 
     // For dynamic blocks the huffman tables takes up some extra space.
-    let dynamic_length =
-        d_ll_length + d_dist_length + huff_table_length + (used_hclens as u64 * 3) +
-        u64::from(HLIT_BITS) + u64::from(HDIST_BITS) + u64::from(HCLEN_BITS);
+    let dynamic_length = d_ll_length + d_dist_length + huff_table_length +
+        (used_hclens as u64 * 3) + u64::from(HLIT_BITS) +
+        u64::from(HDIST_BITS) + u64::from(HCLEN_BITS);
 
     // Static blocks don't have any extra header data.
     let static_length = s_ll_length + s_dist_length;
@@ -243,19 +267,20 @@ pub fn gen_huffman_lengths(l_freqs: &[FrequencyType],
         BlockType::Stored
     } else {
         BlockType::Dynamic(DynamicBlockHeader {
-                               l_lengths: l_lengths,
-                               d_lengths: d_lengths,
-                               encoded_lengths: encoded,
-                               huffman_table_lengths: huffman_table_lengths,
-                               used_hclens: used_hclens,
-                           })
+            l_lengths: l_lengths,
+            d_lengths: d_lengths,
+            encoded_lengths: encoded,
+            huffman_table_lengths: huffman_table_lengths,
+            used_hclens: used_hclens,
+        })
     }
 }
 
 /// Write the specified huffman lengths to the bit writer
-pub fn write_huffman_lengths<W: Write>(header: &DynamicBlockHeader,
-                                       writer: &mut LsbWriter<W>)
-                                       -> Result<()> {
+pub fn write_huffman_lengths<W: Write>(
+    header: &DynamicBlockHeader,
+    writer: &mut LsbWriter<W>,
+) -> Result<()> {
 
     let literal_len_lengths = &header.l_lengths;
     let distance_lengths = &header.d_lengths;
@@ -286,8 +311,10 @@ pub fn write_huffman_lengths<W: Write>(header: &DynamicBlockHeader,
     // Write the lengths for the huffman table describing the huffman table
     // Each length is 3 bits
     for n in &HUFFMAN_LENGTH_ORDER[..used_hclens] {
-        writer
-            .write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3)?;
+        writer.write_bits(
+            huffman_table_lengths[usize::from(*n)] as u16,
+            3,
+        )?;
     }
 
     // Generate codes for the main huffman table using the lengths we just wrote

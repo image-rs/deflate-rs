@@ -17,8 +17,10 @@ mod test {
     #[test]
     fn test_bit_reverse() {
         assert_eq!(reverse_bits(0b0111_0100, 8), 0b0010_1110);
-        assert_eq!(reverse_bits(0b1100_1100_1100_1100, 16),
-                   0b0011_0011_0011_0011);
+        assert_eq!(
+            reverse_bits(0b1100_1100_1100_1100, 16),
+            0b0011_0011_0011_0011
+        );
         // Check that we ignore >16 length
         assert_eq!(reverse_bits(0b11001100_11001100, 32), 0b0011001100110011);
     }

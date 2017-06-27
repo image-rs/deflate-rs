@@ -34,9 +34,7 @@ pub enum Flush {
 /// with the end of block code.
 ///
 /// Returns `Err` if writing should fail at any point.
-pub fn flush_to_bitstream<W: Write>(buffer: &[LZValue],
-                                    state: &mut EncoderState<W>)
-                                    -> io::Result<()> {
+pub fn flush_to_bitstream(buffer: &[LZValue], state: &mut EncoderState) -> io::Result<()> {
     for &b in buffer {
         state.write_lzvalue(b.value())?
     }
@@ -50,27 +48,24 @@ pub fn flush_to_bitstream<W: Write>(buffer: &[LZValue],
 pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
     use lz77::lz77_compress;
 
-    let mut writer = Vec::new();
-    {
-        let mut state = EncoderState::fixed(&mut writer);
-        let compressed = lz77_compress(input).unwrap();
+    let mut state = EncoderState::fixed(Vec::new());
+    let compressed = lz77_compress(input).unwrap();
 
-        // We currently don't split blocks here(this function is just used for tests anyhow)
-        state
-            .write_start_of_block(true, true)
-            .expect("Write error!");
-        flush_to_bitstream(&compressed, &mut state).expect("Write error!");
+    // We currently don't split blocks here(this function is just used for tests anyhow)
+    state.write_start_of_block(true, true).expect(
+        "Write error!",
+    );
+    flush_to_bitstream(&compressed, &mut state).expect("Write error!");
 
-        state.flush().expect("Write error!");
-
-    }
-    writer
+    state.flush().expect("Write error!");
+    state.reset(Vec::new()).expect("Write error!")
 }
 
-fn write_stored_block(input: &[u8],
-                      mut writer: &mut LsbWriter<Vec<u8>>,
-                      final_block: bool)
-                      -> io::Result<usize> {
+fn write_stored_block(
+    input: &[u8],
+    mut writer: &mut LsbWriter<Vec<u8>>,
+    final_block: bool,
+) -> io::Result<usize> {
 
     // If the input is not zero, we write stored blocks for the input data.
     if !input.is_empty() {
@@ -95,10 +90,11 @@ fn write_stored_block(input: &[u8],
 }
 
 /// Inner compression function used by both the writers and the simple compression functions.
-pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
-                                         deflate_state: &mut DeflateState<W>,
-                                         flush: Flush)
-                                         -> io::Result<usize> {
+pub fn compress_data_dynamic_n<W: Write>(
+    input: &[u8],
+    deflate_state: &mut DeflateState<W>,
+    flush: Flush,
+) -> io::Result<usize> {
     let mut bytes_written = 0;
 
     let mut slice = input;
@@ -128,7 +124,10 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
                 // If the buffer was already full when the function was called, this has to be
                 // returned rather than Ok(0) to indicate that we didn't write anything, but are
                 // not done yet.
-                return Err(io::Error::new(io::ErrorKind::Interrupted, "Internal buffer full."));
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "Internal buffer full.",
+                ));
             } else {
                 return Ok(bytes_written);
             }
@@ -139,11 +138,13 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
             break;
         }
 
-        let (written, status, position) = lz77_compress_block(slice,
-                                                              &mut deflate_state.lz77_state,
-                                                              &mut deflate_state.input_buffer,
-                                                              &mut deflate_state.lz77_writer,
-                                                              flush);
+        let (written, status, position) = lz77_compress_block(
+            slice,
+            &mut deflate_state.lz77_state,
+            &mut deflate_state.input_buffer,
+            &mut deflate_state.lz77_writer,
+            flush,
+        );
 
         // Bytes written in this call
         bytes_written += written;
@@ -183,49 +184,60 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
         match res {
             BlockType::Dynamic(header) => {
                 // Write the block header.
-                deflate_state
-                    .encoder_state
-                    .write_start_of_block(false, last_block)?;
+                deflate_state.encoder_state.write_start_of_block(
+                    false,
+                    last_block,
+                )?;
 
                 // Output the lengths of the huffman codes used in this block.
                 write_huffman_lengths(&header, &mut deflate_state.encoder_state.writer)?;
 
                 // Output update the huffman table that will be used to encode the
                 // lz77-compressed data.
-                deflate_state
-                    .encoder_state
-                    .update_huffman_table(&header.l_lengths, &header.d_lengths)?;
+                deflate_state.encoder_state.update_huffman_table(
+                    &header.l_lengths,
+                    &header.d_lengths,
+                )?;
 
 
                 // Write the huffman compressed data and the end of block marker.
-                flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
-                                   &mut deflate_state.encoder_state)?;
+                flush_to_bitstream(
+                    deflate_state.lz77_writer.get_buffer(),
+                    &mut deflate_state.encoder_state,
+                )?;
             }
             BlockType::Fixed => {
                 // Write the block header for fixed code blocks.
-                deflate_state
-                    .encoder_state
-                    .write_start_of_block(true, last_block)?;
+                deflate_state.encoder_state.write_start_of_block(
+                    true,
+                    last_block,
+                )?;
 
                 // Use the pre-defined static huffman codes.
                 deflate_state.encoder_state.set_huffman_to_fixed()?;
 
                 // Write the compressed data and the end of block marker.
-                flush_to_bitstream(deflate_state.lz77_writer.get_buffer(),
-                                   &mut deflate_state.encoder_state)?;
+                flush_to_bitstream(
+                    deflate_state.lz77_writer.get_buffer(),
+                    &mut deflate_state.encoder_state,
+                )?;
             }
             BlockType::Stored => {
                 // If compression fails, output a stored block instead.
 
                 let start_pos = position.saturating_sub(current_block_input_bytes as usize);
 
-                assert!(position >= current_block_input_bytes as usize,
-                        "Error! Trying to output a stored block with forgotten data!\
-                         if you encounter this error, please file an issue!");
+                assert!(
+                    position >= current_block_input_bytes as usize,
+                    "Error! Trying to output a stored block with forgotten data!\
+                         if you encounter this error, please file an issue!"
+                );
 
-                write_stored_block(&deflate_state.input_buffer.get_buffer()[start_pos..position],
-                                   &mut deflate_state.encoder_state.writer,
-                                   flush == Flush::Finish && last_block)?;
+                write_stored_block(
+                    &deflate_state.input_buffer.get_buffer()[start_pos..position],
+                    &mut deflate_state.encoder_state.writer,
+                    flush == Flush::Finish && last_block,
+                )?;
             }
         };
 
@@ -265,11 +277,12 @@ pub fn compress_data_dynamic_n<W: Write>(input: &[u8],
         .expect("Missing writer!")
         .write(&deflate_state.encoder_state.inner_vec()[output_buf_pos..])?;
     if written_to_writer <
-       deflate_state
-           .output_buf()
-           .len()
-           .checked_sub(output_buf_pos)
-           .unwrap() {
+        deflate_state
+            .output_buf()
+            .len()
+            .checked_sub(output_buf_pos)
+            .unwrap()
+    {
         deflate_state.output_buf_pos += written_to_writer;
     } else {
         // If we sucessfully wrote all the data, we can clear the output buffer.
@@ -315,7 +328,19 @@ mod test {
         let test_data = b"Deflate late";
         // let check =
         // [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0xc8, 0x49, 0x2c, 0x49, 0x5, 0x0];
-        let check = [0x73, 0x49, 0x4d, 0xcb, 0x49, 0x2c, 0x49, 0x55, 0x00, 0x11, 0x00];
+        let check = [
+            0x73,
+            0x49,
+            0x4d,
+            0xcb,
+            0x49,
+            0x2c,
+            0x49,
+            0x55,
+            0x00,
+            0x11,
+            0x00,
+        ];
         let compressed = compress_data_fixed(test_data);
         assert_eq!(&compressed, &check);
         let decompressed = decompress_to_end(&compressed);

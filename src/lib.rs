@@ -104,11 +104,12 @@ pub mod write {
 }
 
 
-fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
-                                                        writer: &mut W,
-                                                        mut checksum: RC,
-                                                        compression_options: CompressionOptions)
-                                                        -> io::Result<()> {
+fn compress_data_dynamic<RC: RollingChecksum, W: Write>(
+    input: &[u8],
+    writer: &mut W,
+    mut checksum: RC,
+    compression_options: CompressionOptions,
+) -> io::Result<()> {
     checksum.update_from_slice(input);
     // We use a box here to avoid putting the buffers on the stack
     // It's done here rather than in the structs themselves for now to
@@ -132,11 +133,12 @@ fn compress_data_dynamic<RC: RollingChecksum, W: Write>(input: &[u8],
 /// ```
 pub fn deflate_bytes_conf<O: Into<CompressionOptions>>(input: &[u8], options: O) -> Vec<u8> {
     let mut writer = Vec::with_capacity(input.len() / 3);
-    compress_data_dynamic(input,
-                          &mut writer,
-                          checksum::NoChecksum::new(),
-                          options.into())
-            .expect("Write error!");
+    compress_data_dynamic(
+        input,
+        &mut writer,
+        checksum::NoChecksum::new(),
+        options.into(),
+    ).expect("Write error!");
     writer
 }
 
@@ -186,9 +188,9 @@ pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], option
 
     let hash = checksum.current_hash();
 
-    writer
-        .write_u32::<BigEndian>(hash)
-        .expect("Write error when writing checksum!");
+    writer.write_u32::<BigEndian>(hash).expect(
+        "Write error when writing checksum!",
+    );
     writer
 }
 
@@ -234,17 +236,18 @@ pub fn deflate_bytes_zlib(input: &[u8]) -> Vec<u8> {
 /// # }
 /// ```
 #[cfg(feature = "gzip")]
-pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(input: &[u8],
-                                                            options: O,
-                                                            gzip_header: GzBuilder)
-                                                            -> Vec<u8> {
+pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(
+    input: &[u8],
+    options: O,
+    gzip_header: GzBuilder,
+) -> Vec<u8> {
     use byteorder::WriteBytesExt;
     let mut writer = Vec::with_capacity(input.len() / 3);
 
     // Write header
-    writer
-        .write_all(&gzip_header.into_header())
-        .expect("Write error when writing header!");
+    writer.write_all(&gzip_header.into_header()).expect(
+        "Write error when writing header!",
+    );
     let mut checksum = checksum::NoChecksum::new();
     compress_data_dynamic(input, &mut writer, &mut checksum, options.into())
         .expect("Write error when writing compressed data!");
@@ -252,12 +255,12 @@ pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(input: &[u8],
     let mut crc = Crc::new();
     crc.update(input);
 
-    writer
-        .write_u32::<LittleEndian>(crc.sum())
-        .expect("Write error when writing checksum!");
-    writer
-        .write_u32::<LittleEndian>(crc.amt_as_u32())
-        .expect("Write error when writing amt!");
+    writer.write_u32::<LittleEndian>(crc.sum()).expect(
+        "Write error when writing checksum!",
+    );
+    writer.write_u32::<LittleEndian>(crc.amt_as_u32()).expect(
+        "Write error when writing amt!",
+    );
     writer
 }
 
@@ -286,7 +289,7 @@ mod test {
     use std::io::Write;
 
     use test_utils::{get_test_data, decompress_to_end, decompress_zlib};
-    #[cfg(feature= "gzip")]
+    #[cfg(feature = "gzip")]
     use test_utils::decompress_gzip;
 
     /// Write data to the writer in chunks of chunk_size.
@@ -320,9 +323,11 @@ mod test {
         for (n, (&a, &b)) in input.iter().zip(result.iter()).enumerate() {
             if a != b {
                 println!("First difference at {}, input: {}, output: {}", n, a, b);
-                println!("input: {:?}, output: {:?}",
-                         &input[n - 3..n + 3],
-                         &result[n - 3..n + 3]);
+                println!(
+                    "input: {:?}, output: {:?}",
+                    &input[n - 3..n + 3],
+                    &result[n - 3..n + 3]
+                );
                 break;
             }
         }
@@ -400,9 +405,11 @@ mod test {
     #[test]
     fn gzip() {
         let data = get_test_data();
-        let compressed = deflate_bytes_gzip_conf(&data,
-                                                 Compression::Default,
-                                                 GzBuilder::new().comment("Test"));
+        let compressed = deflate_bytes_gzip_conf(
+            &data,
+            Compression::Default,
+            GzBuilder::new().comment("Test"),
+        );
         let decompressed = decompress_gzip(&compressed);
         assert!(data == decompressed);
     }
@@ -411,8 +418,8 @@ mod test {
         let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
         {
-            let mut compressor = write::ZlibEncoder::new(&mut compressed,
-                                                         CompressionOptions::high());
+            let mut compressor =
+                write::ZlibEncoder::new(&mut compressed, CompressionOptions::high());
             chunked_write(&mut compressor, &data, chunk_size);
             compressor.finish().unwrap();
         }
@@ -440,8 +447,10 @@ mod test {
     /// Check that the frequency values don't overflow.
     #[test]
     fn frequency_overflow() {
-        let _ = deflate_bytes_conf(&vec![5; 100000],
-                                   compression_options::CompressionOptions::default());
+        let _ = deflate_bytes_conf(
+            &vec![5; 100000],
+            compression_options::CompressionOptions::default(),
+        );
     }
 
     /// Compress with an empty slice.

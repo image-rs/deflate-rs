@@ -58,7 +58,7 @@ pub fn decompress_to_end(input: &[u8]) -> Vec<u8> {
     result
 }
 
-#[cfg(feature= "gzip")]
+#[cfg(feature = "gzip")]
 pub fn decompress_gzip(compressed: &[u8]) -> Vec<u8> {
     use std::io::Read;
     use flate2::read::GzDecoder;

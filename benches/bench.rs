@@ -40,14 +40,27 @@ fn test_file_zlib_def(b: &mut Bencher) {
 fn test_file_zlib_high(b: &mut Bencher) {
     let test_data = get_test_data();
 
-    b.iter(|| deflate_bytes_zlib_conf(&test_data, CompressionOptions::high()));
+    b.iter(|| {
+        deflate_bytes_zlib_conf(&test_data, CompressionOptions::high())
+    });
 }
 
 #[bench]
 fn test_file_zlib_fast(b: &mut Bencher) {
     let test_data = get_test_data();
 
-    b.iter(|| deflate_bytes_zlib_conf(&test_data, CompressionOptions::fast()));
+    b.iter(|| {
+        deflate_bytes_zlib_conf(&test_data, CompressionOptions::fast())
+    });
+}
+
+#[bench]
+fn test_file_zlib_rle(b: &mut Bencher) {
+    let test_data = get_test_data();
+
+    b.iter(|| {
+        deflate_bytes_zlib_conf(&test_data, CompressionOptions::rle())
+    });
 }
 
 
@@ -63,7 +76,9 @@ fn deflate_bytes_flate2_zlib(level: Compression, input: &[u8]) -> Vec<u8> {
 #[bench]
 fn test_file_zlib_flate2_def(b: &mut Bencher) {
     let test_data = get_test_data();
-    b.iter(|| deflate_bytes_flate2_zlib(Compression::Default, &test_data));
+    b.iter(|| {
+        deflate_bytes_flate2_zlib(Compression::Default, &test_data)
+    });
 }
 
 #[bench]
