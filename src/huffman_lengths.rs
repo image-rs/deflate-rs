@@ -211,8 +211,7 @@ pub fn gen_huffman_lengths(
 
 
     // Encode length values
-    let (encoded, freqs) = encode_lengths(l_lengths.iter().chain(d_lengths.iter()).cloned())
-        .unwrap();
+    let (encoded, freqs) = encode_lengths(l_lengths.iter().chain(d_lengths.iter()).cloned());
 
     // Create huffman lengths for the length/distance code lengths
     let huffman_table_lengths = huffman_lengths_from_frequency(&freqs, MAX_HUFFMAN_CODE_LENGTH);

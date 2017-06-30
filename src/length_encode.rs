@@ -64,7 +64,7 @@ fn not_max_repetitions(length_value: u8, repeats: u8) -> bool {
 /// the deflate stream.
 /// Returns a tuple containing a vec of the encoded lengths, and an array describing the frequencies
 /// of the different length codes
-pub fn encode_lengths<I>(lengths: I) -> Option<(Vec<EncodedLength>, [u16; 19])>
+pub fn encode_lengths<I>(lengths: I) -> (Vec<EncodedLength>, [u16; 19])
 where
     I: Iterator<Item = u8> + Clone,
 {
@@ -75,13 +75,8 @@ where
     let mut repeat = 0;
     let mut iter = lengths.clone().enumerate().peekable();
     // Previous value
-    let mut prev = if let Some(&(_, b)) = iter.peek() {
-        // Make sure it's different from the first value to not confuse the
-        // algorithm
-        !b
-    } else {
-        return None;
-    };
+    // We set it to the compliment of the first falue to simplify the code.
+    let mut prev = !iter.peek().expect("No length values!").1;
 
     while let Some((n, l)) = iter.next() {
         if l == prev && not_max_repetitions(l, repeat) {
@@ -141,7 +136,7 @@ where
         }
         prev = l;
     }
-    Some((out, frequencies))
+    (out, frequencies)
 }
 
 pub fn huffman_lengths_from_frequency(frequencies: &[u16], max_len: usize) -> Vec<u8> {
@@ -379,7 +374,7 @@ mod test {
     #[test]
     fn test_encode_lengths() {
         use huffman_table::FIXED_CODE_LENGTHS;
-        let enc = encode_lengths(FIXED_CODE_LENGTHS.iter().cloned()).unwrap();
+        let enc = encode_lengths(FIXED_CODE_LENGTHS.iter().cloned());
         // There are no lengths lower than 6 in the fixed table
         assert_eq!(enc.1[0..7], [0, 0, 0, 0, 0, 0, 0]);
         // Neither are there any lengths above 9
@@ -388,7 +383,7 @@ mod test {
         assert_eq!(enc.1[17..19], [0, 0]);
 
         let test_lengths = [0, 0, 5, 0, 15, 1, 0, 0, 0, 2, 4, 4, 4, 4, 3, 5, 5, 5, 5];
-        let enc = encode_lengths(test_lengths.iter().cloned()).unwrap().0;
+        let enc = encode_lengths(test_lengths.iter().cloned()).0;
         assert_eq!(
             enc,
             vec![
@@ -408,11 +403,11 @@ mod test {
             ]
         );
         let test_lengths = [0, 0, 0, 5, 2, 3, 0, 0, 0];
-        let enc = encode_lengths(test_lengths.iter().cloned()).unwrap().0;
+        let enc = encode_lengths(test_lengths.iter().cloned()).0;
         assert_eq!(enc, vec![zero(3), lit(5), lit(2), lit(3), zero(3)]);
 
         let test_lengths = [0, 0, 0, 3, 3, 3, 5, 4, 4, 4, 4, 0, 0];
-        let enc = encode_lengths(test_lengths.iter().cloned()).unwrap().0;
+        let enc = encode_lengths(test_lengths.iter().cloned()).0;
         assert_eq!(
             enc,
             vec![
@@ -719,7 +714,7 @@ mod test {
             1,
         ];
 
-        let _ = encode_lengths(lens.iter().cloned()).unwrap().0;
+        let _ = encode_lengths(lens.iter().cloned()).0;
 
         let lens = [
             0,
@@ -1030,7 +1025,7 @@ mod test {
             4,
         ];
 
-        let enc = encode_lengths(lens.iter().cloned()).unwrap().0;
+        let enc = encode_lengths(lens.iter().cloned()).0;
 
         assert_eq!(
             &enc[..10],
@@ -1063,19 +1058,17 @@ mod test {
             ]
         );
 
-        let enc = encode_lengths([1, 1, 1, 2].iter().cloned()).unwrap().0;
+        let enc = encode_lengths([1, 1, 1, 2].iter().cloned()).0;
         assert_eq!(enc, vec![lit(1), lit(1), lit(1), lit(2)]);
-        let enc = encode_lengths([0, 0, 3].iter().cloned()).unwrap().0;
+        let enc = encode_lengths([0, 0, 3].iter().cloned()).0;
         assert_eq!(enc, vec![lit(0), lit(0), lit(3)]);
-        let enc = encode_lengths([0, 0, 0, 5, 2].iter().cloned()).unwrap().0;
+        let enc = encode_lengths([0, 0, 0, 5, 2].iter().cloned()).0;
         assert_eq!(enc, vec![zero(3), lit(5), lit(2)]);
 
-        let enc = encode_lengths([0, 0, 0, 5, 0].iter().cloned()).unwrap().0;
+        let enc = encode_lengths([0, 0, 0, 5, 0].iter().cloned()).0;
         assert!(*enc.last().unwrap() != lit(5));
 
-        let enc = encode_lengths([0, 4, 4, 4, 4, 0].iter().cloned())
-            .unwrap()
-            .0;
+        let enc = encode_lengths([0, 4, 4, 4, 4, 0].iter().cloned()).0;
         assert_eq!(*enc.last().unwrap(), zero(0));
     }
 

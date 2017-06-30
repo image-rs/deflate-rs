@@ -51,7 +51,7 @@ impl LZValue {
 
     #[inline]
     pub fn length_distance(length: u16, distance: u16) -> LZValue {
-        assert!(distance > 0 && distance <= MAX_DISTANCE);
+        debug_assert!(distance > 0 && distance <= MAX_DISTANCE);
         let stored_length = (length - MIN_MATCH) as u8;
         LZValue {
             litlen: stored_length,

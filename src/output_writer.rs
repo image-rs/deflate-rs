@@ -120,12 +120,10 @@ impl OutputWriter for DynamicWriter {
 
     fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
         let ret = self.fixed_writer.write_length_distance(length, distance);
-        let l_code_num = get_length_code(length).expect("Invalid length!");
+        let l_code_num = get_length_code(length);
         // As we limit the buffer to 2^16 values, this should be safe from overflowing.
         self.frequencies[l_code_num] += 1;
-        let d_code_num = get_distance_code(distance).expect(
-            "Tried to get a distance code which was out of range!",
-        );
+        let d_code_num = get_distance_code(distance);
         self.distance_frequencies[usize::from(d_code_num)] += 1;
         ret
     }
@@ -155,6 +153,17 @@ impl DynamicWriter {
         // since there will always only be one end of block marker in each block
         w.frequencies[END_OF_BLOCK_POSITION] = 1;
         w
+    }
+
+    /// Special output function used with RLE compression
+    /// that avoids bothering to lookup a distance code.
+    pub fn write_length_rle(&mut self, length: u16) -> BufferStatus {
+        let ret = self.fixed_writer.write_length_distance(length, 1);
+        let l_code_num = get_length_code(length);
+        // As we limit the buffer to 2^16 values, this should be safe from overflowing.
+        self.frequencies[l_code_num] += 1;
+        self.distance_frequencies[0] += 1;
+        ret
     }
 
     pub fn get_frequencies(&self) -> (&[u16], &[u16]) {

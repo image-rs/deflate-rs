@@ -1289,12 +1289,9 @@ struct ExtraBits {
 }
 
 /// Get the length code that corresponds to the length value
-pub fn get_length_code(length: u16) -> Option<usize> {
-    if let Some(c) = Some(usize::from(LENGTH_CODE[(length - MIN_MATCH) as usize])) {
-        Some(c + LENGTH_BITS_START as usize)
-    } else {
-        None
-    }
+/// Panics if length is out of range.
+pub fn get_length_code(length: u16) -> usize {
+    usize::from(LENGTH_CODE[(length - MIN_MATCH) as usize]) + LENGTH_BITS_START as usize
 }
 
 /// Get the code for the huffman table and the extra bits for the requested length.
@@ -1316,35 +1313,34 @@ fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
 }
 
 /// Get the spot in the huffman table for distances `distance` corresponds to
-/// Returns none if the distance is 0, or above 32768
-pub fn get_distance_code(distance: u16) -> Option<u8> {
+/// Returns 255 if the distance is invalid.
+/// Avoiding option here for simplicity and performance) as this being called with an invalid
+/// value would be a bug.
+pub fn get_distance_code(distance: u16) -> u8 {
     let distance = distance as usize;
 
     match distance {
         // Since the array starts at 0, we need to subtract 1 to get the correct code number.
-        1...256 => Some(DISTANCE_CODES[distance - 1]),
+        1...256 => DISTANCE_CODES[distance - 1],
         // Due to the distrubution of the distance codes above 256, we can get away with only
         // using the top bits to determine the code, rather than having a 32k long table of
         // distance codes.
-        257...32768 => Some(DISTANCE_CODES[256 + ((distance - 1) >> 7)]),
-        _ => None,
+        257...32768 => DISTANCE_CODES[256 + ((distance - 1) >> 7)],
+        _ => 0,
     }
 }
 
 
 fn get_distance_code_and_extra_bits(distance: u16) -> Option<ExtraBits> {
-    if let Some(distance_code) = get_distance_code(distance) {
-        let extra = num_extra_bits_for_distance_code(distance_code);
-        // FIXME: We should add 1 to the values in distance_base to avoid having to add one here
-        let base = DISTANCE_BASE[distance_code as usize] + 1;
-        Some(ExtraBits {
-            code_number: distance_code.into(),
-            num_bits: extra,
-            value: distance - base,
-        })
-    } else {
-        None
-    }
+    let distance_code = get_distance_code(distance);
+    let extra = num_extra_bits_for_distance_code(distance_code);
+    // FIXME: We should add 1 to the values in distance_base to avoid having to add one here
+    let base = DISTANCE_BASE[distance_code as usize] + 1;
+    Some(ExtraBits {
+        code_number: distance_code.into(),
+        num_bits: extra,
+        value: distance - base,
+    })
 }
 
 #[derive(Copy, Clone, Default)]
@@ -1527,8 +1523,6 @@ impl HuffmanTable {
     }
 
     /// Get the huffman code and extra bits for the specified length
-    ///
-    /// returns None if the length is larger than MIN_MATCH or smaller than MAX_MATCH
     pub fn get_length_huffman(&self, length: StoredLength) -> (HuffmanCode, HuffmanCode) {
 
         let length_data = get_length_code_and_extra_bits(length);
@@ -1624,13 +1618,14 @@ mod test {
 
     #[test]
     fn test_distance_code() {
-        assert_eq!(get_distance_code(1).unwrap(), 0);
-        assert_eq!(get_distance_code(0), None);
-        assert_eq!(get_distance_code(50000), None);
-        assert_eq!(get_distance_code(6146).unwrap(), 25);
-        assert_eq!(get_distance_code(256).unwrap(), 15);
-        assert_eq!(get_distance_code(4733).unwrap(), 24);
-        assert_eq!(get_distance_code(257).unwrap(), 16);
+        assert_eq!(get_distance_code(1), 0);
+        // Using 0 for None at the moment
+        assert_eq!(get_distance_code(0), 0);
+        assert_eq!(get_distance_code(50000), 0);
+        assert_eq!(get_distance_code(6146), 25);
+        assert_eq!(get_distance_code(256), 15);
+        assert_eq!(get_distance_code(4733), 24);
+        assert_eq!(get_distance_code(257), 16);
     }
 
     #[test]

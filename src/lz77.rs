@@ -14,9 +14,7 @@ use huffman_table;
 use chained_hash_table::ChainedHashTable;
 #[cfg(test)]
 use compression_options::{HIGH_MAX_HASH_CHECKS, HIGH_LAZY_IF_LESS_THAN};
-use output_writer::{OutputWriter, BufferStatus};
-#[cfg(test)]
-use output_writer::FixedWriter;
+use output_writer::{OutputWriter, BufferStatus, DynamicWriter};
 use compress::Flush;
 use rle::process_chunk_greedy_rle;
 
@@ -187,12 +185,12 @@ pub fn buffer_full(position: usize) -> ProcessStatus {
     ProcessStatus::BufferFull(position)
 }
 
-fn process_chunk<W: OutputWriter>(
+fn process_chunk(
     data: &[u8],
     iterated_data: &Range<usize>,
     mut match_state: &mut ChunkState,
     hash_table: &mut ChainedHashTable,
-    writer: &mut W,
+    writer: &mut DynamicWriter,
     max_hash_checks: u16,
     lazy_if_less_than: usize,
     matching_type: MatchingType,
@@ -568,14 +566,14 @@ pub enum LZ77Status {
 }
 
 #[cfg(test)]
-pub fn lz77_compress_block_finish<W: OutputWriter>(
+pub fn lz77_compress_block_finish(
     data: &[u8],
     state: &mut LZ77State,
     buffer: &mut InputBuffer,
-    mut writer: &mut W,
+    mut writer: &mut DynamicWriter,
 ) -> (usize, LZ77Status) {
     let (consumed, status, _) =
-        lz77_compress_block::<W>(data, state, buffer, &mut writer, Flush::Finish);
+        lz77_compress_block(data, state, buffer, &mut writer, Flush::Finish);
     (consumed, status)
 }
 
@@ -588,11 +586,11 @@ pub fn lz77_compress_block_finish<W: OutputWriter>(
 /// whether there is no input, it's time to finish, or it's time to end the block, and the position
 /// of the first byte in the input buffer that has not been output (but may have been checked for
 /// matches).
-pub fn lz77_compress_block<W: OutputWriter>(
+pub fn lz77_compress_block(
     data: &[u8],
     state: &mut LZ77State,
     buffer: &mut InputBuffer,
-    mut writer: &mut W,
+    mut writer: &mut DynamicWriter,
     flush: Flush,
 ) -> (usize, LZ77Status, usize) {
     // Currently we only support the maximum window size
@@ -654,7 +652,7 @@ pub fn lz77_compress_block<W: OutputWriter>(
 
                 let start = state.overlap;
 
-                let (overlap, p_status) = process_chunk::<W>(
+                let (overlap, p_status) = process_chunk(
                     buffer.get_buffer(),
                     &(start..first_chunk_end),
                     &mut state.match_state,
@@ -729,7 +727,7 @@ pub fn lz77_compress_block<W: OutputWriter>(
             // or stop because we are at the end of the input data.
             let end = cmp::min(window_size * 2, buffer.current_end());
 
-            let (overlap, p_status) = process_chunk::<W>(
+            let (overlap, p_status) = process_chunk(
                 buffer.get_buffer(),
                 &(start..end),
                 &mut state.match_state,
@@ -879,7 +877,7 @@ pub fn decompress_lz77_with_backbuffer(input: &[LZValue], back_buffer: &[u8]) ->
 pub struct TestStruct {
     state: LZ77State,
     buffer: InputBuffer,
-    writer: FixedWriter,
+    writer: DynamicWriter,
 }
 
 #[cfg(test)]
@@ -900,7 +898,7 @@ impl TestStruct {
         TestStruct {
             state: LZ77State::new(max_hash_checks, lazy_if_less_than, matching_type),
             buffer: InputBuffer::empty(),
-            writer: FixedWriter::new(),
+            writer: DynamicWriter::new(),
         }
     }
 
@@ -1093,10 +1091,9 @@ mod test {
     #[test]
     fn compress_block_status() {
         use input_buffer::InputBuffer;
-        use output_writer::FixedWriter;
 
         let data = b"Test data data";
-        let mut writer = FixedWriter::new();
+        let mut writer = DynamicWriter::new();
 
         let mut buffer = InputBuffer::empty();
         let mut state = LZ77State::new(4096, DEFAULT_LAZY_IF_LESS_THAN, MatchingType::Lazy);
@@ -1109,11 +1106,11 @@ mod test {
     #[test]
     fn compress_block_multiple_windows() {
         use input_buffer::InputBuffer;
-        use output_writer::{OutputWriter, FixedWriter};
+        use output_writer::{OutputWriter, DynamicWriter};
 
         let data = get_test_data();
         assert!(data.len() > (WINDOW_SIZE * 2) + super::MAX_MATCH);
-        let mut writer = FixedWriter::new();
+        let mut writer = DynamicWriter::new();
 
         let mut buffer = InputBuffer::empty();
         let mut state = LZ77State::new(0, DEFAULT_LAZY_IF_LESS_THAN, MatchingType::Lazy);

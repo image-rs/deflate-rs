@@ -1,5 +1,5 @@
 use lz77::{ProcessStatus, buffer_full};
-use output_writer::{OutputWriter, BufferStatus};
+use output_writer::{OutputWriter, BufferStatus, DynamicWriter};
 use matching::get_match_length;
 use huffman_table;
 
@@ -8,10 +8,10 @@ use std::cmp;
 
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 
-pub fn process_chunk_greedy_rle<W: OutputWriter>(
+pub fn process_chunk_greedy_rle(
     data: &[u8],
     iterated_data: &Range<usize>,
-    writer: &mut W,
+    writer: &mut DynamicWriter,
 ) -> (usize, ProcessStatus) {
     let end = cmp::min(data.len(), iterated_data.end);
     // Start on at least byte 1.
@@ -33,7 +33,7 @@ pub fn process_chunk_greedy_rle<W: OutputWriter>(
                 // We need to subtract 1 since the byte at pos is also included.
                 overlap = position + match_len - end;
             };
-            let b_status = writer.write_length_distance(match_len as u16, 1);
+            let b_status = writer.write_length_rle(match_len as u16);
             if b_status == BufferStatus::Full {
                 return (overlap, buffer_full(position + match_len));
             }
@@ -49,7 +49,6 @@ pub fn process_chunk_greedy_rle<W: OutputWriter>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use output_writer::FixedWriter;
     use lzvalue::{LZValue, lit, ld};
 
     fn l(c: char) -> LZValue {
@@ -59,7 +58,7 @@ mod test {
     #[test]
     fn rle_compress() {
         let input = b"textaaaaaaaaatext";
-        let mut w = FixedWriter::new();
+        let mut w = DynamicWriter::new();
         let r = 0..input.len();
         let (overlap, _) = process_chunk_greedy_rle(input, &r, &mut w);
         let expected = [
