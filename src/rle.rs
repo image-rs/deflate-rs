@@ -13,7 +13,10 @@ const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
 ///
 /// Checks how many of the next bytes from the start of the slice `data` matches prev.
 fn get_match_length_rle(data: &[u8], prev: u8) -> usize {
-    data.iter().take(MAX_MATCH).take_while(|&&b| b == prev).count()
+    data.iter()
+        .take(MAX_MATCH)
+        .take_while(|&&b| b == prev)
+        .count()
 }
 
 /// L77-Compress data using the RLE(Run-length encoding) strategy

@@ -211,7 +211,7 @@ pub fn gen_huffman_lengths(
 
 
     // Encode length values
-    let mut freqs = [0u16;19];
+    let mut freqs = [0u16; 19];
     let encoded = encode_lengths_m(l_lengths.iter().chain(d_lengths.iter()), &mut freqs);
 
     // Create huffman lengths for the length/distance code lengths

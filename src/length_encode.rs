@@ -61,13 +61,13 @@ fn not_max_repetitions(length_value: u8, repeats: u8) -> bool {
 
 ///Convenience version for unit tests.
 #[cfg(test)]
-pub fn encode_lengths<'a,I>(lengths: I) -> (Vec<EncodedLength>, [u16; 19])
-    where
-    I: Iterator<Item = &'a u8> + Clone
+pub fn encode_lengths<'a, I>(lengths: I) -> (Vec<EncodedLength>, [u16; 19])
+where
+    I: Iterator<Item = &'a u8> + Clone,
 {
-    let mut freqs = [0u16;19];
+    let mut freqs = [0u16; 19];
     let encoded = encode_lengths_m(lengths, &mut freqs);
-    (encoded,freqs)
+    (encoded, freqs)
 }
 
 /// Run-length encodes the lengths of the values in `lengths` according to the deflate
@@ -78,7 +78,7 @@ pub fn encode_lengths<'a,I>(lengths: I) -> (Vec<EncodedLength>, [u16; 19])
 /// Populates the supplied array with the frequency of the different encoded length values
 /// The frequency array is taken as a parameter rather than returned to avoid
 /// excessive memcpying.
-pub fn encode_lengths_m<'a,I>(lengths: I, mut frequencies: &mut [u16; 19]) -> Vec<EncodedLength>
+pub fn encode_lengths_m<'a, I>(lengths: I, mut frequencies: &mut [u16; 19]) -> Vec<EncodedLength>
 where
     I: Iterator<Item = &'a u8> + Clone,
 {

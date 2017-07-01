@@ -94,7 +94,7 @@ fn issue_17() {
 
 #[test]
 fn test_rle() {
-    use deflate::{deflate_bytes_conf,CompressionOptions};
+    use deflate::{deflate_bytes_conf, CompressionOptions};
     let test_data = get_test_data();
     let compressed = deflate_bytes_conf(&test_data, CompressionOptions::rle());
     let decompressed = {
