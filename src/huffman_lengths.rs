@@ -4,11 +4,11 @@ use length_encode::{encode_lengths_m, huffman_lengths_from_frequency, COPY_PREVI
 use huffman_table::{create_codes, num_extra_bits_for_length_code,
                     num_extra_bits_for_distance_code, NUM_LITERALS_AND_LENGTHS,
                     NUM_DISTANCE_CODES, MAX_CODE_LENGTH, FIXED_CODE_LENGTHS, LENGTH_BITS_START};
-use bitstream::{BitWriter, LsbWriter};
+use bitstream::LsbWriter;
 use output_writer::FrequencyType;
 use stored_block::MAX_STORED_BLOCK_LENGTH;
 
-use std::io::{Write, Result};
+use std::io::Result;
 use std::cmp;
 
 // The minimum number of literal/length values
@@ -277,10 +277,7 @@ pub fn gen_huffman_lengths(
 }
 
 /// Write the specified huffman lengths to the bit writer
-pub fn write_huffman_lengths<W: Write>(
-    header: &DynamicBlockHeader,
-    writer: &mut LsbWriter<W>,
-) -> Result<()> {
+pub fn write_huffman_lengths(header: &DynamicBlockHeader, writer: &mut LsbWriter) -> Result<()> {
 
     let literal_len_lengths = &header.l_lengths;
     let distance_lengths = &header.d_lengths;
@@ -295,10 +292,10 @@ pub fn write_huffman_lengths<W: Write>(
 
     // Number of length codes - 257
     let hlit = (literal_len_lengths.len() - MIN_NUM_LITERALS_AND_LENGTHS) as u16;
-    writer.write_bits(hlit, HLIT_BITS)?;
+    writer.write_bits(hlit, HLIT_BITS);
     // Number of distance codes - 1
     let hdist = (distance_lengths.len() - MIN_NUM_DISTANCES) as u16;
-    writer.write_bits(hdist, HDIST_BITS)?;
+    writer.write_bits(hdist, HDIST_BITS);
 
     // Number of huffman table lengths - 4
     let hclen = used_hclens.saturating_sub(4);
@@ -306,46 +303,43 @@ pub fn write_huffman_lengths<W: Write>(
     // Write HCLEN.
     // Casting to u16 is safe since the length can never be more than the length of
     // `HUFFMAN_LENGTH_ORDER` anyhow.
-    writer.write_bits(hclen as u16, HCLEN_BITS)?;
+    writer.write_bits(hclen as u16, HCLEN_BITS);
 
     // Write the lengths for the huffman table describing the huffman table
     // Each length is 3 bits
     for n in &HUFFMAN_LENGTH_ORDER[..used_hclens] {
-        writer.write_bits(
-            huffman_table_lengths[usize::from(*n)] as u16,
-            3,
-        )?;
+        writer.write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3);
     }
 
     // Generate codes for the main huffman table using the lengths we just wrote
-    let codes = create_codes(huffman_table_lengths).expect("Failed to create huffman codes!");
+    let codes = create_codes(huffman_table_lengths);
 
     // Write the actual huffman lengths
     for v in encoded_lengths {
         match *v {
             EncodedLength::Length(n) => {
                 let code = codes[usize::from(n)];
-                writer.write_bits(code.code, code.length)?;
+                writer.write_bits(code.code, code.length);
             }
             EncodedLength::CopyPrevious(n) => {
                 let code = codes[COPY_PREVIOUS];
-                writer.write_bits(code.code, code.length)?;
+                writer.write_bits(code.code, code.length);
                 assert!(n >= 3);
                 assert!(n <= 6);
-                writer.write_bits((n - 3).into(), 2)?;
+                writer.write_bits((n - 3).into(), 2);
             }
             EncodedLength::RepeatZero3Bits(n) => {
                 let code = codes[REPEAT_ZERO_3_BITS];
-                writer.write_bits(code.code, code.length)?;
+                writer.write_bits(code.code, code.length);
                 assert!(n >= 3);
-                writer.write_bits((n - 3).into(), 3)?;
+                writer.write_bits((n - 3).into(), 3);
             }
             EncodedLength::RepeatZero7Bits(n) => {
                 let code = codes[REPEAT_ZERO_7_BITS];
-                writer.write_bits(code.code, code.length)?;
+                writer.write_bits(code.code, code.length);
                 assert!(n >= 11);
                 assert!(n <= 138);
-                writer.write_bits((n - 11).into(), 7)?;
+                writer.write_bits((n - 11).into(), 7);
             }
         }
     }

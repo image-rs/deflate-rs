@@ -69,7 +69,7 @@ impl<W: Write> DeflateState<W> {
     ///
     /// If flushing fails, the rest of the writer is not cleared.
     pub fn reset(&mut self, writer: W) -> io::Result<W> {
-        self.encoder_state.flush()?;
+        self.encoder_state.flush();
         self.inner.as_mut().expect("Missing writer!").write_all(
             self.encoder_state.inner_vec(),
         )?;

@@ -1,8 +1,7 @@
 use std::io::Write;
 use std::io;
 use std::u16;
-use bitstream::BitWriter;
-
+use bitstream::LsbWriter;
 use byteorder::{LittleEndian, WriteBytesExt};
 
 #[cfg(test)]
@@ -12,16 +11,16 @@ const STORED_FIRST_BYTE: u8 = 0b0000_0000;
 pub const STORED_FIRST_BYTE_FINAL: u8 = 0b0000_0001;
 pub const MAX_STORED_BLOCK_LENGTH: usize = (u16::MAX as usize) / 2;
 
-pub fn write_stored_header<W: BitWriter>(writer: &mut W, final_block: bool) -> io::Result<()> {
+pub fn write_stored_header(writer: &mut LsbWriter, final_block: bool) {
     let header = if final_block {
         STORED_FIRST_BYTE_FINAL
     } else {
         STORED_FIRST_BYTE
     };
     // Write the block header
-    writer.write_bits(header.into(), 3)?;
+    writer.write_bits(header.into(), 3);
     // Flush the writer to make sure we are aligned to the byte boundary.
-    writer.flush()
+    writer.flush_raw();
 }
 
 // Compress one stored block (excluding the header)

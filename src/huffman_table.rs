@@ -1,34 +1,6 @@
 use std::fmt;
 use bit_reverse::reverse_bits;
-use std::io;
 use lzvalue::StoredLength;
-
-#[derive(Debug)]
-pub enum HuffmanError {
-    EmptyLengthTable,
-    CodeTooLong,
-    _TooManyOfLength,
-}
-
-impl From<HuffmanError> for io::Error {
-    fn from(err: HuffmanError) -> io::Error {
-        // As these errors indicate bugs, rather than invalid input,
-        // we don't bother returning custom error types for them to the user.
-        match err {
-            HuffmanError::EmptyLengthTable => {
-                io::Error::new(io::ErrorKind::Other, "BUG! The length table was empty!")
-            }
-            HuffmanError::CodeTooLong => {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    "BUG! One or more huffman codes had a length that exceeded the \
-                                maximum allowed length value.",
-                )
-            }
-            _ => unimplemented!(),
-        }
-    }
-}
 
 // The number of length codes in the huffman table
 pub const NUM_LENGTH_CODES: usize = 29;
@@ -58,7 +30,6 @@ pub const END_OF_BLOCK_POSITION: usize = 256;
 
 // Bit lengths for literal and length codes in the fixed huffman table
 // The huffman codes are generated from this and the distance bit length table
-#[allow(unused)]
 pub static FIXED_CODE_LENGTHS: [u8; NUM_LITERALS_AND_LENGTHS + 2] = [
     8,
     8,
@@ -353,7 +324,7 @@ pub static FIXED_CODE_LENGTHS: [u8; NUM_LITERALS_AND_LENGTHS + 2] = [
 
 
 // The number of extra bits for the length codes
-static LENGTH_EXTRA_BITS_LENGTH: [u8; NUM_LENGTH_CODES] = [
+const LENGTH_EXTRA_BITS_LENGTH: [u8; NUM_LENGTH_CODES] = [
     0,
     0,
     0,
@@ -386,7 +357,7 @@ static LENGTH_EXTRA_BITS_LENGTH: [u8; NUM_LENGTH_CODES] = [
 ];
 
 // Table used to get a code from a length value (see get_distance_code_and_extra_bits)
-static LENGTH_CODE: [u8; 256] = [
+const LENGTH_CODE: [u8; 256] = [
     0,
     1,
     2,
@@ -646,7 +617,7 @@ static LENGTH_CODE: [u8; 256] = [
 ];
 
 // Base values to calculate the value of the bits in length codes
-static BASE_LENGTH: [u8; NUM_LENGTH_CODES] = [
+const BASE_LENGTH: [u8; NUM_LENGTH_CODES] = [
     0,
     1,
     2,
@@ -683,9 +654,9 @@ pub const LENGTH_BITS_START: u16 = 257;
 
 // Lengths for the distance codes in the pre-defined/fixed huffman table
 // (All distance codes are 5 bits long)
-pub static FIXED_CODE_LENGTHS_DISTANCE: [u8; NUM_DISTANCE_CODES + 2] = [5; NUM_DISTANCE_CODES + 2];
+pub const FIXED_CODE_LENGTHS_DISTANCE: [u8; NUM_DISTANCE_CODES + 2] = [5; NUM_DISTANCE_CODES + 2];
 
-static DISTANCE_CODES: [u8; 512] = [
+const DISTANCE_CODES: [u8; 512] = [
     0,
     1,
     2,
@@ -1201,7 +1172,7 @@ static DISTANCE_CODES: [u8; 512] = [
 ];
 
 // Number of extra bits following the distance codes
-static DISTANCE_EXTRA_BITS: [u8; NUM_DISTANCE_CODES] = [
+const DISTANCE_EXTRA_BITS: [u8; NUM_DISTANCE_CODES] = [
     0,
     0,
     0,
@@ -1234,7 +1205,7 @@ static DISTANCE_EXTRA_BITS: [u8; NUM_DISTANCE_CODES] = [
     13,
 ];
 
-static DISTANCE_BASE: [u16; NUM_DISTANCE_CODES] = [
+const DISTANCE_BASE: [u16; NUM_DISTANCE_CODES] = [
     0,
     1,
     2,
@@ -1331,16 +1302,16 @@ pub fn get_distance_code(distance: u16) -> u8 {
 }
 
 
-fn get_distance_code_and_extra_bits(distance: u16) -> Option<ExtraBits> {
+fn get_distance_code_and_extra_bits(distance: u16) -> ExtraBits {
     let distance_code = get_distance_code(distance);
     let extra = num_extra_bits_for_distance_code(distance_code);
     // FIXME: We should add 1 to the values in distance_base to avoid having to add one here
     let base = DISTANCE_BASE[distance_code as usize] + 1;
-    Some(ExtraBits {
+    ExtraBits {
         code_number: distance_code.into(),
         num_bits: extra,
         value: distance - base,
-    })
+    }
 }
 
 #[derive(Copy, Clone, Default)]
@@ -1387,18 +1358,15 @@ pub struct LengthAndDistanceBits {
 /// Returns a tuple containing the longest length value in the table, it's position,
 /// and a vector of lengths.
 /// Returns an error if `table` is empty, or if any of the lengths exceed 15.
-fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), HuffmanError> {
+fn build_length_count_table(table: &[u8]) -> (usize, usize, Vec<u16>) {
     // TODO: Validate the length table properly
     //
     let max_length = match table.iter().max() {
         Some(l) => (*l).into(),
-        None => return Err(HuffmanError::EmptyLengthTable),
+        None => panic!("Empty lengths!"),
     };
 
-    // Check if the longest code length is longer than allowed
-    if max_length > MAX_CODE_LENGTH {
-        return Err(HuffmanError::CodeTooLong);
-    }
+    assert!(max_length <= MAX_CODE_LENGTH);
 
     let mut max_length_pos = 0;
 
@@ -1411,24 +1379,21 @@ fn build_length_count_table(table: &[u8]) -> Result<(usize, usize, Vec<u16>), Hu
             max_length_pos = n;
         }
     }
-    Ok((max_length, max_length_pos, len_counts))
+    (max_length, max_length_pos, len_counts)
 }
 
-pub fn create_codes(length_table: &[u8]) -> Result<Vec<HuffmanCode>, HuffmanError> {
+pub fn create_codes(length_table: &[u8]) -> Vec<HuffmanCode> {
     let mut codes = vec![HuffmanCode::default(); length_table.len()];
-    create_codes_in_place(codes.as_mut_slice(), length_table)?;
-    Ok(codes)
+    create_codes_in_place(codes.as_mut_slice(), length_table);
+    codes
 }
 
 /// Generats a vector of huffman codes given a table of bit lengths
 /// Returns an error if any of the lengths are > 15
-pub fn create_codes_in_place(
-    code_table: &mut [HuffmanCode],
-    length_table: &[u8],
-) -> Result<(), HuffmanError> {
+pub fn create_codes_in_place(code_table: &mut [HuffmanCode], length_table: &[u8]) {
 
 
-    let (max_length, max_length_pos, lengths) = build_length_count_table(length_table)?;
+    let (max_length, max_length_pos, lengths) = build_length_count_table(length_table);
 
     let mut code = 0u16;
     let mut next_code = Vec::with_capacity(length_table.len());
@@ -1445,13 +1410,12 @@ pub fn create_codes_in_place(
             // The algorithm generates the code in the reverse bit order, so we need to reverse them
             // to get the correct codes.
             code_table[n] = HuffmanCode::from_reversed_bits(next_code[length], length as u8)
-                .ok_or(HuffmanError::CodeTooLong)?;
+                .expect("Huffman code too long!");
             // We use wrapping here as we would otherwise overflow on the last code
             // This should be okay as we exit the loop after this so the value is ignored
             next_code[length] = next_code[length].wrapping_add(1);
         }
     }
-    Ok(())
 }
 
 /// A structure containing the tables of huffman codes for lengths, literals and distances
@@ -1471,33 +1435,26 @@ impl HuffmanTable {
     }
 
     #[cfg(test)]
-    pub fn from_length_tables(
-        literals_and_lengths: &[u8],
-        distances: &[u8],
-    ) -> Result<HuffmanTable, HuffmanError> {
+    pub fn from_length_tables(literals_and_lengths: &[u8], distances: &[u8]) -> HuffmanTable {
         let mut table = HuffmanTable {
             codes: [HuffmanCode::default(); 288],
             distance_codes: [HuffmanCode::default(); 32],
         };
 
-        create_codes_in_place(table.codes.as_mut(), literals_and_lengths)?;
-        create_codes_in_place(table.distance_codes.as_mut(), distances)?;
-        Ok(table)
+        create_codes_in_place(table.codes.as_mut(), literals_and_lengths);
+        create_codes_in_place(table.distance_codes.as_mut(), distances);
+        table
     }
 
     /// Update the `HuffmanTable` from the provided length tables.
     /// Returns Err if the tables have lengths > 50, the
     /// tables are too short, or are otherwise not formed correctly.
-    pub fn update_from_length_tables(
-        &mut self,
-        literals_and_lengths: &[u8],
-        distances: &[u8],
-    ) -> Result<(), HuffmanError> {
-        create_codes_in_place(self.codes.as_mut(), literals_and_lengths)?;
+    pub fn update_from_length_tables(&mut self, literals_and_lengths: &[u8], distances: &[u8]) {
+        create_codes_in_place(self.codes.as_mut(), literals_and_lengths);
         create_codes_in_place(self.distance_codes.as_mut(), distances)
     }
 
-    pub fn set_to_fixed(&mut self) -> Result<(), HuffmanError> {
+    pub fn set_to_fixed(&mut self) {
         self.update_from_length_tables(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE)
     }
 
@@ -1506,10 +1463,7 @@ impl HuffmanTable {
     pub fn fixed_table() -> HuffmanTable {
         // This should be safe to unwrap, if it were to panic the code is wrong,
         // tests should catch it.
-        HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE).expect(
-            "Error: Failed to build table for fixed huffman codes, this indicates an \
-                     error somewhere in the code.",
-        )
+        HuffmanTable::from_length_tables(&FIXED_CODE_LENGTHS, &FIXED_CODE_LENGTHS_DISTANCE)
     }
 
     /// Get the huffman code from the corresponding literal value
@@ -1540,25 +1494,20 @@ impl HuffmanTable {
     /// Get the huffman code and extra bits for the specified distance
     ///
     /// Returns None if distance is 0 or above 32768
-    pub fn get_distance_huffman(&self, distance: u16) -> Option<((HuffmanCode, HuffmanCode))> {
-        if distance < MIN_DISTANCE || distance > MAX_DISTANCE {
-            return None;
-        }
+    pub fn get_distance_huffman(&self, distance: u16) -> (HuffmanCode, HuffmanCode) {
+        debug_assert!(distance >= MIN_DISTANCE && distance <= MAX_DISTANCE);
 
-        let distance_data = match get_distance_code_and_extra_bits(distance) {
-            Some(t) => t,
-            None => return None,
-        };
+        let distance_data = get_distance_code_and_extra_bits(distance);
 
         let distance_huffman_code = self.distance_codes[distance_data.code_number as usize];
 
-        Some((
+        (
             distance_huffman_code,
             HuffmanCode {
                 code: distance_data.value,
                 length: distance_data.num_bits,
             },
-        ))
+        )
     }
 
     #[cfg(test)]
@@ -1569,7 +1518,7 @@ impl HuffmanTable {
     ) -> Option<(LengthAndDistanceBits)> {
         assert!(length >= MIN_MATCH && length < MAX_DISTANCE);
         let l_codes = self.get_length_huffman(StoredLength::from_actual_length(length));
-        let d_codes = self.get_distance_huffman(distance).unwrap();
+        let d_codes = self.get_distance_huffman(distance);
         Some(LengthAndDistanceBits {
             length_code: l_codes.0,
             length_extra_bits: l_codes.1,
@@ -1582,9 +1531,7 @@ impl HuffmanTable {
 #[cfg(test)]
 mod test {
     // There seems to be a bug with unused importwarnings here, so we ignore them for now
-    #[allow(unused_imports)]
     use super::*;
-    #[allow(unused_imports)]
     use super::{get_length_code_and_extra_bits, get_distance_code_and_extra_bits,
                 build_length_count_table};
 
@@ -1630,41 +1577,35 @@ mod test {
 
     #[test]
     fn test_distance_extra_bits() {
-        let extra = get_distance_code_and_extra_bits(527).unwrap();
+        let extra = get_distance_code_and_extra_bits(527);
         assert_eq!(extra.value, 0b1110);
         assert_eq!(extra.code_number, 18);
         assert_eq!(extra.num_bits, 8);
-        let extra = get_distance_code_and_extra_bits(256).unwrap();
+        let extra = get_distance_code_and_extra_bits(256);
         assert_eq!(extra.code_number, 15);
         assert_eq!(extra.num_bits, 6);
-        let extra = get_distance_code_and_extra_bits(4733).unwrap();
+        let extra = get_distance_code_and_extra_bits(4733);
         assert_eq!(extra.code_number, 24);
         assert_eq!(extra.num_bits, 11);
     }
 
     #[test]
     fn test_length_table_fixed() {
-        let _ = build_length_count_table(&FIXED_CODE_LENGTHS).unwrap();
+        let _ = build_length_count_table(&FIXED_CODE_LENGTHS);
     }
 
     #[test]
+    #[should_panic]
     fn test_length_table_max_length() {
         let table = [16u8; 288];
-        let test = build_length_count_table(&table);
-        match test {
-            Err(HuffmanError::CodeTooLong) => (),
-            _ => panic!("Didn't fail with invalid length!"),
-        };
+        build_length_count_table(&table);
     }
 
     #[test]
+    #[should_panic]
     fn test_empty_table() {
         let table = [];
-        let test = build_length_count_table(&table);
-        match test {
-            Err(HuffmanError::EmptyLengthTable) => (),
-            _ => panic!("Empty length table didn't fail!'"),
-        }
+        build_length_count_table(&table);
     }
 
     #[test]
