@@ -1,3 +1,13 @@
+//! This module contains the various options to tweak how compression is performed.
+//!
+//! Note that due to the nature of the `DEFLATE` format, lower compression levels
+//! may for some data compress better than higher compression levels.
+//!
+//! For applications where a maximum level of compression (irrespective of compression
+//! speed) is required, consider using the [`Zopfli`](https://crates.io/crates/zopfli)
+//! compressor, which uses a specialised (but slow) algorithm to figure out the maximum
+//! of compression for the provided data.
+//!
 use lz77::MatchingType;
 use std::convert::From;
 
@@ -156,6 +166,8 @@ impl CompressionOptions {
     ///
     /// This is very fast, but tends to compress worse than looking for more matches using hash
     /// chains that the slower settings do.
+    /// Works best on data that has runs of equivialent bytes, like binary or simple images,
+    /// less good for text.
     pub fn rle() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: 0,

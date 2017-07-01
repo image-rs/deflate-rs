@@ -59,18 +59,30 @@ fn not_max_repetitions(length_value: u8, repeats: u8) -> bool {
     (length_value == 0 && repeats < 138) || repeats < 6
 }
 
+///Convenience version for unit tests.
+#[cfg(test)]
+pub fn encode_lengths<'a,I>(lengths: I) -> (Vec<EncodedLength>, [u16; 19])
+    where
+    I: Iterator<Item = &'a u8> + Clone
+{
+    let mut freqs = [0u16;19];
+    let encoded = encode_lengths_m(lengths, &mut freqs);
+    (encoded,freqs)
+}
+
 /// Run-length encodes the lengths of the values in `lengths` according to the deflate
 /// specification. This is used for writing the code lengths for the huffman tables for
 /// the deflate stream.
-/// Returns a tuple containing a vec of the encoded lengths, and an array describing the frequencies
-/// of the different length codes
-pub fn encode_lengths<I>(lengths: I) -> (Vec<EncodedLength>, [u16; 19])
+///
+/// Returns a tuple containing a vec of the encoded lengths
+/// Populates the supplied array with the frequency of the different encoded length values
+/// The frequency array is taken as a parameter rather than returned to avoid
+/// excessive memcpying.
+pub fn encode_lengths_m<'a,I>(lengths: I, mut frequencies: &mut [u16; 19]) -> Vec<EncodedLength>
 where
-    I: Iterator<Item = u8> + Clone,
+    I: Iterator<Item = &'a u8> + Clone,
 {
-    let lengths = lengths;
     let mut out = Vec::with_capacity(lengths.size_hint().0 / 2);
-    let mut frequencies = [0u16; 19];
     // Number of repetitions of the current value
     let mut repeat = 0;
     let mut iter = lengths.clone().enumerate().peekable();
@@ -78,7 +90,7 @@ where
     // We set it to the compliment of the first falue to simplify the code.
     let mut prev = !iter.peek().expect("No length values!").1;
 
-    while let Some((n, l)) = iter.next() {
+    while let Some((n, &l)) = iter.next() {
         if l == prev && not_max_repetitions(l, repeat) {
             repeat += 1;
         }
@@ -125,7 +137,7 @@ where
                     0
                 };
 
-                for i in b_iter.take(repeat as usize + extra) {
+                for &i in b_iter.take(repeat as usize + extra) {
                     update_out_and_freq(EncodedLength::Length(i), &mut out, &mut frequencies);
                 }
 
@@ -136,7 +148,7 @@ where
         }
         prev = l;
     }
-    (out, frequencies)
+    out
 }
 
 pub fn huffman_lengths_from_frequency(frequencies: &[u16], max_len: usize) -> Vec<u8> {
@@ -374,7 +386,7 @@ mod test {
     #[test]
     fn test_encode_lengths() {
         use huffman_table::FIXED_CODE_LENGTHS;
-        let enc = encode_lengths(FIXED_CODE_LENGTHS.iter().cloned());
+        let enc = encode_lengths(FIXED_CODE_LENGTHS.iter());
         // There are no lengths lower than 6 in the fixed table
         assert_eq!(enc.1[0..7], [0, 0, 0, 0, 0, 0, 0]);
         // Neither are there any lengths above 9
@@ -383,7 +395,7 @@ mod test {
         assert_eq!(enc.1[17..19], [0, 0]);
 
         let test_lengths = [0, 0, 5, 0, 15, 1, 0, 0, 0, 2, 4, 4, 4, 4, 3, 5, 5, 5, 5];
-        let enc = encode_lengths(test_lengths.iter().cloned()).0;
+        let enc = encode_lengths(test_lengths.iter()).0;
         assert_eq!(
             enc,
             vec![
@@ -403,11 +415,11 @@ mod test {
             ]
         );
         let test_lengths = [0, 0, 0, 5, 2, 3, 0, 0, 0];
-        let enc = encode_lengths(test_lengths.iter().cloned()).0;
+        let enc = encode_lengths(test_lengths.iter()).0;
         assert_eq!(enc, vec![zero(3), lit(5), lit(2), lit(3), zero(3)]);
 
         let test_lengths = [0, 0, 0, 3, 3, 3, 5, 4, 4, 4, 4, 0, 0];
-        let enc = encode_lengths(test_lengths.iter().cloned()).0;
+        let enc = encode_lengths(test_lengths.iter()).0;
         assert_eq!(
             enc,
             vec![
@@ -714,7 +726,7 @@ mod test {
             1,
         ];
 
-        let _ = encode_lengths(lens.iter().cloned()).0;
+        let _ = encode_lengths(lens.iter()).0;
 
         let lens = [
             0,
@@ -1025,7 +1037,7 @@ mod test {
             4,
         ];
 
-        let enc = encode_lengths(lens.iter().cloned()).0;
+        let enc = encode_lengths(lens.iter()).0;
 
         assert_eq!(
             &enc[..10],
@@ -1058,17 +1070,17 @@ mod test {
             ]
         );
 
-        let enc = encode_lengths([1, 1, 1, 2].iter().cloned()).0;
+        let enc = encode_lengths([1, 1, 1, 2].iter()).0;
         assert_eq!(enc, vec![lit(1), lit(1), lit(1), lit(2)]);
-        let enc = encode_lengths([0, 0, 3].iter().cloned()).0;
+        let enc = encode_lengths([0, 0, 3].iter()).0;
         assert_eq!(enc, vec![lit(0), lit(0), lit(3)]);
-        let enc = encode_lengths([0, 0, 0, 5, 2].iter().cloned()).0;
+        let enc = encode_lengths([0, 0, 0, 5, 2].iter()).0;
         assert_eq!(enc, vec![zero(3), lit(5), lit(2)]);
 
-        let enc = encode_lengths([0, 0, 0, 5, 0].iter().cloned()).0;
+        let enc = encode_lengths([0, 0, 0, 5, 0].iter()).0;
         assert!(*enc.last().unwrap() != lit(5));
 
-        let enc = encode_lengths([0, 4, 4, 4, 4, 0].iter().cloned()).0;
+        let enc = encode_lengths([0, 4, 4, 4, 4, 0].iter()).0;
         assert_eq!(*enc.last().unwrap(), zero(0));
     }
 

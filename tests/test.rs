@@ -91,3 +91,21 @@ fn issue_17() {
 
     roundtrip(&data);
 }
+
+#[test]
+fn test_rle() {
+    use deflate::{deflate_bytes_conf,CompressionOptions};
+    let test_data = get_test_data();
+    let compressed = deflate_bytes_conf(&test_data, CompressionOptions::rle());
+    let decompressed = {
+        let mut d = flate2::read::DeflateDecoder::new(compressed.as_slice());
+        let mut out = Vec::new();
+        d.read_to_end(&mut out).unwrap();
+        out
+    };
+
+    println!("Input size: {}", test_data.len());
+    println!("Rle compressed len: {}", compressed.len());
+
+    assert!(test_data == decompressed);
+}

@@ -1,5 +1,5 @@
 use length_encode::EncodedLength;
-use length_encode::{encode_lengths, huffman_lengths_from_frequency, COPY_PREVIOUS,
+use length_encode::{encode_lengths_m, huffman_lengths_from_frequency, COPY_PREVIOUS,
                     REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS};
 use huffman_table::{create_codes, num_extra_bits_for_length_code,
                     num_extra_bits_for_distance_code, NUM_LITERALS_AND_LENGTHS,
@@ -211,7 +211,8 @@ pub fn gen_huffman_lengths(
 
 
     // Encode length values
-    let (encoded, freqs) = encode_lengths(l_lengths.iter().chain(d_lengths.iter()).cloned());
+    let mut freqs = [0u16;19];
+    let encoded = encode_lengths_m(l_lengths.iter().chain(d_lengths.iter()), &mut freqs);
 
     // Create huffman lengths for the length/distance code lengths
     let huffman_table_lengths = huffman_lengths_from_frequency(&freqs, MAX_HUFFMAN_CODE_LENGTH);
