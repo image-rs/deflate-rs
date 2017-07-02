@@ -37,6 +37,7 @@ pub const REPEAT_ZERO_7_BITS: usize = 18;
 
 const MIN_REPEAT: u8 = 3;
 
+/// Push an `EncodedLength` to the vector and update the frequency table.
 fn update_out_and_freq(
     encoded: EncodedLength,
     output: &mut Vec<EncodedLength>,
@@ -54,7 +55,7 @@ fn update_out_and_freq(
     output.push(encoded);
 }
 
-// Convenience function to check if the repeat counter should be incremented further
+/// Convenience function to check if the repeat counter should be incremented further
 fn not_max_repetitions(length_value: u8, repeats: u8) -> bool {
     (length_value == 0 && repeats < 138) || repeats < 6
 }

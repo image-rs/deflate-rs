@@ -90,6 +90,7 @@ impl ChainedHashTable {
         // bounds checks in this function.
         let new_hash = update_hash(self.current_hash, value);
 
+
         self.prev[position & WINDOW_MASK] = self.head[new_hash as usize];
 
         // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
@@ -118,8 +119,25 @@ impl ChainedHashTable {
     }
 
     #[inline]
+    #[cfg(debug_assertions)]
     pub fn get_prev(&self, bytes: usize) -> u16 {
         self.prev[bytes & WINDOW_MASK]
+    }
+
+    #[inline]
+    #[cfg(not(debug_assertions))]
+    pub fn get_prev(&self, bytes: usize) -> u16 {
+        // Safety: The index is anded by WINDOW_MASK, which is the length
+        // of the prev array - 1, which means that the index value will always
+        // be less than the length of prev.
+        // Prev is made into a boxed slice when the table is created.
+        // and the length can thus not change after init.
+        //
+        // If prev is a Box[u16;WINDOW_SIZE], the compiler will avoid this bounds check
+        // and using unsafe wouldn't be needed. However, the rust compiler is currently
+        // not able to optimise out the stack arrays when using Box::new() to create a
+        // boxed array, which leads to substantially slower initialisation of the hash table.
+        unsafe { *self.prev.get_unchecked(bytes & WINDOW_MASK) }
     }
 
     fn slide_value(b: u16, pos: u16, bytes: u16) -> u16 {

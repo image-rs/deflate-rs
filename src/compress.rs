@@ -182,7 +182,7 @@ pub fn compress_data_dynamic_n<W: Write>(
                 );
 
                 // Output the lengths of the huffman codes used in this block.
-                write_huffman_lengths(&header, &mut deflate_state.encoder_state.writer)?;
+                write_huffman_lengths(&header, &mut deflate_state.encoder_state.writer);
 
                 // Output update the huffman table that will be used to encode the
                 // lz77-compressed data.

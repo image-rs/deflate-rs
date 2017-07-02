@@ -1243,6 +1243,9 @@ pub fn num_extra_bits_for_length_code(code: u8) -> u8 {
 }
 
 pub fn num_extra_bits_for_distance_code(code: u8) -> u8 {
+    // Alternatively, this could possibly be made to generate faster code,
+    // but at the moment doesn't seem to make things faster.
+    // (code >> 1).saturating_sub(1)
     DISTANCE_EXTRA_BITS[code as usize]
 }
 
@@ -1511,20 +1514,16 @@ impl HuffmanTable {
     }
 
     #[cfg(test)]
-    pub fn get_length_distance_code(
-        &self,
-        length: u16,
-        distance: u16,
-    ) -> Option<(LengthAndDistanceBits)> {
+    pub fn get_length_distance_code(&self, length: u16, distance: u16) -> LengthAndDistanceBits {
         assert!(length >= MIN_MATCH && length < MAX_DISTANCE);
         let l_codes = self.get_length_huffman(StoredLength::from_actual_length(length));
         let d_codes = self.get_distance_huffman(distance);
-        Some(LengthAndDistanceBits {
+        LengthAndDistanceBits {
             length_code: l_codes.0,
             length_extra_bits: l_codes.1,
             distance_code: d_codes.0,
             distance_extra_bits: d_codes.1,
-        })
+        }
     }
 }
 
@@ -1623,7 +1622,7 @@ mod test {
         assert_eq!(table.distance_codes[0].code, 0);
         assert_eq!(table.distance_codes[5].code, 20);
 
-        let ld = table.get_length_distance_code(4, 5).unwrap();
+        let ld = table.get_length_distance_code(4, 5);
 
         assert_eq!(ld.length_code.code, 0b00100000);
         assert_eq!(ld.distance_code.code, 0b00100);

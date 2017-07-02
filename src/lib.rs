@@ -8,13 +8,13 @@
 //! like zlib and miniz.
 //!
 //! The deflate algorithm is an older compression algorithm that is still widely used today,
-//! by e.g html headers, the `.png` inage format, the `unix` gzip program and commonly in `.zip`
-//! files. The zlib and gzip formats are wrappers around DEFLATE-compressed data, containing some
-//! extra metadata and a checksum to validate the integrity of the raw data.
+//! by e.g html headers, the `.png` inage format, the unix `gzip` program and commonly in `.zip`
+//! files. The `zlib` and `gzip` formats are wrappers around DEFLATE-compressed data, containing
+//! some extra metadata and a checksum to validate the integrity of the raw data.
 //!
 //! The deflate algorithm does not perform as well as newer algorhitms used in file formats such as
 //! `.7z`, `.rar`, `.xz` and `.bz2`, and is thus not the ideal choice for applications where
-//! the `DEFLATE` format (with our without wrappers) is not required.
+//! the `DEFLATE` format (with or without wrappers) is not required.
 //!
 //! Support for the gzip wrapper (the wrapper that is used in `.gz` files) is disabled by default,
 //! but can be enabled with the `gzip` feature.
@@ -42,8 +42,8 @@
 //!
 //! let data = b"This is some test data";
 //! let mut encoder = ZlibEncoder::new(Vec::new(), Compression::Default);
-//! encoder.write_all(data).unwrap();
-//! let compressed_data = encoder.finish().unwrap();
+//! encoder.write_all(data).expect("Write error!");
+//! let compressed_data = encoder.finish().expect("Failed to finish compression!");
 //! # let _ = compressed_data;
 //! ```
 

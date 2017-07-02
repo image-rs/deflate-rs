@@ -8,7 +8,6 @@ use bitstream::LsbWriter;
 use output_writer::FrequencyType;
 use stored_block::MAX_STORED_BLOCK_LENGTH;
 
-use std::io::Result;
 use std::cmp;
 
 // The minimum number of literal/length values
@@ -200,6 +199,7 @@ pub fn gen_huffman_lengths(
     // generating the lengths to save some work.
     // There is however a minimum number of values we have to keep
     // according to the deflate spec.
+    // TODO: We could probably compute some of this in parallel.
     let l_lengths = huffman_lengths_from_frequency(
         remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS),
         MAX_CODE_LENGTH,
@@ -277,7 +277,7 @@ pub fn gen_huffman_lengths(
 }
 
 /// Write the specified huffman lengths to the bit writer
-pub fn write_huffman_lengths(header: &DynamicBlockHeader, writer: &mut LsbWriter) -> Result<()> {
+pub fn write_huffman_lengths(header: &DynamicBlockHeader, writer: &mut LsbWriter) {
 
     let literal_len_lengths = &header.l_lengths;
     let distance_lengths = &header.d_lengths;
@@ -343,7 +343,6 @@ pub fn write_huffman_lengths(header: &DynamicBlockHeader, writer: &mut LsbWriter
             }
         }
     }
-    Ok(())
 }
 
 
