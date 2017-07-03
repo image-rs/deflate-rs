@@ -1172,6 +1172,7 @@ const DISTANCE_CODES: [u8; 512] = [
 ];
 
 // Number of extra bits following the distance codes
+#[cfg(test)]
 const DISTANCE_EXTRA_BITS: [u8; NUM_DISTANCE_CODES] = [
     0,
     0,
@@ -1242,11 +1243,15 @@ pub fn num_extra_bits_for_length_code(code: u8) -> u8 {
     LENGTH_EXTRA_BITS_LENGTH[code as usize]
 }
 
+/// Get the number of extra bits used for a distance code.
+/// (Code numbers above `NUM_DISTANCE_CODES` will give some garbage
+/// value.)
 pub fn num_extra_bits_for_distance_code(code: u8) -> u8 {
-    // Alternatively, this could possibly be made to generate faster code,
-    // but at the moment doesn't seem to make things faster.
-    // (code >> 1).saturating_sub(1)
-    DISTANCE_EXTRA_BITS[code as usize]
+    // This can be easily calculated without a lookup.
+    //
+    let mut c = code >> 1;
+    c -= (c != 0) as u8;
+    c
 }
 
 /// A struct representing the data needed to generate the bit codes for
@@ -1337,14 +1342,11 @@ impl fmt::Debug for HuffmanCode {
 impl HuffmanCode {
     /// Create a new huffman code struct, reversing the bits in the code
     /// Returns None if the code is longer than 15 bits (the maximum allowed by the DEFLATE spec)
-    fn from_reversed_bits(code: u16, length: u8) -> Option<HuffmanCode> {
-        if length <= 15 {
-            Some(HuffmanCode {
-                code: reverse_bits(code, length),
-                length: length,
-            })
-        } else {
-            None
+    fn from_reversed_bits(code: u16, length: u8) -> HuffmanCode {
+        debug_assert!(length <= 15);
+        HuffmanCode {
+            code: reverse_bits(code, length),
+            length: length,
         }
     }
 }
@@ -1362,12 +1364,8 @@ pub struct LengthAndDistanceBits {
 /// and a vector of lengths.
 /// Returns an error if `table` is empty, or if any of the lengths exceed 15.
 fn build_length_count_table(table: &[u8]) -> (usize, usize, Vec<u16>) {
-    // TODO: Validate the length table properly
-    //
-    let max_length = match table.iter().max() {
-        Some(l) => (*l).into(),
-        None => panic!("Empty lengths!"),
-    };
+    // TODO: Validate the length table properly in debug mode.
+    let max_length = (*table.iter().max().expect("BUG! Empty lengths!")).into();
 
     assert!(max_length <= MAX_CODE_LENGTH);
 
@@ -1412,8 +1410,7 @@ pub fn create_codes_in_place(code_table: &mut [HuffmanCode], length_table: &[u8]
         if length != 0 {
             // The algorithm generates the code in the reverse bit order, so we need to reverse them
             // to get the correct codes.
-            code_table[n] = HuffmanCode::from_reversed_bits(next_code[length], length as u8)
-                .expect("Huffman code too long!");
+            code_table[n] = HuffmanCode::from_reversed_bits(next_code[length], length as u8);
             // We use wrapping here as we would otherwise overflow on the last code
             // This should be okay as we exit the loop after this so the value is ignored
             next_code[length] = next_code[length].wrapping_add(1);
@@ -1529,7 +1526,6 @@ impl HuffmanTable {
 
 #[cfg(test)]
 mod test {
-    // There seems to be a bug with unused importwarnings here, so we ignore them for now
     use super::*;
     use super::{get_length_code_and_extra_bits, get_distance_code_and_extra_bits,
                 build_length_count_table};
@@ -1628,5 +1624,12 @@ mod test {
         assert_eq!(ld.distance_code.code, 0b00100);
         assert_eq!(ld.distance_extra_bits.length, 1);
         assert_eq!(ld.distance_extra_bits.code, 0);
+    }
+
+    #[test]
+    fn extra_bits_distance() {
+        for i in 0..NUM_DISTANCE_CODES {
+            assert_eq!(num_extra_bits_for_distance_code(i as u8), DISTANCE_EXTRA_BITS[i]);
+        }
     }
 }

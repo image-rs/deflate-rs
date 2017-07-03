@@ -5,13 +5,52 @@
 //! This module provides a bit writer
 use std::io::{self, Write};
 
+#[cfg(target_pointer_width="64")]
+#[macro_use]
+mod arch_dep {
+    /// The data type of the accumulator.
+    /// a 64-bit value allows us to store more before
+    /// each push to the vector, but is sub-optimal
+    /// on 32-bit platforms.
+    pub type AccType = u64;
+    pub const FLUSH_AT: u8 = 48;
+    /// Push pending bits to vector.
+    /// Using a macro here since an inline functio
+    /// didn't optimise properly.
+    macro_rules! push{
+        ($s:ident) => {
+            $s.w.extend_from_slice(
+                &[$s.acc as u8,
+                  ($s.acc >> 8) as u8,
+                  ($s.acc >> 16) as u8,
+                  ($s.acc >> 24) as u8,
+                  ($s.acc >> 32) as u8,
+                  ($s.acc >> 40) as u8
+                ][..]);
+        };
+    }
+}
+#[cfg(not(target_pointer_width="64"))]
+#[macro_use]
+mod arch_dep {
+    pub type AccType = u32;
+    pub const FLUSH_AT: u8 = 16;
+    macro_rules! push{
+        ($s:ident) => {
+            $s.w.push($s.acc as u8);
+            $s.w.push(($s.acc >> 8) as u8);
+        };
+    }
+}
+
+use self::arch_dep::*;
 
 ///Writes bits to a byte stream, LSB first.
 pub struct LsbWriter {
     // NOTE(oyvindln) Made this public for now so it can be replaced after initialization.
     pub w: Vec<u8>,
     bits: u8,
-    acc: u32,
+    acc: AccType,
 }
 
 impl LsbWriter {
@@ -29,23 +68,36 @@ impl LsbWriter {
         self.bits
     }
 
+    /// Buffer n number of bits, and write them to the vec if there are enough pending bits.
     pub fn write_bits(&mut self, v: u16, n: u8) {
         // NOTE: This outputs garbage data if n is 0, but v is not 0
-        self.acc |= (v as u32) << self.bits;
+        self.acc |= (v as AccType) << self.bits;
         self.bits += n;
+        // Waiting until we have FLUSH_AT bits and pushing them all in one batch.
+        while self.bits >= FLUSH_AT {
+            push!(self);
+            self.acc >>= FLUSH_AT;
+            self.bits -= FLUSH_AT;
+        }
+    }
+
+    fn write_bits_finish(&mut self, v: u16, n: u8) {
+        // NOTE: This outputs garbage data if n is 0, but v is not 0
+        self.acc |= (v as AccType) << self.bits;
+        self.bits += n % 8;
         while self.bits >= 8 {
             self.w.push(self.acc as u8);
             self.acc >>= 8;
-            self.bits -= 8
+            self.bits -= 8;
         }
     }
 
     pub fn flush_raw(&mut self) {
-        let missing = 8 - self.bits;
+        let missing = FLUSH_AT - self.bits;
         // Have to test for self.bits > 0 here,
         // otherwise flush would output an extra byte when flush was called at a byte boundary
         if missing > 0 && self.bits > 0 {
-            self.write_bits(0, missing);
+            self.write_bits_finish(0, missing);
         }
     }
 }
@@ -137,11 +189,13 @@ mod test {
             213,
             47,
             216,
+            21,
         ];
         let mut writer = LsbWriter::new(Vec::new());
         for v in input.iter() {
             writer.write_bits(v.0, v.1);
         }
+        writer.flush_raw();
         assert_eq!(writer.w, expected);
     }
 }

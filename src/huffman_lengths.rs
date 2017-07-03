@@ -253,7 +253,7 @@ pub fn gen_huffman_lengths(
     let static_length = s_ll_length + s_dist_length;
 
     // Calculate how many bits it will take to store the data in uncompressed (stored) block(s).
-    let stored_length = stored_length(num_input_bytes) + stored_padding(pending_bits);
+    let stored_length = stored_length(num_input_bytes) + stored_padding(pending_bits % 8);
 
     let used_length = cmp::min(cmp::min(dynamic_length, static_length), stored_length);
 
