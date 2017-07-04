@@ -68,7 +68,7 @@ fn deflate_bytes_flate2_zlib(level: Compression, input: &[u8]) -> Vec<u8> {
     use flate2::write::ZlibEncoder;
     use std::io::Write;
 
-    let mut e = ZlibEncoder::new(Vec::new(), level);
+    let mut e = ZlibEncoder::new(Vec::with_capacity(input.len() / 3), level);
     e.write_all(input).unwrap();
     e.finish().unwrap()
 }

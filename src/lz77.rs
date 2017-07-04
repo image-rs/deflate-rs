@@ -1,8 +1,8 @@
 //! This module contains functionality for doing lz77 compression of data.
 #![macro_use]
 use std::cmp;
-use std::ops::Range;
-use std::iter::{Iterator, Enumerate};
+use std::ops::{Range, RangeFrom};
+use std::iter::{self, Iterator};
 use std::slice::Iter;
 use std::fmt;
 
@@ -232,7 +232,7 @@ fn process_chunk(
 fn add_to_hash_table(
     bytes_to_add: usize,
     pos_of_first_byte: usize,
-    insert_it: &mut Enumerate<Iter<u8>>,
+    insert_it: &mut iter::Zip<RangeFrom<usize>, Iter<u8>>, //Enumerate<Iter<u8>>,
     hash_it: &mut Iter<u8>,
     hash_table: &mut ChainedHashTable,
 ) {
@@ -274,12 +274,12 @@ fn match_too_far(match_len: usize, match_dist: usize) -> bool {
 fn create_iterators<'a>(
     data: &'a [u8],
     iterated_data: &Range<usize>,
-) -> (usize, usize, Enumerate<Iter<'a, u8>>, Iter<'a, u8>) {
+) -> (usize, iter::Zip<RangeFrom<usize>, Iter<'a, u8>>, Iter<'a, u8>) {
     let end = cmp::min(data.len(), iterated_data.end);
     let start = iterated_data.start;
     let current_chunk = &data[start..end];
 
-    let insert_it = current_chunk.iter().enumerate();
+    let insert_it = (start..).zip(current_chunk.iter());
     let hash_it = {
         let hash_start = if data.len() - start > 2 {
             start + 2
@@ -288,7 +288,7 @@ fn create_iterators<'a>(
         };
         (&data[hash_start..]).iter()
     };
-    (start, end, insert_it, hash_it)
+    (end, insert_it, hash_it)
 }
 
 fn process_chunk_lazy<W: OutputWriter>(
@@ -301,7 +301,7 @@ fn process_chunk_lazy<W: OutputWriter>(
     lazy_if_less_than: usize,
 ) -> (usize, ProcessStatus) {
 
-    let (start, end, mut insert_it, mut hash_it) = create_iterators(data, iterated_data);
+    let (end, mut insert_it, mut hash_it) = create_iterators(data, iterated_data);
 
     const NO_LENGTH: u16 = 0;
 
@@ -328,16 +328,15 @@ fn process_chunk_lazy<W: OutputWriter>(
     state.prev_byte = state.cur_byte;
 
     // Iterate through the slice, adding literals or length/distance pairs
-    while let Some((n, &b)) = insert_it.next() {
+    while let Some((position, &b)) = insert_it.next() {
         state.cur_byte = b;
         if let Some(&hash_byte) = hash_it.next() {
-            let position = n + start;
             hash_table.add_hash_value(position, hash_byte);
 
             // Only lazy match if we have a match shorter than a set value
             // TODO: This should be cleaned up a bit
             if !ignore_next {
-                let (mut match_len, mut match_dist) = {
+                let (mut match_len, match_dist) = {
                     // If there already was a decent match at the previous byte
                     // and we are lazy matching, do less match checks in this step.
                     let max_hash_checks = if prev_length >= 32 {
@@ -361,7 +360,6 @@ fn process_chunk_lazy<W: OutputWriter>(
                 // outputting.
                 if match_too_far(match_len, match_dist) {
                     match_len = NO_LENGTH as usize;
-                    match_dist = 0;
                 };
 
                 if match_len >= lazy_if_less_than {
@@ -378,9 +376,7 @@ fn process_chunk_lazy<W: OutputWriter>(
                 ignore_next = false;
             };
 
-            if prev_length >= state.current_length && prev_length >= MIN_MATCH as u16 &&
-                prev_distance > 0
-            {
+            if prev_length >= state.current_length && prev_length >= MIN_MATCH as u16 {
                 // The previous match was better so we add it.
                 // Casting note: length and distance is already bounded by the longest match
                 // function. Usize is just used for convenience.
@@ -437,10 +433,8 @@ fn process_chunk_lazy<W: OutputWriter>(
             prev_distance = state.current_distance;
             state.prev_byte = b;
         } else {
-            let position = n + start;
-
             // If there is a match at this point, it will not have been added, so we need to add it.
-            if prev_length >= MIN_MATCH as u16 && prev_distance != 0 {
+            if prev_length >= MIN_MATCH as u16 {
                 let b_status =
                     writer.write_length_distance(prev_length as u16, prev_distance as u16);
 
@@ -488,7 +482,7 @@ fn process_chunk_greedy<W: OutputWriter>(
     max_hash_checks: u16,
 ) -> (usize, ProcessStatus) {
 
-    let (start, end, mut insert_it, mut hash_it) = create_iterators(data, iterated_data);
+    let (end, mut insert_it, mut hash_it) = create_iterators(data, iterated_data);
 
     const NO_LENGTH: usize = 0;
 
@@ -497,9 +491,8 @@ fn process_chunk_greedy<W: OutputWriter>(
     let mut overlap = 0;
 
     // Iterate through the slice, adding literals or length/distance pairs.
-    while let Some((n, &b)) = insert_it.next() {
+    while let Some((position, &b)) = insert_it.next() {
         if let Some(&hash_byte) = hash_it.next() {
-            let position = n + start;
             hash_table.add_hash_value(position, hash_byte);
 
             // TODO: This should be cleaned up a bit.
@@ -507,9 +500,7 @@ fn process_chunk_greedy<W: OutputWriter>(
                 longest_match(data, hash_table, position, NO_LENGTH, max_hash_checks)
             };
 
-            if match_len >= MIN_MATCH as usize && match_dist > 0 &&
-                !match_too_far(match_len, match_dist)
-            {
+            if match_len >= MIN_MATCH as usize && !match_too_far(match_len, match_dist) {
                 // Casting note: length and distance is already bounded by the longest match
                 // function. Usize is just used for convenience.
                 let b_status = writer.write_length_distance(match_len as u16, match_dist as u16);
@@ -547,7 +538,7 @@ fn process_chunk_greedy<W: OutputWriter>(
             // We are at the last two bytes we want to add, so there is no point
             // searching for matches here.
             // END
-            write_literal!(writer, b, n + start + 1);
+            write_literal!(writer, b, position + 1);
         }
     }
     (overlap, ProcessStatus::Ok)
@@ -752,7 +743,9 @@ pub fn lz77_compress_block(
                 state.overlap = if overlap > 0 {
                     // If we are at the end of the window, make sure we slide the buffer and the
                     // hash table.
-                    state.hash_table.slide(window_size);
+                    if state.max_hash_checks > 0 {
+                        state.hash_table.slide(window_size);
+                    }
                     remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
                     overlap
                 } else {
@@ -801,7 +794,9 @@ pub fn lz77_compress_block(
                 // We slide the hash table back to make space for new hash values
                 // We only need to remember 2^15 bytes back (the maximum distance allowed by the
                 // deflate spec).
-                state.hash_table.slide(window_size);
+                if state.max_hash_checks > 0 {
+                    state.hash_table.slide(window_size);
+                }
 
                 // Also slide the buffer, discarding data we no longer need and adding new data.
                 remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));

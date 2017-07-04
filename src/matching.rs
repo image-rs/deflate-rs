@@ -70,9 +70,9 @@ pub fn longest_match(
 
     // debug_assert_eq!(position, hash_table.current_head() as usize);
 
-    // If we are at the start, we already have a match at the maximum length,
+    // If we already have a match at the maximum length,
     // or we can't grow further, we stop here.
-    if position == 0 || prev_length >= MAX_MATCH || position + prev_length >= data.len() {
+    if prev_length >= MAX_MATCH || position + prev_length >= data.len() {
         return (0, 0);
     }
 
@@ -84,7 +84,7 @@ pub fn longest_match(
 
     // Make sure the length is at least one to simplify the matching code, as
     // otherwise the matching code might underflow.
-    let prev_length = if prev_length < 1 { 1 } else { prev_length };
+    let prev_length = cmp::max(prev_length, MIN_MATCH - 1);
 
     let max_length = cmp::min((data.len() - position), MAX_MATCH);
 
@@ -123,7 +123,7 @@ pub fn longest_match(
             // though adding code for skipping these bytes may not result in any speed
             // gain due to the added complexity.
             let length = get_match_length(data, position, current_head);
-            if length > best_length && length >= MIN_MATCH {
+            if length > best_length {
                 best_length = length;
                 best_distance = position - current_head;
                 if length == max_length {
@@ -135,13 +135,16 @@ pub fn longest_match(
         }
     }
 
-    let r = if best_length > prev_length {
+    /*let r = if best_length > prev_length {
         best_length
     } else {
         0
-    };
-
-    (r, best_distance)
+    };*/
+    if best_length > prev_length {
+        (best_length, best_distance)
+    } else {
+        (0, 0)
+    }
 }
 
 // Get the longest match from the current position of the hash table.

@@ -91,7 +91,7 @@ fn calculate_huffman_length(frequencies: &[FrequencyType], code_lengths: &[u8]) 
 fn calculate_block_length<F>(
     frequencies: &[FrequencyType],
     dyn_code_lengths: &[u8],
-    get_num_extra_bits: F,
+    get_num_extra_bits: &F,
 ) -> (u64, u64)
 where
     F: Fn(usize) -> u64,
@@ -232,12 +232,12 @@ pub fn gen_huffman_lengths(
     // (excluding the 3-bit block header since it's used in all block types).
 
     // Total length of the compressed literals/lengths.
-    let (d_ll_length, s_ll_length) = calculate_block_length(l_freqs, &l_lengths, |c| {
+    let (d_ll_length, s_ll_length) = calculate_block_length(l_freqs, &l_lengths, &|c| {
         num_extra_bits_for_length_code(c.saturating_sub(LENGTH_BITS_START as usize) as u8).into()
     });
 
     // Total length of the compressed distances.
-    let (d_dist_length, s_dist_length) = calculate_block_length(d_freqs, &d_lengths, |c| {
+    let (d_dist_length, s_dist_length) = calculate_block_length(d_freqs, &d_lengths, &|c| {
         num_extra_bits_for_distance_code(c as u8).into()
     });
 

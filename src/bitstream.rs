@@ -5,7 +5,7 @@
 //! This module provides a bit writer
 use std::io::{self, Write};
 
-#[cfg(target_pointer_width="64")]
+#[cfg(target_pointer_width = "64")]
 #[macro_use]
 mod arch_dep {
     /// The data type of the accumulator.
@@ -30,7 +30,7 @@ mod arch_dep {
         };
     }
 }
-#[cfg(not(target_pointer_width="64"))]
+#[cfg(not(target_pointer_width = "64"))]
 #[macro_use]
 mod arch_dep {
     pub type AccType = u32;

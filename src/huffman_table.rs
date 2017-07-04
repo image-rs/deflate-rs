@@ -1629,7 +1629,10 @@ mod test {
     #[test]
     fn extra_bits_distance() {
         for i in 0..NUM_DISTANCE_CODES {
-            assert_eq!(num_extra_bits_for_distance_code(i as u8), DISTANCE_EXTRA_BITS[i]);
+            assert_eq!(
+                num_extra_bits_for_distance_code(i as u8),
+                DISTANCE_EXTRA_BITS[i]
+            );
         }
     }
 }

@@ -2,6 +2,7 @@ extern crate deflate;
 extern crate flate2;
 
 use std::io::{Write, Read};
+use deflate::CompressionOptions;
 
 fn get_test_file_data(name: &str) -> Vec<u8> {
     use std::fs::File;
@@ -19,9 +20,14 @@ fn get_test_data() -> Vec<u8> {
 }
 
 fn roundtrip(data: &[u8]) {
-    let compressed = deflate::deflate_bytes(data);
+    roundtrip_conf(data, CompressionOptions::default())
+}
+
+fn roundtrip_conf(data: &[u8], level: CompressionOptions) {
+    let compressed = deflate::deflate_bytes_zlib_conf(data, level);
+    println!("Compressed len: {}, level: {:?}", compressed.len(), level);
     let decompressed = {
-        let mut d = flate2::read::DeflateDecoder::new(compressed.as_slice());
+        let mut d = flate2::read::ZlibDecoder::new(compressed.as_slice());
         let mut out = Vec::new();
         d.read_to_end(&mut out).unwrap();
         out
@@ -33,15 +39,12 @@ fn roundtrip(data: &[u8]) {
 #[test]
 fn file_zlib_compare_output() {
     use flate2::Compression;
-    use deflate::{CompressionOptions, deflate_bytes_zlib_conf};
     let test_data = get_test_data();
     let flate2_compressed = {
         let mut e = flate2::write::ZlibEncoder::new(Vec::new(), Compression::Best);
         e.write_all(&test_data).unwrap();
         e.finish().unwrap()
     };
-
-    let deflate_compressed = deflate_bytes_zlib_conf(&test_data, CompressionOptions::high());
 
     // {
     //     use std::fs::File;
@@ -57,19 +60,11 @@ fn file_zlib_compare_output() {
     // }
 
     println!(
-        "flate2: {}, deflate: {}",
+        "flate2 len: {}",
         flate2_compressed.len(),
-        deflate_compressed.len()
     );
-    let decompressed = {
-        let mut d = flate2::read::ZlibDecoder::new(deflate_compressed.as_slice());
-        let mut out = Vec::new();
-        d.read_to_end(&mut out).unwrap();
-        out
-    };
 
-
-    assert!(decompressed == test_data);
+    roundtrip_conf(&test_data, CompressionOptions::high());
 }
 
 #[test]
@@ -93,7 +88,13 @@ fn issue_17() {
 }
 
 #[test]
-fn test_rle() {
+fn fast() {
+    let test_data = get_test_data();
+    roundtrip_conf(&test_data, CompressionOptions::fast());
+}
+
+#[test]
+fn rle() {
     use deflate::{deflate_bytes_conf, CompressionOptions};
     let test_data = get_test_data();
     let compressed = deflate_bytes_conf(&test_data, CompressionOptions::rle());

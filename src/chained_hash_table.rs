@@ -23,6 +23,7 @@ fn init_array(arr: &mut [u16]) {
     }
 }
 
+//#[inline]
 fn new_array() -> Box<[u16]> {
     // Create the vector with the elements initialised as using collect or extend ends
     // up being significantly slower for some reason.
