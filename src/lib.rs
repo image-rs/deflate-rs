@@ -301,11 +301,12 @@ mod test {
     #[cfg(feature = "gzip")]
     use test_utils::decompress_gzip;
 
+    type CO = CompressionOptions;
+
     /// Write data to the writer in chunks of chunk_size.
     fn chunked_write<W: Write>(mut writer: W, data: &[u8], chunk_size: usize) {
         for chunk in data.chunks(chunk_size) {
-            let bytes_written = writer.write(&chunk).unwrap();
-            assert_eq!(bytes_written, chunk.len());
+            writer.write_all(&chunk).unwrap();
         }
     }
 
@@ -349,7 +350,7 @@ mod test {
     #[test]
     fn file_rle() {
         let input = get_test_data();
-        let compressed = deflate_bytes_conf(&input, CompressionOptions::rle());
+        let compressed = deflate_bytes_conf(&input, CO::rle());
         let result = decompress_to_end(&compressed);
         assert!(input == result);
     }
@@ -377,26 +378,14 @@ mod test {
     #[test]
     fn zlib_short() {
         let test_data = [10, 10, 10, 10, 10, 55];
-        let compressed = deflate_bytes_zlib(&test_data);
-
-        let result = decompress_zlib(&compressed);
-        assert_eq!(&test_data, result.as_slice());
+        roundtrip_zlib(&test_data, CO::default());
     }
 
     #[test]
     fn zlib_last_block() {
         let mut test_data = vec![22; 32768];
         test_data.extend(&[5, 2, 55, 11, 12]);
-        let compressed = deflate_bytes_zlib(&test_data);
-        // {
-        // use std::fs::File;
-        // use std::io::Write;
-        // let mut f = File::create("out_block.zlib").unwrap();
-        // f.write_all(&compressed).unwrap();
-        // }
-
-        let result = decompress_zlib(&compressed);
-        assert!(test_data == result);
+        roundtrip_zlib(&test_data, CO::default());
     }
 
     #[test]
@@ -414,43 +403,54 @@ mod test {
     #[test]
     fn gzip() {
         let data = get_test_data();
+        let comment = b"Test";
         let compressed = deflate_bytes_gzip_conf(
             &data,
             Compression::Default,
-            GzBuilder::new().comment("Test"),
+            GzBuilder::new().comment(&comment[..]),
         );
-        let decompressed = decompress_gzip(&compressed);
+        let (dec, decompressed) = decompress_gzip(&compressed);
+        assert_eq!(dec.header().comment().unwrap(), comment);
         assert!(data == decompressed);
     }
 
-    fn chunk_test(chunk_size: usize) {
+    fn chunk_test(chunk_size: usize, level: CompressionOptions) {
         let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
         {
             let mut compressor =
-                write::ZlibEncoder::new(&mut compressed, CompressionOptions::high());
+                write::ZlibEncoder::new(&mut compressed, level);
             chunked_write(&mut compressor, &data, chunk_size);
             compressor.finish().unwrap();
         }
-        let compressed2 = deflate_bytes_zlib_conf(&data, CompressionOptions::high());
+        let compressed2 = deflate_bytes_zlib_conf(&data, level);
         let res = decompress_zlib(&compressed);
         assert!(res == data);
         assert_eq!(compressed.len(), compressed2.len());
         assert!(compressed == compressed2);
     }
 
+    fn writer_chunks_level(level: CompressionOptions) {
+        use input_buffer::BUFFER_SIZE;
+        let ct = |n| {
+            chunk_test(n, level)
+        };
+        ct(1);
+        ct(50);
+        ct(400);
+        ct(32768);
+        ct(BUFFER_SIZE);
+        ct(50000);
+        ct((32768 * 2) + 258);
+    }
+
     #[ignore]
     #[test]
     /// Test the writer by inputing data in one chunk at the time.
     fn zlib_writer_chunks() {
-        use input_buffer::BUFFER_SIZE;
-        chunk_test(1);
-        chunk_test(50);
-        chunk_test(400);
-        chunk_test(32768);
-        chunk_test(BUFFER_SIZE);
-        chunk_test(50000);
-        chunk_test((32768 * 2) + 258);
+        writer_chunks_level(CompressionOptions::default());
+        writer_chunks_level(CompressionOptions::fast());
+        writer_chunks_level(CompressionOptions::rle());
     }
 
     /// Check that the frequency values don't overflow.
@@ -462,11 +462,39 @@ mod test {
         );
     }
 
+    fn roundtrip_zlib(data: &[u8], level: CompressionOptions) {
+        let compressed = deflate_bytes_zlib_conf(data, level);
+        let res = decompress_zlib(&compressed);
+        if data.len() <= 32  {
+            assert_eq!(res, data, "Failed with level: {:?}", level);
+        } else {
+            assert!(res == data, "Failed with level: {:?}", level);
+        }
+    }
+
+    fn check_zero(level: CompressionOptions) {
+        roundtrip_zlib(&[], level);
+    }
+
     /// Compress with an empty slice.
     #[test]
-    fn empty() {
-        let compressed = deflate_bytes_zlib(&[]);
-        let res = decompress_zlib(&compressed);
-        assert_eq!(res.len(), 0);
+    fn empty_input() {
+        check_zero(CompressionOptions::default());
+        check_zero(CompressionOptions::fast());
+        check_zero(CompressionOptions::rle());
     }
+
+    #[test]
+    fn one_and_two_values() {
+        let one = &[1][..];
+        roundtrip_zlib(one, CO::rle());
+        roundtrip_zlib(one, CO::fast());
+        roundtrip_zlib(one, CO::default());
+        let two = &[5,6,7, 8][..];
+        roundtrip_zlib(two, CO::rle());
+        roundtrip_zlib(two, CO::fast());
+        roundtrip_zlib(two, CO::default());
+    }
+
+
 }

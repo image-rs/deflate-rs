@@ -445,8 +445,10 @@ pub mod gzip {
         #[test]
         fn gzip_writer() {
             let data = get_test_data();
+            let comment = b"Comment";
             let compressed = {
-                let mut compressor = GzEncoder::new(
+                let mut compressor = GzEncoder::from_builder(
+                    GzBuilder::new().comment(&comment[..]),
                     Vec::with_capacity(data.len() / 3),
                     CompressionOptions::default(),
                 );
@@ -455,7 +457,8 @@ pub mod gzip {
                 compressor.finish().unwrap()
             };
 
-            let res = decompress_gzip(&compressed);
+            let (dec, res) = decompress_gzip(&compressed);
+            assert_eq!(dec.header().comment().unwrap(), comment);
             assert!(res == data);
         }
     }

@@ -27,6 +27,10 @@ pub fn process_chunk_greedy_rle(
     iterated_data: &Range<usize>,
     writer: &mut DynamicWriter,
 ) -> (usize, ProcessStatus) {
+    if data.is_empty() {
+        return (0, ProcessStatus::Ok)
+    };
+
     let end = cmp::min(data.len(), iterated_data.end);
     // Start on at least byte 1.
     let start = cmp::max(iterated_data.start, 1);
