@@ -142,7 +142,11 @@ impl ChainedHashTable {
     }
 
     fn slide_value(b: u16, pos: u16, bytes: u16) -> u16 {
-        if b >= bytes { b - bytes } else { pos }
+        if b >= bytes {
+            b - bytes
+        } else {
+            pos
+        }
     }
 
     fn slide_table(table: &mut [u16], bytes: u16) {

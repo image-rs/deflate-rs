@@ -59,10 +59,7 @@ fn file_zlib_compare_output() {
     //     }
     // }
 
-    println!(
-        "flate2 len: {}",
-        flate2_compressed.len(),
-    );
+    println!("flate2 len: {}", flate2_compressed.len(),);
 
     roundtrip_conf(&test_data, CompressionOptions::high());
 }

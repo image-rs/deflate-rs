@@ -135,11 +135,6 @@ pub fn longest_match(
         }
     }
 
-    /*let r = if best_length > prev_length {
-        best_length
-    } else {
-        0
-    };*/
     if best_length > prev_length {
         (best_length, best_distance)
     } else {

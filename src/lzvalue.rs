@@ -11,11 +11,15 @@ impl StoredLength {
     #[cfg(test)]
     pub fn from_actual_length(length: u16) -> StoredLength {
         assert!(length <= MAX_MATCH && length >= MIN_MATCH);
-        StoredLength { length: (length - MIN_MATCH) as u8 }
+        StoredLength {
+            length: (length - MIN_MATCH) as u8,
+        }
     }
 
     pub fn new(stored_length: u8) -> StoredLength {
-        StoredLength { length: stored_length }
+        StoredLength {
+            length: stored_length,
+        }
     }
 
     pub fn stored_length(&self) -> u8 {

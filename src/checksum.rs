@@ -36,7 +36,9 @@ pub struct Adler32Checksum {
 
 impl Adler32Checksum {
     pub fn new() -> Adler32Checksum {
-        Adler32Checksum { adler32: RollingAdler32::new() }
+        Adler32Checksum {
+            adler32: RollingAdler32::new(),
+        }
     }
 }
 

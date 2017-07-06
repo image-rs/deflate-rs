@@ -86,7 +86,9 @@ pub struct DeflateEncoder<W: Write> {
 impl<W: Write> DeflateEncoder<W> {
     /// Creates a new encoder using the provided compression options.
     pub fn new<O: Into<CompressionOptions>>(writer: W, options: O) -> DeflateEncoder<W> {
-        DeflateEncoder { deflate_state: DeflateState::new(options.into(), writer) }
+        DeflateEncoder {
+            deflate_state: DeflateState::new(options.into(), writer),
+        }
     }
 
     /// Encode all pending data to the contained writer, consume this `DeflateEncoder`,
@@ -331,9 +333,10 @@ pub mod gzip {
         /// Write header to the output buffer if it hasn't been done yet.
         fn check_write_header(&mut self) {
             if !self.header.is_empty() {
-                self.inner.deflate_state.output_buf().extend_from_slice(
-                    &self.header,
-                );
+                self.inner
+                    .deflate_state
+                    .output_buf()
+                    .extend_from_slice(&self.header);
                 self.header.clear();
             }
         }

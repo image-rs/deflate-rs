@@ -153,7 +153,11 @@ where
 }
 
 pub fn huffman_lengths_from_frequency(frequencies: &[u16], max_len: usize) -> Vec<u8> {
-    in_place::in_place_lengths(frequencies, max_len)
+    in_place::gen_lengths(frequencies, max_len)
+}
+
+pub fn huffman_lengths_from_frequency_m(frequencies: &[u16], max_len: usize, lens: &mut [u8]) {
+    in_place::in_place_lengths(frequencies, max_len, lens);
 }
 
 mod in_place {
@@ -286,6 +290,14 @@ mod in_place {
         }
     }
 
+
+    pub fn gen_lengths(frequencies: &[u16], max_len: usize) -> Vec<u8> {
+
+        let mut lens = vec![0u8; frequencies.len()];
+        in_place_lengths(frequencies, max_len, lens.as_mut_slice());
+        lens
+    }
+
     /// Generate huffman code lengths, using the algorithm described by
     /// Moffat and Katajainen in In-Place Calculation of Minimum-Redundancy Codes
     /// http://people.eng.unimelb.edu.au/ammoffat/abstracts/mk95wads.html
@@ -295,7 +307,14 @@ mod in_place {
     /// tables that are better compressible than the algorithm used previously. The downside of this
     /// algorithm is that it's not length-limited, so if too long code lengths are generated,
     /// it might result in a sub-optimal tables as the length-restricting function isn't optimal.
-    pub fn in_place_lengths(frequencies: &[u16], max_len: usize) -> Vec<u8> {
+    pub fn in_place_lengths(frequencies: &[u16], max_len: usize, lengths: &mut [u8]) {
+
+        debug_assert!(lengths.len() >= frequencies.len());
+
+        for mut l in lengths.iter_mut() {
+            *l = 0;
+        }
+
         // Discard zero length nodes as they won't be given a code and thus don't need to
         // participate in code length generation and create a new vec of the remaining
         // symbols and weights.
@@ -312,14 +331,12 @@ mod in_place {
             })
             .collect();
 
-        let mut ret = vec![0u8; frequencies.len()];
-
         // Special cases with zero or 1 value having a non-zero frequency
         if leaves.len() == 1 {
-            ret[leaves[0].symbol as usize] = 1;
-            return ret;
+            lengths[leaves[0].symbol as usize] = 1;
+            return;
         } else if leaves.is_empty() {
-            return ret;
+            return;
         }
 
         // Sort the leaves by value. As the sort in the standard library is stable, we don't
@@ -346,17 +363,15 @@ mod in_place {
         let mut leaf_it = leaves.iter().rev();
         for (&n_codes, i) in num_codes[1..max_len + 1].iter().zip(1..(max_len as u8) + 1) {
             for _ in 0..n_codes {
-                ret[leaf_it.next().unwrap().symbol as usize] = i;
+                lengths[leaf_it.next().unwrap().symbol as usize] = i;
             }
         }
 
         debug_assert_eq!(leaf_it.next(), None);
         debug_assert!(
-            validate_lengths(&ret),
+            validate_lengths(lengths),
             "The generated length codes were not valid!"
         );
-
-        ret
     }
 
 
@@ -1052,7 +1067,7 @@ mod test {
                 lit(6),
                 zero(3),
                 lit(8),
-                zero(4),
+                zero(4)
             ]
         );
         assert_eq!(
@@ -1067,7 +1082,7 @@ mod test {
                 lit(8),
                 lit(6),
                 lit(6),
-                lit(8),
+                lit(8)
             ]
         );
 
@@ -1436,9 +1451,9 @@ mod test {
         //
 
 
-        let num_bits = lens.iter().zip(freqs.iter()).fold(0, |a, (&f, &l)| {
-            a + (f as u16 * l)
-        });
+        let num_bits = lens.iter()
+            .zip(freqs.iter())
+            .fold(0, |a, (&f, &l)| a + (f as u16 * l));
         assert_eq!(num_bits, 7701);
     }
 }

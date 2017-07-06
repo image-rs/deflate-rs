@@ -21,7 +21,7 @@ pub enum BType {
 
 /// A struct wrapping a writer that writes data compressed using the provided huffman table
 pub struct EncoderState {
-    huffman_table: HuffmanTable,
+    pub huffman_table: HuffmanTable,
     pub writer: LsbWriter,
 }
 
@@ -57,15 +57,13 @@ impl EncoderState {
             LZType::Literal(l) => self.write_literal(l),
             LZType::StoredLengthDistance(l, d) => {
                 let (code, extra_bits_code) = self.huffman_table.get_length_huffman(l);
-                assert!(
+                debug_assert!(
                     code.length != 0,
                     format!("Code: {:?}, Value: {:?}", code, value)
                 );
                 self.writer.write_bits(code.code, code.length);
-                self.writer.write_bits(
-                    extra_bits_code.code,
-                    extra_bits_code.length,
-                );
+                self.writer
+                    .write_bits(extra_bits_code.code, extra_bits_code.length);
 
                 let (code, extra_bits_code) = self.huffman_table.get_distance_huffman(d);
                 debug_assert!(
@@ -74,10 +72,8 @@ impl EncoderState {
                 );
 
                 self.writer.write_bits(code.code, code.length);
-                self.writer.write_bits(
-                    extra_bits_code.code,
-                    extra_bits_code.length,
-                )
+                self.writer
+                    .write_bits(extra_bits_code.code, extra_bits_code.length)
             }
         };
     }
@@ -108,15 +104,6 @@ impl EncoderState {
     /// Flush the contained writer and it's bitstream wrapper.
     pub fn flush(&mut self) {
         self.writer.flush_raw()
-    }
-
-    /// Update the huffman table by generating new huffman codes
-    /// from length the length values from the provided tables.
-    pub fn update_huffman_table(&mut self, literals_and_lengths: &[u8], distances: &[u8]) {
-        self.huffman_table.update_from_length_tables(
-            literals_and_lengths,
-            distances,
-        )
     }
 
     pub fn set_huffman_to_fixed(&mut self) {

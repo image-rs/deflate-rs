@@ -72,7 +72,9 @@ pub struct FixedWriter {
 
 impl FixedWriter {
     pub fn new() -> FixedWriter {
-        FixedWriter { buffer: Vec::with_capacity(MAX_BUFFER_LENGTH) }
+        FixedWriter {
+            buffer: Vec::with_capacity(MAX_BUFFER_LENGTH),
+        }
     }
 }
 

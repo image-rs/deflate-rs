@@ -168,7 +168,16 @@ pub fn compress_data_dynamic_n<W: Write>(
 
         let res = {
             let (l_freqs, d_freqs) = deflate_state.lz77_writer.get_frequencies();
-            gen_huffman_lengths(l_freqs, d_freqs, current_block_input_bytes, partial_bits)
+            let (l_lengths, d_lengths) =
+                deflate_state.encoder_state.huffman_table.get_lengths_mut();
+            gen_huffman_lengths(
+                l_freqs,
+                d_freqs,
+                current_block_input_bytes,
+                partial_bits,
+                l_lengths,
+                d_lengths,
+            )
         };
 
         // Check if we've actually managed to compress the input, and output stored blocks
@@ -176,20 +185,23 @@ pub fn compress_data_dynamic_n<W: Write>(
         match res {
             BlockType::Dynamic(header) => {
                 // Write the block header.
-                deflate_state.encoder_state.write_start_of_block(
-                    false,
-                    last_block,
-                );
+                deflate_state
+                    .encoder_state
+                    .write_start_of_block(false, last_block);
 
                 // Output the lengths of the huffman codes used in this block.
-                write_huffman_lengths(&header, &mut deflate_state.encoder_state.writer);
-
-                // Output update the huffman table that will be used to encode the
-                // lz77-compressed data.
-                deflate_state.encoder_state.update_huffman_table(
-                    &header.l_lengths,
-                    &header.d_lengths,
+                write_huffman_lengths(
+                    &header,
+                    &deflate_state.encoder_state.huffman_table,
+                    &mut deflate_state.encoder_state.writer,
                 );
+
+                // Uupdate the huffman codes that will be used to encode the
+                // lz77-compressed data.
+                deflate_state
+                    .encoder_state
+                    .huffman_table
+                    .update_from_lengths();
 
 
                 // Write the huffman compressed data and the end of block marker.
@@ -200,10 +212,9 @@ pub fn compress_data_dynamic_n<W: Write>(
             }
             BlockType::Fixed => {
                 // Write the block header for fixed code blocks.
-                deflate_state.encoder_state.write_start_of_block(
-                    true,
-                    last_block,
-                );
+                deflate_state
+                    .encoder_state
+                    .write_start_of_block(true, last_block);
 
                 // Use the pre-defined static huffman codes.
                 deflate_state.encoder_state.set_huffman_to_fixed();
@@ -222,7 +233,7 @@ pub fn compress_data_dynamic_n<W: Write>(
                 assert!(
                     position >= current_block_input_bytes as usize,
                     "Error! Trying to output a stored block with forgotten data!\
-                         if you encounter this error, please file an issue!"
+                     if you encounter this error, please file an issue!"
                 );
 
                 write_stored_block(

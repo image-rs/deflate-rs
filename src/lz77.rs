@@ -135,7 +135,11 @@ impl LZ77State {
     pub fn pending_byte_as_num(&self) -> usize {
         // This could be implemented by using `as usize` as the documentation states this would give
         // the same result, but not sure if that should be relied upon.
-        if self.match_state.add { 1 } else { 0 }
+        if self.match_state.add {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -274,7 +278,11 @@ fn match_too_far(match_len: usize, match_dist: usize) -> bool {
 fn create_iterators<'a>(
     data: &'a [u8],
     iterated_data: &Range<usize>,
-) -> (usize, iter::Zip<RangeFrom<usize>, Iter<'a, u8>>, Iter<'a, u8>) {
+) -> (
+    usize,
+    iter::Zip<RangeFrom<usize>, Iter<'a, u8>>,
+    Iter<'a, u8>,
+) {
     let end = cmp::min(data.len(), iterated_data.end);
     let start = iterated_data.start;
     let current_chunk = &data[start..end];
@@ -380,8 +388,8 @@ fn process_chunk_lazy<W: OutputWriter>(
                 // The previous match was better so we add it.
                 // Casting note: length and distance is already bounded by the longest match
                 // function. Usize is just used for convenience.
-                let b_status =
-                    writer.write_length_distance(prev_length as u16, prev_distance as u16);
+                let b_status = writer
+                    .write_length_distance(prev_length as u16, prev_distance as u16);
 
                 // We add the bytes to the hash table and checksum.
                 // Since we've already added two of them, we need to add two less than
@@ -435,8 +443,8 @@ fn process_chunk_lazy<W: OutputWriter>(
         } else {
             // If there is a match at this point, it will not have been added, so we need to add it.
             if prev_length >= MIN_MATCH as u16 {
-                let b_status =
-                    writer.write_length_distance(prev_length as u16, prev_distance as u16);
+                let b_status = writer
+                    .write_length_distance(prev_length as u16, prev_distance as u16);
 
                 state.current_length = 0;
                 state.current_distance = 0;
@@ -496,9 +504,8 @@ fn process_chunk_greedy<W: OutputWriter>(
             hash_table.add_hash_value(position, hash_byte);
 
             // TODO: This should be cleaned up a bit.
-            let (match_len, match_dist) = {
-                longest_match(data, hash_table, position, NO_LENGTH, max_hash_checks)
-            };
+            let (match_len, match_dist) =
+                { longest_match(data, hash_table, position, NO_LENGTH, max_hash_checks) };
 
             if match_len >= MIN_MATCH as usize && !match_too_far(match_len, match_dist) {
                 // Casting note: length and distance is already bounded by the longest match
@@ -839,7 +846,7 @@ pub fn decompress_lz77_with_backbuffer(input: &[LZValue], back_buffer: &[u8]) ->
                     assert!(
                         into_back_buffer <= back_buffer.len(),
                         "ERROR: Attempted to refer to a match in non-existing data!\
-                            into_back_buffer: {}, back_buffer len {}, d {}, l {:?}",
+                         into_back_buffer: {}, back_buffer len {}, d {}, l {:?}",
                         into_back_buffer,
                         back_buffer.len(),
                         d,

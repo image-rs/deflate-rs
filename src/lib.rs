@@ -197,9 +197,9 @@ pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], option
 
     let hash = checksum.current_hash();
 
-    writer.write_u32::<BigEndian>(hash).expect(
-        "Write error when writing checksum!",
-    );
+    writer
+        .write_u32::<BigEndian>(hash)
+        .expect("Write error when writing checksum!");
     writer
 }
 
@@ -254,9 +254,9 @@ pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(
     let mut writer = Vec::with_capacity(input.len() / 3);
 
     // Write header
-    writer.write_all(&gzip_header.into_header()).expect(
-        "Write error when writing header!",
-    );
+    writer
+        .write_all(&gzip_header.into_header())
+        .expect("Write error when writing header!");
     let mut checksum = checksum::NoChecksum::new();
     compress_data_dynamic(input, &mut writer, &mut checksum, options.into())
         .expect("Write error when writing compressed data!");
@@ -264,12 +264,12 @@ pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(
     let mut crc = Crc::new();
     crc.update(input);
 
-    writer.write_u32::<LittleEndian>(crc.sum()).expect(
-        "Write error when writing checksum!",
-    );
-    writer.write_u32::<LittleEndian>(crc.amt_as_u32()).expect(
-        "Write error when writing amt!",
-    );
+    writer
+        .write_u32::<LittleEndian>(crc.sum())
+        .expect("Write error when writing checksum!");
+    writer
+        .write_u32::<LittleEndian>(crc.amt_as_u32())
+        .expect("Write error when writing amt!");
     writer
 }
 
@@ -351,6 +351,7 @@ mod test {
     fn file_rle() {
         let input = get_test_data();
         let compressed = deflate_bytes_conf(&input, CO::rle());
+
         let result = decompress_to_end(&compressed);
         assert!(input == result);
     }
@@ -418,8 +419,7 @@ mod test {
         let mut compressed = Vec::with_capacity(32000);
         let data = get_test_data();
         {
-            let mut compressor =
-                write::ZlibEncoder::new(&mut compressed, level);
+            let mut compressor = write::ZlibEncoder::new(&mut compressed, level);
             chunked_write(&mut compressor, &data, chunk_size);
             compressor.finish().unwrap();
         }
@@ -432,9 +432,7 @@ mod test {
 
     fn writer_chunks_level(level: CompressionOptions) {
         use input_buffer::BUFFER_SIZE;
-        let ct = |n| {
-            chunk_test(n, level)
-        };
+        let ct = |n| chunk_test(n, level);
         ct(1);
         ct(50);
         ct(400);
@@ -465,7 +463,7 @@ mod test {
     fn roundtrip_zlib(data: &[u8], level: CompressionOptions) {
         let compressed = deflate_bytes_zlib_conf(data, level);
         let res = decompress_zlib(&compressed);
-        if data.len() <= 32  {
+        if data.len() <= 32 {
             assert_eq!(res, data, "Failed with level: {:?}", level);
         } else {
             assert!(res == data, "Failed with level: {:?}", level);
@@ -490,7 +488,7 @@ mod test {
         roundtrip_zlib(one, CO::rle());
         roundtrip_zlib(one, CO::fast());
         roundtrip_zlib(one, CO::default());
-        let two = &[5,6,7, 8][..];
+        let two = &[5, 6, 7, 8][..];
         roundtrip_zlib(two, CO::rle());
         roundtrip_zlib(two, CO::fast());
         roundtrip_zlib(two, CO::default());
