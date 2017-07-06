@@ -22,132 +22,66 @@ pub enum BufferStatus {
     Full,
 }
 
-/// A trait used by the lz77 compression function to write output.
-/// Used to use the same function for compression with both fixed and dynamic huffman codes
-/// (When fixed codes are used, there is no need to store frequency information)
-pub trait OutputWriter {
-    fn write_literal(&mut self, literal: u8) -> BufferStatus;
-    fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus;
-    fn buffer_length(&self) -> usize;
-    fn clear_buffer(&mut self);
-    fn get_buffer(&self) -> &[LZValue];
-}
-
-pub struct _DummyWriter {
-    written: usize,
-}
-
-impl OutputWriter for _DummyWriter {
-    fn write_literal(&mut self, _: u8) -> BufferStatus {
-        self.written += 1;
-        BufferStatus::NotFull
-    }
-    fn write_length_distance(&mut self, _: u16, _: u16) -> BufferStatus {
-        self.written += 2;
-        BufferStatus::NotFull
-    }
-    fn buffer_length(&self) -> usize {
-        self.written
-    }
-    fn clear_buffer(&mut self) {}
-
-    fn get_buffer(&self) -> &[LZValue] {
-        &[]
-    }
-}
-
-fn check_buffer_length(buffer: &[LZValue]) -> BufferStatus {
-    if buffer.len() >= MAX_BUFFER_LENGTH {
-        BufferStatus::Full
-    } else {
-        BufferStatus::NotFull
-    }
-}
-
-/// `OutputWriter` that doesn't store frequency information
-#[derive(Debug)]
-pub struct FixedWriter {
-    pub buffer: Vec<LZValue>,
-}
-
-impl FixedWriter {
-    pub fn new() -> FixedWriter {
-        FixedWriter {
-            buffer: Vec::with_capacity(MAX_BUFFER_LENGTH),
-        }
-    }
-}
-
-impl OutputWriter for FixedWriter {
-    fn write_literal(&mut self, literal: u8) -> BufferStatus {
-        debug_assert!(self.buffer.len() < MAX_BUFFER_LENGTH);
-        self.buffer.push(LZValue::literal(literal));
-        check_buffer_length(&self.buffer)
-    }
-
-    fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
-        debug_assert!(self.buffer.len() < MAX_BUFFER_LENGTH);
-        self.buffer.push(LZValue::length_distance(length, distance));
-        check_buffer_length(&self.buffer)
-    }
-
-    fn buffer_length(&self) -> usize {
-        self.buffer.len()
-    }
-
-    fn clear_buffer(&mut self) {
-        self.buffer.clear();
-    }
-
-    fn get_buffer(&self) -> &[LZValue] {
-        &self.buffer
-    }
-}
-
-// `OutputWriter` that keeps track of the usage of different codes
+/// Struct that buffers lz77 data and keeps track of the usage of different codes
 pub struct DynamicWriter {
-    fixed_writer: FixedWriter,
+    buffer: Vec<LZValue>,
     // The two last length codes are not actually used, but only participates in code construction
     // Therefore, we ignore them to get the correct number of lengths
     frequencies: [FrequencyType; NUM_LITERALS_AND_LENGTHS],
     distance_frequencies: [FrequencyType; NUM_DISTANCE_CODES],
 }
 
-impl OutputWriter for DynamicWriter {
-    fn write_literal(&mut self, literal: u8) -> BufferStatus {
-        let ret = self.fixed_writer.write_literal(literal);
-        self.frequencies[usize::from(literal)] += 1;
-        ret
+impl DynamicWriter {
+    #[inline]
+    pub fn check_buffer_length(&self) -> BufferStatus {
+        if self.buffer.len() >= MAX_BUFFER_LENGTH {
+            BufferStatus::Full
+        } else {
+            BufferStatus::NotFull
+        }
     }
 
-    fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
-        let ret = self.fixed_writer.write_length_distance(length, distance);
+    #[inline]
+    pub fn write_literal(&mut self, literal: u8) -> BufferStatus {
+        debug_assert!(self.buffer.len() < MAX_BUFFER_LENGTH);
+        self.buffer.push(LZValue::literal(literal));
+        self.frequencies[usize::from(literal)] += 1;
+        self.check_buffer_length()
+    }
+
+    #[inline]
+    pub fn write_length_distance(&mut self, length: u16, distance: u16) -> BufferStatus {
+        self.buffer.push(LZValue::length_distance(length, distance));
         let l_code_num = get_length_code(length);
         // As we limit the buffer to 2^16 values, this should be safe from overflowing.
-        self.frequencies[l_code_num] += 1;
+        if cfg!(debug_assertions) {
+            self.frequencies[l_code_num] += 1;
+        } else {
+            // #Safety
+            // None of the values in the table of length code numbers will give a value
+            // that is out of bounds.
+            // There is a test to ensure that these functions can not produce too large values.
+            unsafe {
+                *self.frequencies.get_unchecked_mut(l_code_num) += 1;
+            }
+        }
         let d_code_num = get_distance_code(distance);
+        // The compiler seems to be able to evade the bounds check here somehow.
         self.distance_frequencies[usize::from(d_code_num)] += 1;
-        ret
+        self.check_buffer_length()
     }
 
-    fn buffer_length(&self) -> usize {
-        self.fixed_writer.buffer_length()
+    pub fn buffer_length(&self) -> usize {
+        self.buffer.len()
     }
 
-    fn clear_buffer(&mut self) {
-        self.clear_data();
-        self.clear();
+    pub fn get_buffer(&self) -> &[LZValue] {
+        &self.buffer
     }
 
-    fn get_buffer(&self) -> &[LZValue] {
-        self.fixed_writer.get_buffer()
-    }
-}
-
-impl DynamicWriter {
     pub fn new() -> DynamicWriter {
         let mut w = DynamicWriter {
-            fixed_writer: FixedWriter::new(),
+            buffer: Vec::with_capacity(MAX_BUFFER_LENGTH),
             frequencies: [0; NUM_LITERALS_AND_LENGTHS],
             distance_frequencies: [0; NUM_DISTANCE_CODES],
         };
@@ -159,13 +93,24 @@ impl DynamicWriter {
 
     /// Special output function used with RLE compression
     /// that avoids bothering to lookup a distance code.
+    #[inline]
     pub fn write_length_rle(&mut self, length: u16) -> BufferStatus {
-        let ret = self.fixed_writer.write_length_distance(length, 1);
+        self.buffer.push(LZValue::length_distance(length, 1));
         let l_code_num = get_length_code(length);
         // As we limit the buffer to 2^16 values, this should be safe from overflowing.
-        self.frequencies[l_code_num] += 1;
+        if cfg!(debug_assertions) {
+            self.frequencies[l_code_num] += 1;
+        } else {
+            // #Safety
+            // None of the values in the table of length code numbers will give a value
+            // that is out of bounds.
+            // There is a test to ensure that these functions won't produce too large values.
+            unsafe {
+                *self.frequencies.get_unchecked_mut(l_code_num) += 1;
+            }
+        }
         self.distance_frequencies[0] += 1;
-        ret
+        self.check_buffer_length()
     }
 
     pub fn get_frequencies(&self) -> (&[u16], &[u16]) {
@@ -179,11 +124,31 @@ impl DynamicWriter {
     }
 
     pub fn clear_data(&mut self) {
-        self.fixed_writer.clear_buffer();
+        self.buffer.clear()
     }
 
     pub fn clear(&mut self) {
         self.clear_frequencies();
         self.clear_data();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use huffman_table::{get_length_code, get_distance_code};
+    #[test]
+    /// Ensure that these function won't produce values that would overflow the output_writer
+    /// tables since we use some unsafe indexing.
+    fn array_bounds() {
+        let w = DynamicWriter::new();
+
+        for i in 0..u16::max_value() {
+            get_length_code(i) < w.frequencies.len();
+        }
+
+        for i in 0..u16::max_value() {
+            get_distance_code(i) < w.distance_frequencies.len() as u8;
+        }
     }
 }

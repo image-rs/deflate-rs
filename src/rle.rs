@@ -1,5 +1,5 @@
 use lz77::{ProcessStatus, buffer_full};
-use output_writer::{OutputWriter, BufferStatus, DynamicWriter};
+use output_writer::{BufferStatus, DynamicWriter};
 use huffman_table;
 
 use std::ops::Range;

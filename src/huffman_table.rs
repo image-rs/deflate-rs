@@ -1270,7 +1270,9 @@ struct ExtraBits {
 /// Get the length code that corresponds to the length value
 /// Panics if length is out of range.
 pub fn get_length_code(length: u16) -> usize {
-    usize::from(LENGTH_CODE[(length - MIN_MATCH) as usize]) + LENGTH_BITS_START as usize
+    // Going via an u8 here helps the compiler evade bounds checking.
+    usize::from(LENGTH_CODE[(length.wrapping_sub(MIN_MATCH)) as u8 as usize]) +
+        LENGTH_BITS_START as usize
 }
 
 /// Get the code for the huffman table and the extra bits for the requested length.
@@ -1669,4 +1671,5 @@ mod test {
         }
         println!("Size of huffmanCode struct: {}", size_of::<HuffmanCode>());
     }
+
 }

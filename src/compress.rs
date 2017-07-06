@@ -6,7 +6,6 @@ use encoder_state::EncoderState;
 use lzvalue::LZValue;
 use lz77::{lz77_compress_block, LZ77Status};
 use huffman_lengths::{gen_huffman_lengths, write_huffman_lengths, BlockType};
-use output_writer::OutputWriter;
 use bitstream::LsbWriter;
 use stored_block::{compress_block_stored, write_stored_header, MAX_STORED_BLOCK_LENGTH};
 

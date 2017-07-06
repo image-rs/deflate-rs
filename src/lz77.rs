@@ -14,7 +14,7 @@ use huffman_table;
 use chained_hash_table::ChainedHashTable;
 #[cfg(test)]
 use compression_options::{HIGH_MAX_HASH_CHECKS, HIGH_LAZY_IF_LESS_THAN};
-use output_writer::{OutputWriter, BufferStatus, DynamicWriter};
+use output_writer::{BufferStatus, DynamicWriter};
 use compress::Flush;
 use rle::process_chunk_greedy_rle;
 
@@ -299,12 +299,12 @@ fn create_iterators<'a>(
     (end, insert_it, hash_it)
 }
 
-fn process_chunk_lazy<W: OutputWriter>(
+fn process_chunk_lazy(
     data: &[u8],
     iterated_data: &Range<usize>,
     state: &mut ChunkState,
     mut hash_table: &mut ChainedHashTable,
-    writer: &mut W,
+    writer: &mut DynamicWriter,
     max_hash_checks: u16,
     lazy_if_less_than: usize,
 ) -> (usize, ProcessStatus) {
@@ -482,11 +482,11 @@ fn process_chunk_lazy<W: OutputWriter>(
     (overlap, ProcessStatus::Ok)
 }
 
-fn process_chunk_greedy<W: OutputWriter>(
+fn process_chunk_greedy(
     data: &[u8],
     iterated_data: &Range<usize>,
     mut hash_table: &mut ChainedHashTable,
-    writer: &mut W,
+    writer: &mut DynamicWriter,
     max_hash_checks: u16,
 ) -> (usize, ProcessStatus) {
 
@@ -955,7 +955,7 @@ pub fn lz77_compress_conf(
             ).0;
             slice = &slice[bytes_written..];
             out.extend(test.writer.get_buffer());
-            test.writer.clear_buffer();
+            test.writer.clear();
         }
 
     }
@@ -1108,7 +1108,7 @@ mod test {
     #[test]
     fn compress_block_multiple_windows() {
         use input_buffer::InputBuffer;
-        use output_writer::{OutputWriter, DynamicWriter};
+        use output_writer::DynamicWriter;
 
         let data = get_test_data();
         assert!(data.len() > (WINDOW_SIZE * 2) + super::MAX_MATCH);
@@ -1126,7 +1126,7 @@ mod test {
         let buf_len = buffer.get_buffer().len();
         assert!(buffer.get_buffer()[..] == data[..buf_len]);
 
-        writer.clear_buffer();
+        writer.clear();
         let (_, status) = lz77_compress_block_finish(
             &data[bytes_consumed..],
             &mut state,
@@ -1139,7 +1139,6 @@ mod test {
 
     #[test]
     fn multiple_inputs() {
-        use output_writer::OutputWriter;
         let data = b"Badger badger bababa test data 25 asfgestghresjkgh";
         let comp1 = lz77_compress(data).unwrap();
         let comp2 = {
@@ -1205,7 +1204,7 @@ mod test {
 
         let mut out = decompress_lz77(state.writer.get_buffer());
 
-        state.writer.clear_buffer();
+        state.writer.clear();
         // The buffer should now be cleared.
         assert_eq!(state.writer.get_buffer().len(), 0);
 

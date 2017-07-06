@@ -23,7 +23,7 @@ fn init_array(arr: &mut [u16]) {
     }
 }
 
-//#[inline]
+#[inline]
 fn new_array() -> Box<[u16]> {
     // Create the vector with the elements initialised as using collect or extend ends
     // up being significantly slower for some reason.
@@ -91,19 +91,28 @@ impl ChainedHashTable {
         // bounds checks in this function.
         let new_hash = update_hash(self.current_hash, value);
 
+        if cfg!(debug_assertions) {
+            self.prev[position & WINDOW_MASK] = self.head[new_hash as usize];
 
-        self.prev[position & WINDOW_MASK] = self.head[new_hash as usize];
+            // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
+            // where in the buffer (which is 64k bytes) we are referring to.
+            self.head[new_hash as usize] = position as u16;
 
-        // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
-        // where in the buffer (which is 64k bytes) we are referring to.
-        self.head[new_hash as usize] = position as u16;
-
+            self.count += 1;
+        } else {
+            // # Unsafe
+            // Both the position and new_hash are anded with the WINDOW mask which makes it
+            // impossible for them to be larger than the length of prev and next,
+            // Prev and next always have a length of WINDOW_MASK + 1 and can't be changed
+            // after initialisation of the struct.
+            unsafe {
+                *self.prev.get_unchecked_mut(position & WINDOW_MASK) = *self.head
+                    .get_unchecked(new_hash as usize);
+                *self.head.get_unchecked_mut(new_hash as usize) = position as u16;
+            }
+        }
         // Update the stored hash value with the new hash.
         self.current_hash = new_hash;
-
-        if cfg!(debug_assertions) {
-            self.count += 1;
-        }
     }
 
     // Get the head of the hash chain for the current hash value
@@ -128,7 +137,8 @@ impl ChainedHashTable {
     #[inline]
     #[cfg(not(debug_assertions))]
     pub fn get_prev(&self, bytes: usize) -> u16 {
-        // Safety: The index is anded by WINDOW_MASK, which is the length
+        // # Safety:
+        // The index is anded by WINDOW_MASK, which is the length
         // of the prev array - 1, which means that the index value will always
         // be less than the length of prev.
         // Prev is made into a boxed slice when the table is created.
@@ -187,7 +197,7 @@ pub fn filled_hash_table(data: &[u8]) -> ChainedHashTable {
 
 #[cfg(test)]
 mod test {
-    use super::filled_hash_table;
+    use super::{filled_hash_table, ChainedHashTable, WINDOW_MASK};
 
     #[test]
     fn chained_hash() {
@@ -292,5 +302,13 @@ mod test {
             pos = hash_table.get_prev(pos as usize);
             iterations += 1;
         }
+    }
+
+    #[test]
+    /// Ensure that these are long enough since we use some unsafe indexing.
+    fn array_bounds() {
+        let t = ChainedHashTable::new();
+        assert_eq!(t.head.len(), WINDOW_MASK + 1);
+        assert_eq!(t.prev.len(), WINDOW_MASK + 1);
     }
 }
