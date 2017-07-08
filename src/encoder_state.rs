@@ -27,9 +27,9 @@ pub struct EncoderState {
 
 impl EncoderState {
     /// Creates a new encoder state using the provided huffman table and writer
-    pub fn new(huffman_table: HuffmanTable, writer: Vec<u8>) -> EncoderState {
+    pub fn new(writer: Vec<u8>) -> EncoderState {
         EncoderState {
-            huffman_table: huffman_table,
+            huffman_table: HuffmanTable::empty(),
             writer: LsbWriter::new(writer),
         }
     }
@@ -37,7 +37,10 @@ impl EncoderState {
     #[cfg(test)]
     /// Creates a new encoder state using the fixed huffman table
     pub fn fixed(writer: Vec<u8>) -> EncoderState {
-        EncoderState::new(HuffmanTable::fixed_table(), writer)
+        EncoderState {
+            huffman_table: HuffmanTable::fixed_table(),
+            writer: LsbWriter::new(writer),
+        }
     }
 
     pub fn inner_vec(&mut self) -> &mut Vec<u8> {

@@ -6,7 +6,6 @@ use output_writer::DynamicWriter;
 use encoder_state::EncoderState;
 use input_buffer::InputBuffer;
 use compression_options::{CompressionOptions, MAX_HASH_CHECKS};
-use huffman_table::HuffmanTable;
 use compress::Flush;
 pub use huffman_table::MAX_MATCH;
 
@@ -46,7 +45,7 @@ impl<W: Write> DeflateState<W> {
                 cmp::min(compression_options.lazy_if_less_than, MAX_HASH_CHECKS),
                 compression_options.matching_type,
             ),
-            encoder_state: EncoderState::new(HuffmanTable::empty(), Vec::with_capacity(1024 * 32)),
+            encoder_state: EncoderState::new(Vec::with_capacity(1024 * 32)),
             lz77_writer: DynamicWriter::new(),
             compression_options: compression_options,
             bytes_written: 0,

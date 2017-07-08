@@ -1,7 +1,5 @@
-use length_encode::EncodedLength;
-use length_encode::{encode_lengths_m, huffman_lengths_from_frequency,
-                    huffman_lengths_from_frequency_m, COPY_PREVIOUS, REPEAT_ZERO_3_BITS,
-                    REPEAT_ZERO_7_BITS};
+use length_encode::{EncodedLength, LeafVec, encode_lengths_m, huffman_lengths_from_frequency_m,
+                    COPY_PREVIOUS, REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS};
 use huffman_table::{HuffmanTable, create_codes_in_place, num_extra_bits_for_length_code,
                     num_extra_bits_for_distance_code, NUM_LITERALS_AND_LENGTHS,
                     NUM_DISTANCE_CODES, MAX_CODE_LENGTH, FIXED_CODE_LENGTHS, LENGTH_BITS_START};
@@ -198,6 +196,8 @@ pub fn gen_huffman_lengths(
     let l_freqs = remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS);
     let d_freqs = remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES);
 
+    let mut leaf_buffer = LeafVec::with_capacity(l_freqs.len());
+
     // The huffman spec allows us to exclude zeroes at the end of the
     // table of huffman lengths.
     // Since a frequency of 0 will give an huffman
@@ -206,8 +206,8 @@ pub fn gen_huffman_lengths(
     // There is however a minimum number of values we have to keep
     // according to the deflate spec.
     // TODO: We could probably compute some of this in parallel.
-    huffman_lengths_from_frequency_m(l_freqs, MAX_CODE_LENGTH, l_lengths);
-    huffman_lengths_from_frequency_m(d_freqs, MAX_CODE_LENGTH, d_lengths);
+    huffman_lengths_from_frequency_m(l_freqs, MAX_CODE_LENGTH, &mut leaf_buffer, l_lengths);
+    huffman_lengths_from_frequency_m(d_freqs, MAX_CODE_LENGTH, &mut leaf_buffer, d_lengths);
 
 
     let used_lengths = l_freqs.len();
@@ -218,12 +218,18 @@ pub fn gen_huffman_lengths(
     let encoded = encode_lengths_m(
         l_lengths[..used_lengths]
             .iter()
-            .chain(d_lengths[..used_distances].iter()),
+            .chain(&d_lengths[..used_distances]),
         &mut freqs,
     );
 
     // Create huffman lengths for the length/distance code lengths
-    let huffman_table_lengths = huffman_lengths_from_frequency(&freqs, MAX_HUFFMAN_CODE_LENGTH);
+    let mut huffman_table_lengths = vec![0; freqs.len()];
+    huffman_lengths_from_frequency_m(
+        &freqs,
+        MAX_HUFFMAN_CODE_LENGTH,
+        &mut leaf_buffer,
+        huffman_table_lengths.as_mut_slice(),
+    );
 
     // Count how many of these lengths we use.
     let used_hclens = HUFFMAN_LENGTH_ORDER.len() -

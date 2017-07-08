@@ -55,7 +55,6 @@ pub struct LsbWriter {
 
 impl LsbWriter {
     /// Creates a new bit reader
-    #[allow(dead_code)]
     pub fn new(writer: Vec<u8>) -> LsbWriter {
         LsbWriter {
             w: writer,

@@ -18,16 +18,34 @@ fn update_hash_conf(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> 
 
 #[inline]
 fn init_array(arr: &mut [u16]) {
+    use std::ptr;
     for (n, mut b) in arr.iter_mut().enumerate() {
-        *b = n as u16;
+        // # Unsafe
+        // The pointers are grabbed straight from the iterator, so they
+        // won't be out of range.
+        // As u16 is a primitive type, it does not implement drop,
+        // so we don't have to worry about dropping values.
+        // We do it like this since this is called on the array once with
+        // uninitialised values.
+        unsafe {
+            ptr::write(b, n as u16);
+        }
     }
 }
 
 #[inline]
 fn new_array() -> Box<[u16]> {
-    // Create the vector with the elements initialised as using collect or extend ends
-    // up being significantly slower for some reason.
-    let mut arr = vec![0; WINDOW_SIZE];
+    // Ideally we would use collect here, but that is extremely slow for some
+    // reason.
+    let mut arr = Vec::with_capacity(WINDOW_SIZE);
+    // # Unsafe
+    // We set the length right after creating the array with the same capacity, so
+    // assuming the implementation of Vec does what it's supposed to this is safe provided
+    // the values are not read from.
+    debug_assert!(arr.capacity() >= WINDOW_SIZE);
+    unsafe {
+        arr.set_len(WINDOW_SIZE);
+    }
     init_array(&mut arr);
     arr.into_boxed_slice()
 }
@@ -151,6 +169,7 @@ impl ChainedHashTable {
         unsafe { *self.prev.get_unchecked(bytes & WINDOW_MASK) }
     }
 
+    #[inline]
     fn slide_value(b: u16, pos: u16, bytes: u16) -> u16 {
         if b >= bytes {
             b - bytes
@@ -159,6 +178,7 @@ impl ChainedHashTable {
         }
     }
 
+    #[inline]
     fn slide_table(table: &mut [u16], bytes: u16) {
         for (n, b) in table.iter_mut().enumerate() {
             *b = ChainedHashTable::slide_value(*b, n as u16, bytes);
@@ -173,16 +193,6 @@ impl ChainedHashTable {
         }
         ChainedHashTable::slide_table(&mut self.head[..], bytes as u16);
         ChainedHashTable::slide_table(&mut self.prev[..], bytes as u16);
-    }
-
-    // #[cfg(test)]
-    pub fn _get_head_arr(&self) -> &[u16] {
-        &self.head[..]
-    }
-
-    // #[cfg(test)]
-    pub fn _get_prev_arr(&self) -> &[u16] {
-        &self.prev[..]
     }
 }
 
@@ -243,7 +253,7 @@ mod test {
         test_data.extend((255u8..0));
         let hash_table = filled_hash_table(&test_data);
         let prev_pos = hash_table.get_prev(hash_table.current_head() as usize);
-        // Since all sequences in the input are unique, there shouldn't be any previous values
+        // Since all sequences in the input are unique, there shouldn't be any previous values.
         assert_eq!(prev_pos, hash_table.current_hash());
     }
 

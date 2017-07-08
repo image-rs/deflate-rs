@@ -1362,9 +1362,9 @@ pub struct LengthAndDistanceBits {
 
 /// Counts the number of values of each length.
 /// Returns a tuple containing the longest length value in the table, it's position,
-/// and a vector of lengths.
+/// and fills in lengths in the `len_counts` slice.
 /// Returns an error if `table` is empty, or if any of the lengths exceed 15.
-fn build_length_count_table(table: &[u8]) -> (usize, usize, Vec<u16>) {
+fn build_length_count_table(table: &[u8], len_counts: &mut [u16; 16]) -> (usize, usize) {
     // TODO: Validate the length table properly in debug mode.
     let max_length = (*table.iter().max().expect("BUG! Empty lengths!")).into();
 
@@ -1372,7 +1372,6 @@ fn build_length_count_table(table: &[u8]) -> (usize, usize, Vec<u16>) {
 
     let mut max_length_pos = 0;
 
-    let mut len_counts = vec![0u16; max_length + 1];
     for (n, &length) in table.iter().enumerate() {
         // TODO: Make sure we don't have more of one length than we can make
         // codes for
@@ -1381,13 +1380,15 @@ fn build_length_count_table(table: &[u8]) -> (usize, usize, Vec<u16>) {
             max_length_pos = n;
         }
     }
-    (max_length, max_length_pos, len_counts)
+    (max_length, max_length_pos)
 }
 
 /// Generats a vector of huffman codes given a table of bit lengths
 /// Returns an error if any of the lengths are > 15
 pub fn create_codes_in_place(code_table: &mut [u16], length_table: &[u8]) {
-    let (max_length, max_length_pos, lengths) = build_length_count_table(length_table);
+    let mut len_counts = [0; 16];
+    let (max_length, max_length_pos) = build_length_count_table(length_table, &mut len_counts);
+    let lengths = len_counts;
 
     let mut code = 0u16;
     let mut next_code = Vec::with_capacity(length_table.len());
@@ -1620,21 +1621,21 @@ mod test {
 
     #[test]
     fn test_length_table_fixed() {
-        let _ = build_length_count_table(&FIXED_CODE_LENGTHS);
+        let _ = build_length_count_table(&FIXED_CODE_LENGTHS, &mut [0; 16]);
     }
 
     #[test]
     #[should_panic]
     fn test_length_table_max_length() {
         let table = [16u8; 288];
-        build_length_count_table(&table);
+        build_length_count_table(&table, &mut [0; 16]);
     }
 
     #[test]
     #[should_panic]
     fn test_empty_table() {
         let table = [];
-        build_length_count_table(&table);
+        build_length_count_table(&table, &mut [0; 16]);
     }
 
     #[test]

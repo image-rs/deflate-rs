@@ -152,12 +152,25 @@ where
     out
 }
 
+#[cfg(test)]
 pub fn huffman_lengths_from_frequency(frequencies: &[u16], max_len: usize) -> Vec<u8> {
     in_place::gen_lengths(frequencies, max_len)
 }
 
-pub fn huffman_lengths_from_frequency_m(frequencies: &[u16], max_len: usize, lens: &mut [u8]) {
-    in_place::in_place_lengths(frequencies, max_len, lens);
+pub type LeafVec = Vec<in_place::Node>;
+
+/// Generate a set of canonical huffman lengths from the given frequencies, with a maximum length
+/// of `max_len`. The lengths are put in the lens slice parameter. Unused lengths are set to 0.
+///
+/// The leaf buffer is passed in to avoid allocating it every time this function is called.
+/// The existing data contained in it is not preserved.
+pub fn huffman_lengths_from_frequency_m(
+    frequencies: &[u16],
+    max_len: usize,
+    leaf_buffer: &mut LeafVec,
+    lens: &mut [u8],
+) {
+    in_place::in_place_lengths(frequencies, max_len, leaf_buffer, lens);
 }
 
 mod in_place {
@@ -170,7 +183,7 @@ mod in_place {
         !(v > 1.0)
     }
 
-    #[derive(Eq, Ord, PartialEq, PartialOrd, Debug, Clone, Copy, Default)]
+    #[derive(Eq, PartialEq, Debug)]
     pub struct Node {
         value: WeightType,
         symbol: u16,
@@ -291,10 +304,12 @@ mod in_place {
     }
 
 
+    #[cfg(test)]
+    /// Convenience wrapper for tests.
     pub fn gen_lengths(frequencies: &[u16], max_len: usize) -> Vec<u8> {
-
         let mut lens = vec![0u8; frequencies.len()];
-        in_place_lengths(frequencies, max_len, lens.as_mut_slice());
+        let mut leaves = Vec::new();
+        in_place_lengths(frequencies, max_len, &mut leaves, lens.as_mut_slice());
         lens
     }
 
@@ -307,7 +322,12 @@ mod in_place {
     /// tables that are better compressible than the algorithm used previously. The downside of this
     /// algorithm is that it's not length-limited, so if too long code lengths are generated,
     /// it might result in a sub-optimal tables as the length-restricting function isn't optimal.
-    pub fn in_place_lengths(frequencies: &[u16], max_len: usize, lengths: &mut [u8]) {
+    pub fn in_place_lengths(
+        frequencies: &[u16],
+        max_len: usize,
+        mut leaves: &mut Vec<Node>,
+        lengths: &mut [u8],
+    ) {
 
         debug_assert!(lengths.len() >= frequencies.len());
 
@@ -315,21 +335,22 @@ mod in_place {
             *l = 0;
         }
 
+        // Clear any previous leaves in the leaf buffer.
+        leaves.clear();
+
         // Discard zero length nodes as they won't be given a code and thus don't need to
         // participate in code length generation and create a new vec of the remaining
         // symbols and weights.
-        let mut leaves: Vec<Node> = frequencies
-            .iter()
-            .enumerate()
-            .filter_map(|(n, f)| if *f > 0 {
+        leaves.extend(frequencies.iter().enumerate().filter_map(
+            |(n, f)| if *f > 0 {
                 Some(Node {
                     value: *f as WeightType,
                     symbol: n as u16,
                 })
             } else {
                 None
-            })
-            .collect();
+            },
+        ));
 
         // Special cases with zero or 1 value having a non-zero frequency
         if leaves.len() == 1 {
@@ -341,19 +362,16 @@ mod in_place {
 
         // Sort the leaves by value. As the sort in the standard library is stable, we don't
         // have to worry about the symbol code here.
-        leaves.sort_by(|&a, &b| a.value.cmp(&b.value));
+        leaves.sort_by(|a, b| a.value.cmp(&b.value));
 
         step_1(&mut leaves);
         step_2(&mut leaves);
 
         // Count how many codes of each length used, for usage in the next section.
-        let mut num_codes = {
-            let mut num_codes = [0u16; NUM_CODES_LENGTH];
-            for l in &leaves {
-                num_codes[l.value as usize] += 1;
-            }
-            num_codes
-        };
+        let mut num_codes = [0u16; NUM_CODES_LENGTH];
+        for l in leaves.iter() {
+            num_codes[l.value as usize] += 1;
+        }
 
         // As the algorithm used here doesn't limit the maximum length that can be generated
         // we need to make sure none of the lengths exceed `max_len`
@@ -361,6 +379,7 @@ mod in_place {
 
         // Output the actual lengths
         let mut leaf_it = leaves.iter().rev();
+        // Start at 1 since the length table is already filled with zeroes.
         for (&n_codes, i) in num_codes[1..max_len + 1].iter().zip(1..(max_len as u8) + 1) {
             for _ in 0..n_codes {
                 lengths[leaf_it.next().unwrap().symbol as usize] = i;

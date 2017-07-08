@@ -11,7 +11,6 @@ use test::Bencher;
 use flate2::Compression;
 use flate2::write;
 use deflate::{CompressionOptions, deflate_bytes_zlib_conf, deflate_bytes_zlib};
-use deflate::write::DeflateEncoder;
 
 fn load_from_file(name: &str) -> Vec<u8> {
     use std::fs::File;
@@ -108,6 +107,7 @@ impl Write for Dummy {
 
 #[bench]
 fn writer_create(b: &mut Bencher) {
+    use deflate::write::DeflateEncoder;
     b.iter(|| DeflateEncoder::new(Dummy {}, CompressionOptions::fast()));
 }
 
