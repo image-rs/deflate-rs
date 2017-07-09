@@ -38,11 +38,12 @@ fn new_array() -> Box<[u16]> {
     // Ideally we would use collect here, but that is extremely slow for some
     // reason.
     let mut arr = Vec::with_capacity(WINDOW_SIZE);
+
+    debug_assert!(arr.capacity() >= WINDOW_SIZE);
     // # Unsafe
     // We set the length right after creating the array with the same capacity, so
     // assuming the implementation of Vec does what it's supposed to this is safe provided
     // the values are not read from.
-    debug_assert!(arr.capacity() >= WINDOW_SIZE);
     unsafe {
         arr.set_len(WINDOW_SIZE);
     }

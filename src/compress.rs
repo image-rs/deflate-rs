@@ -31,8 +31,6 @@ pub enum Flush {
 
 /// Write all the lz77 encoded data in the buffer using the specified `EncoderState`, and finish
 /// with the end of block code.
-///
-/// Returns `Err` if writing should fail at any point.
 pub fn flush_to_bitstream(buffer: &[LZValue], state: &mut EncoderState) {
     for &b in buffer {
         state.write_lzvalue(b.value());
