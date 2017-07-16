@@ -7,6 +7,8 @@ use encoder_state::EncoderState;
 use input_buffer::InputBuffer;
 use compression_options::{CompressionOptions, MAX_HASH_CHECKS};
 use compress::Flush;
+use length_encode::{LeafVec, EncodedLength};
+use huffman_table::NUM_LITERALS_AND_LENGTHS;
 pub use huffman_table::MAX_MATCH;
 
 /// A counter used for checking values in debug mode.
@@ -45,6 +47,21 @@ impl DebugCounter {
     pub fn add(&self, _: u64) {}
 }
 
+pub struct LengthBuffers {
+    pub leaf_buf: LeafVec,
+    pub length_buf: Vec<EncodedLength>,
+}
+
+impl LengthBuffers {
+    #[inline]
+    fn new() -> LengthBuffers {
+        LengthBuffers {
+            leaf_buf: Vec::with_capacity(NUM_LITERALS_AND_LENGTHS),
+            length_buf: Vec::with_capacity(19),
+        }
+    }
+}
+
 /// A struct containing all the stored state used for the encoder.
 pub struct DeflateState<W: Write> {
     /// State of lz77 compression.
@@ -55,6 +72,8 @@ pub struct DeflateState<W: Write> {
     pub encoder_state: EncoderState,
     /// The buffer containing the raw output of the lz77-encoding.
     pub lz77_writer: DynamicWriter,
+    /// Buffers used when generating huffman code lengths.
+    pub length_buffers: LengthBuffers,
     /// Total number of bytes consumed/written to the input buffer.
     pub bytes_written: u64,
     /// Wrapped writer.
@@ -82,6 +101,7 @@ impl<W: Write> DeflateState<W> {
             ),
             encoder_state: EncoderState::new(Vec::with_capacity(1024 * 32)),
             lz77_writer: DynamicWriter::new(),
+            length_buffers: LengthBuffers::new(),
             compression_options: compression_options,
             bytes_written: 0,
             inner: Some(writer),
@@ -91,6 +111,7 @@ impl<W: Write> DeflateState<W> {
         }
     }
 
+    #[inline]
     pub fn output_buf(&mut self) -> &mut Vec<u8> {
         self.encoder_state.inner_vec()
     }

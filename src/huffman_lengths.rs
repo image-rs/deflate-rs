@@ -1,4 +1,4 @@
-use length_encode::{EncodedLength, LeafVec, encode_lengths_m, huffman_lengths_from_frequency_m,
+use length_encode::{EncodedLength, encode_lengths_m, huffman_lengths_from_frequency_m,
                     COPY_PREVIOUS, REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS};
 use huffman_table::{HuffmanTable, create_codes_in_place, num_extra_bits_for_length_code,
                     num_extra_bits_for_distance_code, NUM_LITERALS_AND_LENGTHS,
@@ -6,6 +6,7 @@ use huffman_table::{HuffmanTable, create_codes_in_place, num_extra_bits_for_leng
 use bitstream::LsbWriter;
 use output_writer::FrequencyType;
 use stored_block::MAX_STORED_BLOCK_LENGTH;
+use deflate_state::LengthBuffers;
 
 use std::cmp;
 
@@ -165,8 +166,6 @@ pub enum BlockType {
 /// The code lengths are stored directly in the `HuffmanTable` struct.
 /// TODO: Do the same for other things here.
 pub struct DynamicBlockHeader {
-    /// Run-length encoded huffman length values.
-    pub encoded_lengths: Vec<EncodedLength>,
     /// Length of the run-length encoding symbols.
     pub huffman_table_lengths: Vec<u8>,
     /// Number of lengths for values describing the huffman table that encodes the length values
@@ -185,6 +184,7 @@ pub fn gen_huffman_lengths(
     pending_bits: u8,
     l_lengths: &mut [u8; 288],
     d_lengths: &mut [u8; 32],
+    length_buffers: &mut LengthBuffers,
 ) -> BlockType {
     // Avoid corner cases and issues if this is called for an empty block.
     // For blocks this short, a fixed block will be the shortest.
@@ -196,8 +196,6 @@ pub fn gen_huffman_lengths(
     let l_freqs = remove_trailing_zeroes(l_freqs, MIN_NUM_LITERALS_AND_LENGTHS);
     let d_freqs = remove_trailing_zeroes(d_freqs, MIN_NUM_DISTANCES);
 
-    let mut leaf_buffer = LeafVec::with_capacity(l_freqs.len());
-
     // The huffman spec allows us to exclude zeroes at the end of the
     // table of huffman lengths.
     // Since a frequency of 0 will give an huffman
@@ -206,8 +204,18 @@ pub fn gen_huffman_lengths(
     // There is however a minimum number of values we have to keep
     // according to the deflate spec.
     // TODO: We could probably compute some of this in parallel.
-    huffman_lengths_from_frequency_m(l_freqs, MAX_CODE_LENGTH, &mut leaf_buffer, l_lengths);
-    huffman_lengths_from_frequency_m(d_freqs, MAX_CODE_LENGTH, &mut leaf_buffer, d_lengths);
+    huffman_lengths_from_frequency_m(
+        l_freqs,
+        MAX_CODE_LENGTH,
+        &mut length_buffers.leaf_buf,
+        l_lengths,
+    );
+    huffman_lengths_from_frequency_m(
+        d_freqs,
+        MAX_CODE_LENGTH,
+        &mut length_buffers.leaf_buf,
+        d_lengths,
+    );
 
 
     let used_lengths = l_freqs.len();
@@ -215,10 +223,11 @@ pub fn gen_huffman_lengths(
 
     // Encode length values
     let mut freqs = [0u16; 19];
-    let encoded = encode_lengths_m(
+    encode_lengths_m(
         l_lengths[..used_lengths]
             .iter()
             .chain(&d_lengths[..used_distances]),
+        &mut length_buffers.length_buf,
         &mut freqs,
     );
 
@@ -227,7 +236,7 @@ pub fn gen_huffman_lengths(
     huffman_lengths_from_frequency_m(
         &freqs,
         MAX_HUFFMAN_CODE_LENGTH,
-        &mut leaf_buffer,
+        &mut length_buffers.leaf_buf,
         huffman_table_lengths.as_mut_slice(),
     );
 
@@ -281,7 +290,6 @@ pub fn gen_huffman_lengths(
         BlockType::Stored
     } else {
         BlockType::Dynamic(DynamicBlockHeader {
-            encoded_lengths: encoded,
             huffman_table_lengths: huffman_table_lengths,
             used_hclens: used_hclens,
         })
@@ -292,6 +300,7 @@ pub fn gen_huffman_lengths(
 pub fn write_huffman_lengths(
     header: &DynamicBlockHeader,
     huffman_table: &HuffmanTable,
+    encoded_lengths: &[EncodedLength],
     writer: &mut LsbWriter,
 ) {
     // Ignore trailing zero lengths as allowed by the deflate spec.
@@ -300,7 +309,6 @@ pub fn write_huffman_lengths(
         remove_trailing_zeroes(literal_len_lengths, MIN_NUM_LITERALS_AND_LENGTHS);
     let distance_lengths = remove_trailing_zeroes(distance_lengths, MIN_NUM_DISTANCES);
     let huffman_table_lengths = &header.huffman_table_lengths;
-    let encoded_lengths = &header.encoded_lengths;
     let used_hclens = header.used_hclens;
 
     assert!(literal_len_lengths.len() <= NUM_LITERALS_AND_LENGTHS);

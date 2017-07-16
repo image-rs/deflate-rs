@@ -169,6 +169,7 @@ pub fn compress_data_dynamic_n<W: Write>(
             let (l_freqs, d_freqs) = deflate_state.lz77_writer.get_frequencies();
             let (l_lengths, d_lengths) =
                 deflate_state.encoder_state.huffman_table.get_lengths_mut();
+
             gen_huffman_lengths(
                 l_freqs,
                 d_freqs,
@@ -176,6 +177,7 @@ pub fn compress_data_dynamic_n<W: Write>(
                 partial_bits,
                 l_lengths,
                 d_lengths,
+                &mut deflate_state.length_buffers,
             )
         };
 
@@ -192,6 +194,7 @@ pub fn compress_data_dynamic_n<W: Write>(
                 write_huffman_lengths(
                     &header,
                     &deflate_state.encoder_state.huffman_table,
+                    &mut deflate_state.length_buffers.length_buf,
                     &mut deflate_state.encoder_state.writer,
                 );
 

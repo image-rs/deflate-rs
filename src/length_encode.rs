@@ -67,7 +67,8 @@ where
     I: Iterator<Item = &'a u8> + Clone,
 {
     let mut freqs = [0u16; 19];
-    let encoded = encode_lengths_m(lengths, &mut freqs);
+    let mut encoded: Vec<EncodedLength> = Vec::new();
+    encode_lengths_m(lengths, &mut encoded, &mut freqs);
     (encoded, freqs)
 }
 
@@ -79,11 +80,14 @@ where
 /// Populates the supplied array with the frequency of the different encoded length values
 /// The frequency array is taken as a parameter rather than returned to avoid
 /// excessive memcpying.
-pub fn encode_lengths_m<'a, I>(lengths: I, mut frequencies: &mut [u16; 19]) -> Vec<EncodedLength>
-where
+pub fn encode_lengths_m<'a, I>(
+    lengths: I,
+    mut out: &mut Vec<EncodedLength>,
+    mut frequencies: &mut [u16; 19],
+) where
     I: Iterator<Item = &'a u8> + Clone,
 {
-    let mut out = Vec::with_capacity(lengths.size_hint().0 / 2);
+    out.clear();
     // Number of repetitions of the current value
     let mut repeat = 0;
     let mut iter = lengths.clone().enumerate().peekable();
@@ -149,7 +153,6 @@ where
         }
         prev = l;
     }
-    out
 }
 
 #[cfg(test)]

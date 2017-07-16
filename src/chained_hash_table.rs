@@ -32,6 +32,12 @@ impl Default for Tables {
     }
 }
 
+impl Tables {
+    fn fill_prev(&mut self) {
+        self.prev.copy_from_slice(&self.head);
+    }
+}
+
 /// Create and box the hash chains.
 fn create_tables() -> Box<Tables> {
     // Using default here is a trick to get around the lack of box syntax on stable rust.
@@ -53,14 +59,7 @@ fn create_tables() -> Box<Tables> {
         }
     }
 
-    for (n, mut b) in t.prev.iter_mut().enumerate() {
-        // # Unsafe
-        //
-        // See above.
-        unsafe {
-            ptr::write(b, n as u16);
-        }
-    }
+    t.fill_prev();
 
     t
 }
