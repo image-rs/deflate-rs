@@ -1,3 +1,5 @@
+use deflate_state::DebugCounter;
+
 pub const WINDOW_SIZE: usize = 32768;
 const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 #[cfg(test)]
@@ -39,7 +41,7 @@ fn new_array() -> Box<[u16]> {
     // reason.
     let mut arr = Vec::with_capacity(WINDOW_SIZE);
 
-    debug_assert!(arr.capacity() >= WINDOW_SIZE);
+    assert!(arr.capacity() >= WINDOW_SIZE);
     // # Unsafe
     // We set the length right after creating the array with the same capacity, so
     // assuming the implementation of Vec does what it's supposed to this is safe provided
@@ -60,7 +62,7 @@ pub struct ChainedHashTable {
     prev: Box<[u16]>,
     // Used for testing
     // Didn't find an easy way for it not to exist when debug_assertions are disabled.
-    pub count: u64,
+    count: DebugCounter,
 }
 
 impl ChainedHashTable {
@@ -70,7 +72,7 @@ impl ChainedHashTable {
             current_hash: 0,
             head: chain.clone(),
             prev: chain,
-            count: 0,
+            count: DebugCounter::default(),
         }
     }
 
@@ -88,7 +90,7 @@ impl ChainedHashTable {
         init_array(&mut self.head);
         init_array(&mut self.prev);
         if cfg!(debug_assertions) {
-            self.count = 0;
+            self.count.reset();
         }
     }
 
@@ -100,7 +102,10 @@ impl ChainedHashTable {
     // Insert a byte into the hash table
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
         // Check that all bytes are input in order and at the correct positions.
-        debug_assert_eq!(position & WINDOW_MASK, self.count as usize & WINDOW_MASK);
+        debug_assert_eq!(
+            position & WINDOW_MASK,
+            self.count.get() as usize & WINDOW_MASK
+        );
         debug_assert!(
             position < WINDOW_SIZE * 2,
             "Position is larger than 2 * window size! {}",
@@ -117,7 +122,7 @@ impl ChainedHashTable {
             // where in the buffer (which is 64k bytes) we are referring to.
             self.head[new_hash as usize] = position as u16;
 
-            self.count += 1;
+            self.count.add(1);
         } else {
             // # Unsafe
             // Both the position and new_hash are anded with the WINDOW mask which makes it
@@ -125,8 +130,8 @@ impl ChainedHashTable {
             // Prev and next always have a length of WINDOW_MASK + 1 and can't be changed
             // after initialisation of the struct.
             unsafe {
-                *self.prev.get_unchecked_mut(position & WINDOW_MASK) = *self.head
-                    .get_unchecked(new_hash as usize);
+                *self.prev.get_unchecked_mut(position & WINDOW_MASK) =
+                    *self.head.get_unchecked(new_hash as usize);
                 *self.head.get_unchecked_mut(new_hash as usize) = position as u16;
             }
         }
@@ -189,8 +194,7 @@ impl ChainedHashTable {
     pub fn slide(&mut self, bytes: usize) {
         if cfg!(debug_assertions) && bytes != WINDOW_SIZE {
             // This should only happen in tests in this file.
-            self.count = 0;
-
+            self.count.reset();
         }
         ChainedHashTable::slide_table(&mut self.head[..], bytes as u16);
         ChainedHashTable::slide_table(&mut self.prev[..], bytes as u16);

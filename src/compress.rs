@@ -158,7 +158,9 @@ pub fn compress_data_dynamic_n<W: Write>(
         let current_block_input_bytes = deflate_state.lz77_state.current_block_input_bytes();
 
         if cfg!(debug_assertions) {
-            deflate_state.bytes_written_control += current_block_input_bytes;
+            deflate_state
+                .bytes_written_control
+                .add(current_block_input_bytes);
         }
 
         let partial_bits = deflate_state.encoder_state.writer.pending_bits();

@@ -9,6 +9,41 @@ use compression_options::{CompressionOptions, MAX_HASH_CHECKS};
 use compress::Flush;
 pub use huffman_table::MAX_MATCH;
 
+/// A counter used for checking values in debug mode.
+/// Does nothing when debug assertions are disabled.
+#[derive(Default)]
+pub struct DebugCounter {
+    #[cfg(debug_assertions)]
+    count: u64,
+}
+
+impl DebugCounter {
+    #[cfg(debug_assertions)]
+    pub fn get(&self) -> u64 {
+        self.count
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn get(&self) -> u64 {
+        0
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn reset(&mut self) {
+        self.count = 0;
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn reset(&self) {}
+
+    #[cfg(debug_assertions)]
+    pub fn add(&mut self, val: u64) {
+        self.count += val;
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn add(&self, _: u64) {}
+}
 
 /// A struct containing all the stored state used for the encoder.
 pub struct DeflateState<W: Write> {
@@ -33,7 +68,7 @@ pub struct DeflateState<W: Write> {
     pub flush_mode: Flush,
     /// Number of bytes written as calculated by sum of block input lengths.
     /// Used to check that they are correct when `debug_assertions` are enabled.
-    pub bytes_written_control: u64,
+    pub bytes_written_control: DebugCounter,
 }
 
 impl<W: Write> DeflateState<W> {
@@ -52,7 +87,7 @@ impl<W: Write> DeflateState<W> {
             inner: Some(writer),
             output_buf_pos: 0,
             flush_mode: Flush::None,
-            bytes_written_control: 0,
+            bytes_written_control: DebugCounter::default(),
         }
     }
 
@@ -81,7 +116,7 @@ impl<W: Write> DeflateState<W> {
         self.output_buf_pos = 0;
         self.flush_mode = Flush::None;
         if cfg!(debug_assertions) {
-            self.bytes_written_control = 0;
+            self.bytes_written_control.reset();
         }
         mem::replace(&mut self.inner, Some(writer))
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Missing writer"))

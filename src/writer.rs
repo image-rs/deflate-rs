@@ -53,7 +53,7 @@ pub fn compress_until_done<W: Write>(
 
     debug_assert_eq!(
         deflate_state.bytes_written,
-        deflate_state.bytes_written_control
+        deflate_state.bytes_written_control.get()
     );
 
     Ok(())
@@ -66,7 +66,11 @@ pub fn compress_until_done<W: Write>(
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
+/// # use std::io;
+/// #
+/// # fn try_main() -> io::Result<Vec<u8>> {
+/// #
 /// use std::io::Write;
 ///
 /// use deflate::Compression;
@@ -74,9 +78,14 @@ pub fn compress_until_done<W: Write>(
 ///
 /// let data = b"This is some test data";
 /// let mut encoder = DeflateEncoder::new(Vec::new(), Compression::Default);
-/// encoder.write_all(data).unwrap();
-/// let compressed_data = encoder.finish().unwrap();
-/// # let _ = compressed_data;
+/// encoder.write_all(data)?;
+/// let compressed_data = encoder.finish()?;
+/// # Ok(compressed_data)
+/// #
+/// # }
+/// # fn main() {
+/// #     try_main().unwrap();
+/// # }
 /// ```
 /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 pub struct DeflateEncoder<W: Write> {
@@ -152,7 +161,11 @@ impl<W: Write> Drop for DeflateEncoder<W> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
+/// # use std::io;
+/// #
+/// # fn try_main() -> io::Result<Vec<u8>> {
+/// #
 /// use std::io::Write;
 ///
 /// use deflate::Compression;
@@ -160,9 +173,14 @@ impl<W: Write> Drop for DeflateEncoder<W> {
 ///
 /// let data = b"This is some test data";
 /// let mut encoder = ZlibEncoder::new(Vec::new(), Compression::Default);
-/// encoder.write_all(data).unwrap();
-/// let compressed_data = encoder.finish().unwrap();
-/// # let _ = compressed_data;
+/// encoder.write_all(data)?;
+/// let compressed_data = encoder.finish()?;
+/// # Ok(compressed_data)
+/// #
+/// # }
+/// # fn main() {
+/// #     try_main().unwrap();
+/// # }
 /// ```
 /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 pub struct ZlibEncoder<W: Write> {
@@ -290,7 +308,11 @@ pub mod gzip {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust
+    /// # use std::io;
+    /// #
+    /// # fn try_main() -> io::Result<Vec<u8>> {
+    /// #
     /// use std::io::Write;
     ///
     /// use deflate::Compression;
@@ -298,9 +320,14 @@ pub mod gzip {
     ///
     /// let data = b"This is some test data";
     /// let mut encoder = GzEncoder::new(Vec::new(), Compression::Default);
-    /// encoder.write_all(data).unwrap();
-    /// let compressed_data = encoder.finish().unwrap();
-    /// # let _ = compressed_data;
+    /// encoder.write_all(data)?;
+    /// let compressed_data = encoder.finish()?;
+    /// # Ok(compressed_data)
+    /// #
+    /// # }
+    /// # fn main() {
+    /// #     try_main().unwrap();
+    /// # }
     /// ```
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     pub struct GzEncoder<W: Write> {

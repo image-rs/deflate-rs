@@ -1530,8 +1530,8 @@ impl HuffmanTable {
         let distance_data = get_distance_code_and_extra_bits(distance);
 
         let distance_huffman_code = self.distance_codes[distance_data.code_number as usize];
-        let distance_huffman_length = self.distance_code_lengths
-            [distance_data.code_number as usize];
+        let distance_huffman_length =
+            self.distance_code_lengths[distance_data.code_number as usize];
 
         (
             HuffmanCode {

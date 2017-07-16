@@ -388,8 +388,8 @@ fn process_chunk_lazy(
                 // The previous match was better so we add it.
                 // Casting note: length and distance is already bounded by the longest match
                 // function. Usize is just used for convenience.
-                let b_status = writer
-                    .write_length_distance(prev_length as u16, prev_distance as u16);
+                let b_status =
+                    writer.write_length_distance(prev_length as u16, prev_distance as u16);
 
                 // We add the bytes to the hash table and checksum.
                 // Since we've already added two of them, we need to add two less than
@@ -443,8 +443,8 @@ fn process_chunk_lazy(
         } else {
             // If there is a match at this point, it will not have been added, so we need to add it.
             if prev_length >= MIN_MATCH as u16 {
-                let b_status = writer
-                    .write_length_distance(prev_length as u16, prev_distance as u16);
+                let b_status =
+                    writer.write_length_distance(prev_length as u16, prev_distance as u16);
 
                 state.current_length = 0;
                 state.current_distance = 0;
