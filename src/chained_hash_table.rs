@@ -1,4 +1,5 @@
 use deflate_state::DebugCounter;
+use std::{mem, ptr};
 
 pub const WINDOW_SIZE: usize = 32768;
 const WINDOW_MASK: usize = WINDOW_SIZE - 1;
@@ -6,6 +7,63 @@ const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 pub const HASH_BYTES: usize = 3;
 const HASH_SHIFT: u16 = 5;
 const HASH_MASK: u16 = WINDOW_MASK as u16;
+
+/// Helper struct to let us allocate both head and prev in the same block.
+struct Tables {
+    /// Starts of hash chains (in prev)
+    pub head: [u16; WINDOW_SIZE],
+    /// Link to previous occurence of this hash value
+    pub prev: [u16; WINDOW_SIZE],
+}
+
+impl Default for Tables {
+    #[inline]
+    fn default() -> Tables {
+        // # Unsafe
+        // This struct is not public and is only used in this module, and
+        // the values are immediately filled in after this struct is
+        // created.
+        unsafe {
+            Tables {
+                head: mem::uninitialized(),
+                prev: mem::uninitialized(),
+            }
+        }
+    }
+}
+
+/// Create and box the hash chains.
+fn create_tables() -> Box<Tables> {
+    // Using default here is a trick to get around the lack of box syntax on stable rust.
+    //
+    // Box::new([0u16,n]) ends up creating an temporary array on the stack which is not optimised
+    // but using default, which simply calls `box value` internally allows us to get around this.
+    //
+    // We could use vec instead, but using a boxed array helps the compiler optimise
+    // away bounds checks as `n & WINDOW_MASK < WINDOW_SIZE` will always be true.
+    let mut t: Box<Tables> = Box::default();
+
+    for (n, mut b) in t.head.iter_mut().enumerate() {
+        // # Unsafe
+        //
+        // Using ptr::write here since the values are uninitialised.
+        // u16 is a primitive and doesn't implement drop, so this would be safe either way.
+        unsafe {
+            ptr::write(b, n as u16);
+        }
+    }
+
+    for (n, mut b) in t.prev.iter_mut().enumerate() {
+        // # Unsafe
+        //
+        // See above.
+        unsafe {
+            ptr::write(b, n as u16);
+        }
+    }
+
+    t
+}
 
 /// Returns a new hash value based on the previous value and the next byte
 #[inline]
@@ -19,59 +77,26 @@ fn update_hash_conf(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> 
 }
 
 #[inline]
-fn init_array(arr: &mut [u16]) {
-    use std::ptr;
+fn reset_array(arr: &mut [u16; WINDOW_SIZE]) {
     for (n, mut b) in arr.iter_mut().enumerate() {
-        // # Unsafe
-        // The pointers are grabbed straight from the iterator, so they
-        // won't be out of range.
-        // As u16 is a primitive type, it does not implement drop,
-        // so we don't have to worry about dropping values.
-        // We do it like this since this is called on the array once with
-        // uninitialised values.
-        unsafe {
-            ptr::write(b, n as u16);
-        }
+        *b = n as u16;
     }
-}
-
-#[inline]
-fn new_array() -> Box<[u16]> {
-    // Ideally we would use collect here, but that is extremely slow for some
-    // reason.
-    let mut arr = Vec::with_capacity(WINDOW_SIZE);
-
-    assert!(arr.capacity() >= WINDOW_SIZE);
-    // # Unsafe
-    // We set the length right after creating the array with the same capacity, so
-    // assuming the implementation of Vec does what it's supposed to this is safe provided
-    // the values are not read from.
-    unsafe {
-        arr.set_len(WINDOW_SIZE);
-    }
-    init_array(&mut arr);
-    arr.into_boxed_slice()
 }
 
 pub struct ChainedHashTable {
     // Current running hash value of the last 3 bytes
     current_hash: u16,
-    // Starts of hash chains (in prev)
-    head: Box<[u16]>,
-    // link to previous occurence of this hash value
-    prev: Box<[u16]>,
+    // Hash chains.
+    c: Box<Tables>,
     // Used for testing
-    // Didn't find an easy way for it not to exist when debug_assertions are disabled.
     count: DebugCounter,
 }
 
 impl ChainedHashTable {
     pub fn new() -> ChainedHashTable {
-        let chain = new_array();
         ChainedHashTable {
             current_hash: 0,
-            head: chain.clone(),
-            prev: chain,
+            c: create_tables(),
             count: DebugCounter::default(),
         }
     }
@@ -87,8 +112,12 @@ impl ChainedHashTable {
     /// Resets the hash value and hash chains
     pub fn reset(&mut self) {
         self.current_hash = 0;
-        init_array(&mut self.head);
-        init_array(&mut self.prev);
+        reset_array(&mut self.c.head);
+        {
+            let h = self.c.head;
+            let mut c = self.c.prev;
+            c[..].copy_from_slice(&h[..]);
+        }
         if cfg!(debug_assertions) {
             self.count.reset();
         }
@@ -116,25 +145,15 @@ impl ChainedHashTable {
         let new_hash = update_hash(self.current_hash, value);
 
         if cfg!(debug_assertions) {
-            self.prev[position & WINDOW_MASK] = self.head[new_hash as usize];
-
-            // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
-            // where in the buffer (which is 64k bytes) we are referring to.
-            self.head[new_hash as usize] = position as u16;
-
             self.count.add(1);
-        } else {
-            // # Unsafe
-            // Both the position and new_hash are anded with the WINDOW mask which makes it
-            // impossible for them to be larger than the length of prev and next,
-            // Prev and next always have a length of WINDOW_MASK + 1 and can't be changed
-            // after initialisation of the struct.
-            unsafe {
-                *self.prev.get_unchecked_mut(position & WINDOW_MASK) =
-                    *self.head.get_unchecked(new_hash as usize);
-                *self.head.get_unchecked_mut(new_hash as usize) = position as u16;
-            }
         }
+
+        self.c.prev[position & WINDOW_MASK] = self.c.head[new_hash as usize];
+
+        // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
+        // where in the buffer (which is 64k bytes) we are referring to.
+        self.c.head[new_hash as usize] = position as u16;
+
         // Update the stored hash value with the new hash.
         self.current_hash = new_hash;
     }
@@ -143,7 +162,7 @@ impl ChainedHashTable {
     #[cfg(test)]
     #[inline]
     pub fn current_head(&self) -> u16 {
-        self.head[self.current_hash as usize]
+        self.c.head[self.current_hash as usize]
     }
 
     #[cfg(test)]
@@ -153,26 +172,8 @@ impl ChainedHashTable {
     }
 
     #[inline]
-    #[cfg(debug_assertions)]
     pub fn get_prev(&self, bytes: usize) -> u16 {
-        self.prev[bytes & WINDOW_MASK]
-    }
-
-    #[inline]
-    #[cfg(not(debug_assertions))]
-    pub fn get_prev(&self, bytes: usize) -> u16 {
-        // # Safety:
-        // The index is anded by WINDOW_MASK, which is the length
-        // of the prev array - 1, which means that the index value will always
-        // be less than the length of prev.
-        // Prev is made into a boxed slice when the table is created.
-        // and the length can thus not change after init.
-        //
-        // If prev is a Box[u16;WINDOW_SIZE], the compiler will avoid this bounds check
-        // and using unsafe wouldn't be needed. However, the rust compiler is currently
-        // not able to optimise out the stack arrays when using Box::new() to create a
-        // boxed array, which leads to substantially slower initialisation of the hash table.
-        unsafe { *self.prev.get_unchecked(bytes & WINDOW_MASK) }
+        self.c.prev[bytes & WINDOW_MASK]
     }
 
     #[inline]
@@ -185,7 +186,7 @@ impl ChainedHashTable {
     }
 
     #[inline]
-    fn slide_table(table: &mut [u16], bytes: u16) {
+    fn slide_table(table: &mut [u16; WINDOW_SIZE], bytes: u16) {
         for (n, b) in table.iter_mut().enumerate() {
             *b = ChainedHashTable::slide_value(*b, n as u16, bytes);
         }
@@ -196,8 +197,8 @@ impl ChainedHashTable {
             // This should only happen in tests in this file.
             self.count.reset();
         }
-        ChainedHashTable::slide_table(&mut self.head[..], bytes as u16);
-        ChainedHashTable::slide_table(&mut self.prev[..], bytes as u16);
+        ChainedHashTable::slide_table(&mut self.c.head, bytes as u16);
+        ChainedHashTable::slide_table(&mut self.c.prev, bytes as u16);
     }
 }
 
@@ -212,7 +213,7 @@ pub fn filled_hash_table(data: &[u8]) -> ChainedHashTable {
 
 #[cfg(test)]
 mod test {
-    use super::{filled_hash_table, ChainedHashTable, WINDOW_MASK};
+    use super::{filled_hash_table, ChainedHashTable};
 
     #[test]
     fn chained_hash() {
@@ -286,7 +287,7 @@ mod test {
         hash_table.slide(window_size);
 
         {
-            let max_head = hash_table.head.iter().max().unwrap();
+            let max_head = hash_table.c.head.iter().max().unwrap();
             // After sliding there should be no hashes referring to values
             // higher than the window size
             assert!(*max_head < window_size16);
@@ -303,7 +304,7 @@ mod test {
 
         // There should hashes referring to values in the upper part of the input window
         // at this point
-        let max_prev = hash_table.prev.iter().max().unwrap();
+        let max_prev = hash_table.c.prev.iter().max().unwrap();
         assert!(*max_prev > window_size16);
 
         let mut pos = hash_table.current_head();
@@ -320,10 +321,14 @@ mod test {
     }
 
     #[test]
-    /// Ensure that these are long enough since we use some unsafe indexing.
-    fn array_bounds() {
+    /// Ensure that the initial hash values are correct.
+    fn initial_chains() {
         let t = ChainedHashTable::new();
-        assert_eq!(t.head.len(), WINDOW_MASK + 1);
-        assert_eq!(t.prev.len(), WINDOW_MASK + 1);
+        for (n, &b) in t.c.head.iter().enumerate() {
+            assert_eq!(n, b as usize);
+        }
+        for (n, &b) in t.c.prev.iter().enumerate() {
+            assert_eq!(n, b as usize);
+        }
     }
 }
