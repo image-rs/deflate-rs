@@ -85,6 +85,7 @@ fn reset_array(arr: &mut [u16; WINDOW_SIZE]) {
 pub struct ChainedHashTable {
     // Current running hash value of the last 3 bytes
     current_hash: u16,
+    last_prev: u16,
     // Hash chains.
     c: Box<Tables>,
     // Used for testing
@@ -95,6 +96,7 @@ impl ChainedHashTable {
     pub fn new() -> ChainedHashTable {
         ChainedHashTable {
             current_hash: 0,
+            last_prev: 0,
             c: create_tables(),
             count: DebugCounter::default(),
         }
@@ -111,6 +113,7 @@ impl ChainedHashTable {
     /// Resets the hash value and hash chains
     pub fn reset(&mut self) {
         self.current_hash = 0;
+        self.last_prev = 0;
         reset_array(&mut self.c.head);
         {
             let h = self.c.head;
@@ -128,7 +131,7 @@ impl ChainedHashTable {
     }
 
     // Insert a byte into the hash table
-    pub fn add_hash_value(&mut self, position: usize, value: u8) {
+    pub fn add_hash_value(&mut self, position: usize, value: u8) -> u16{
         // Check that all bytes are input in order and at the correct positions.
         debug_assert_eq!(
             position & WINDOW_MASK,
@@ -147,7 +150,9 @@ impl ChainedHashTable {
             self.count.add(1);
         }
 
-        self.c.prev[position & WINDOW_MASK] = self.c.head[new_hash as usize];
+        let prev = self.c.head[new_hash as usize];
+        //self.last_prev = prev;
+        self.c.prev[position & WINDOW_MASK] = prev;
 
         // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
         // where in the buffer (which is 64k bytes) we are referring to.
@@ -155,6 +160,7 @@ impl ChainedHashTable {
 
         // Update the stored hash value with the new hash.
         self.current_hash = new_hash;
+        prev
     }
 
     // Get the head of the hash chain for the current hash value
@@ -173,6 +179,11 @@ impl ChainedHashTable {
     #[inline]
     pub fn get_prev(&self, bytes: usize) -> u16 {
         self.c.prev[bytes & WINDOW_MASK]
+    }
+
+    #[cfg(test)]
+    pub fn last_prev(&self) -> u16 {
+        self.get_prev(self.current_head() as usize)
     }
 
     #[inline]

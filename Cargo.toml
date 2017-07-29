@@ -26,7 +26,7 @@ benchmarks = []
 gzip = ["gzip-header"]
 
 [badges]
-travis-ci = { repository = "oyvindln/deflate-rs", branch = "master" }
+travis-ci = { repository = "oyvindln/deflate-rs", branch = "dev" }
 
 [package.metadata.docs.rs]
 features = ["gzip"]

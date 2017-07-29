@@ -339,7 +339,7 @@ fn process_chunk_lazy(
     while let Some((position, &b)) = insert_it.next() {
         state.cur_byte = b;
         if let Some(&hash_byte) = hash_it.next() {
-            hash_table.add_hash_value(position, hash_byte);
+            let last_prev = hash_table.add_hash_value(position, hash_byte);
 
             // Only lazy match if we have a match shorter than a set value
             // TODO: This should be cleaned up a bit
@@ -361,6 +361,7 @@ fn process_chunk_lazy(
                         position,
                         prev_length as usize,
                         max_hash_checks,
+                        last_prev,
                     )
                 };
 
@@ -501,11 +502,11 @@ fn process_chunk_greedy(
     // Iterate through the slice, adding literals or length/distance pairs.
     while let Some((position, &b)) = insert_it.next() {
         if let Some(&hash_byte) = hash_it.next() {
-            hash_table.add_hash_value(position, hash_byte);
+            let last_prev = hash_table.add_hash_value(position, hash_byte);
 
             // TODO: This should be cleaned up a bit.
             let (match_len, match_dist) =
-                { longest_match(data, hash_table, position, NO_LENGTH, max_hash_checks) };
+                { longest_match(data, hash_table, position, NO_LENGTH, max_hash_checks, last_prev) };
 
             if match_len >= MIN_MATCH as usize && !match_too_far(match_len, match_dist) {
                 // Casting note: length and distance is already bounded by the longest match

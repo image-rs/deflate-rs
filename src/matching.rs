@@ -66,6 +66,7 @@ pub fn longest_match(
     position: usize,
     prev_length: usize,
     max_hash_checks: u16,
+    last_prev: u16,
 ) -> (usize, usize) {
 
     // debug_assert_eq!(position, hash_table.current_head() as usize);
@@ -89,21 +90,19 @@ pub fn longest_match(
     let max_length = cmp::min((data.len() - position), MAX_MATCH);
 
     // The position in the hash chain we are currently checking.
-    let mut current_head = position;
+    let mut current_head = last_prev as usize;
 
     // The best match length we've found so far, and it's distance.
     let mut best_length = prev_length;
     let mut best_distance = 0;
 
     // The position of the previous value in the hash chain.
-    let mut prev_head;
+    let mut prev_head = position;
 
     for _ in 0..max_hash_checks {
-        prev_head = current_head;
-        current_head = hash_table.get_prev(current_head) as usize;
         if current_head >= prev_head || current_head < limit {
             // If the current hash chain value refers to itself, or is referring to
-            // a value that's higher (we only move backwars through the chain),
+            // a value that's higher (we only move backwards through the chain),
             // we are at the end and can stop.
             break;
         }
@@ -133,6 +132,8 @@ pub fn longest_match(
                 }
             }
         }
+        prev_head = current_head;
+        current_head = hash_table.get_prev(current_head) as usize;
     }
 
     if best_length > prev_length {
@@ -147,12 +148,14 @@ pub fn longest_match(
 #[cfg(test)]
 pub fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usize, usize) {
     use compression_options::MAX_HASH_CHECKS;
+    let prev = hash_table.last_prev();
     longest_match(
         data,
         hash_table,
         hash_table.current_head() as usize,
         MIN_MATCH as usize - 1,
         MAX_HASH_CHECKS,
+        prev,
     )
 }
 
@@ -219,7 +222,9 @@ mod test {
             hash_table.add_hash_value(n, b);
         }
 
-        let (match_length, match_dist) = longest_match(test_data, &hash_table, 2, 0, 4096);
+        let prev = hash_table.last_prev();
+
+        let (match_length, match_dist) = longest_match(test_data, &hash_table, 2, 0, 4096, prev);
 
         assert_eq!(match_dist, 1);
         assert!(match_length > 2);
