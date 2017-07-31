@@ -257,10 +257,10 @@ impl<W: Write> io::Write for ZlibEncoder<W> {
         let flush_mode = self.deflate_state.flush_mode;
         let res = compress_data_dynamic_n(buf, &mut self.deflate_state, flush_mode);
         match res {
-            /// If this is returned, the whole buffer was consumed
+            // If this is returned, the whole buffer was consumed
             Ok(0) => self.checksum.update_from_slice(buf),
-            /// Otherwise, only part of it was consumed, so only that part
-            /// added to the checksum.
+            // Otherwise, only part of it was consumed, so only that part
+            // added to the checksum.
             Ok(n) => self.checksum.update_from_slice(&buf[0..n]),
             _ => (),
         };

@@ -34,7 +34,14 @@ impl Default for Tables {
 
 impl Tables {
     fn fill_prev(&mut self) {
-        self.prev.copy_from_slice(&self.head);
+        assert_eq!(self.head.len(), self.prev.len());
+        // # Unsafe
+        //
+        // The arrays are created with the same length statically, so this should be safe.
+        // We use this rather than copy_from_slice as prev starts out unitialized.
+        unsafe {
+            ptr::copy_nonoverlapping(self.head.as_ptr(), self.prev.as_mut_ptr(), self.prev.len())
+        }
     }
 }
 
