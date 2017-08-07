@@ -4,6 +4,7 @@ use chained_hash_table::{ChainedHashTable, WINDOW_SIZE};
 use huffman_table;
 
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
+#[cfg(test)]
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 
 /// Get the length of the checked match
@@ -84,7 +85,7 @@ pub fn longest_match(
 
     // Make sure the length is at least one to simplify the matching code, as
     // otherwise the matching code might underflow.
-    let prev_length = cmp::max(prev_length, MIN_MATCH - 1);
+    let prev_length = cmp::max(prev_length, 1);
 
     let max_length = cmp::min((data.len() - position), MAX_MATCH);
 
@@ -223,5 +224,24 @@ mod test {
 
         assert_eq!(match_dist, 1);
         assert!(match_length > 2);
+    }
+}
+
+
+#[cfg(all(test, feature = "benchmarks"))]
+mod bench {
+    use test_std::Bencher;
+    use test_utils::get_test_data;
+    use chained_hash_table::filled_hash_table;
+    use super::longest_match_current;
+    #[bench]
+    fn matching(b: &mut Bencher) {
+        const POS: usize = 20011;
+        let data = get_test_data();
+        let hash_table = filled_hash_table(&data[..POS + 1]);
+        println!("M: {:?}", longest_match_current(&data[..], &hash_table));
+        b.iter( ||
+          longest_match_current(&data[..], &hash_table)
+        );
     }
 }
