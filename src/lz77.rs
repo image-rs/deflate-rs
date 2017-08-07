@@ -11,7 +11,7 @@ use matching::longest_match;
 #[cfg(test)]
 use lzvalue::{LZValue, LZType};
 use huffman_table;
-use chained_hash_table::ChainedHashTable;
+use chained_hash_table::{ChainedHashTable, update_hash};
 #[cfg(test)]
 use compression_options::{HIGH_MAX_HASH_CHECKS, HIGH_LAZY_IF_LESS_THAN};
 use output_writer::{BufferStatus, DynamicWriter};
@@ -235,20 +235,24 @@ fn process_chunk(
 /// adding `start` to the position supplied to the hash table.
 fn add_to_hash_table(
     bytes_to_add: usize,
-    pos_of_first_byte: usize,
-    insert_it: &mut iter::Zip<RangeFrom<usize>, Iter<u8>>, //Enumerate<Iter<u8>>,
+    insert_it: &mut iter::Zip<RangeFrom<usize>, Iter<u8>>,
     hash_it: &mut Iter<u8>,
     hash_table: &mut ChainedHashTable,
 ) {
-    let taker = insert_it.by_ref().take(bytes_to_add).enumerate();
+    let taker = insert_it.by_ref().take(bytes_to_add);
     let mut hash_taker = hash_it.by_ref().take(bytes_to_add);
+    // Update the hash manually here to keep it in a register.
+    let mut hash = hash_table.current_hash();
     // Advance the iterators and add the bytes we jump over to the hash table and
     // checksum
     for (ipos, _) in taker {
         if let Some(&i_hash_byte) = hash_taker.next() {
-            hash_table.add_hash_value(ipos + pos_of_first_byte, i_hash_byte);
+            hash = update_hash(hash, i_hash_byte);
+            hash_table.add_with_hash(ipos, hash);
         }
     }
+    // Write the hash back once we are done.
+    hash_table.set_hash(hash);
 }
 
 /// Write the specified literal `byte` to the writer `w`, and return
@@ -398,7 +402,6 @@ fn process_chunk_lazy(
 
                 add_to_hash_table(
                     bytes_to_add as usize,
-                    position + 1,
                     &mut insert_it,
                     &mut hash_it,
                     &mut hash_table,
@@ -518,7 +521,6 @@ fn process_chunk_greedy(
                 let bytes_to_add = match_len - 1;
                 add_to_hash_table(
                     bytes_to_add,
-                    position + 1,
                     &mut insert_it,
                     &mut hash_it,
                     &mut hash_table,

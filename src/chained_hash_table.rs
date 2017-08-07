@@ -73,7 +73,7 @@ fn create_tables() -> Box<Tables> {
 
 /// Returns a new hash value based on the previous value and the next byte
 #[inline]
-fn update_hash(current_hash: u16, to_insert: u8) -> u16 {
+pub fn update_hash(current_hash: u16, to_insert: u8) -> u16 {
     update_hash_conf(current_hash, to_insert, HASH_SHIFT, HASH_MASK)
 }
 
@@ -134,7 +134,8 @@ impl ChainedHashTable {
         self.current_hash = update_hash(self.current_hash, v2);
     }
 
-    // Insert a byte into the hash table
+    /// Insert a byte into the hash table
+    #[inline]
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
         // Check that all bytes are input in order and at the correct positions.
         debug_assert_eq!(
@@ -150,18 +151,30 @@ impl ChainedHashTable {
         // bounds checks in this function.
         let new_hash = update_hash(self.current_hash, value);
 
+        self.add_with_hash(position, new_hash);
+
+        // Update the stored hash value with the new hash.
+        self.current_hash = new_hash;
+    }
+
+    /// Directly set the current hash value
+    #[inline]
+    pub fn set_hash(&mut self, hash: u16) {
+        self.current_hash = hash;
+    }
+
+    /// Update the tables directly, providing the hash.
+    #[inline]
+    pub fn add_with_hash(&mut self, position: usize, hash: u16) {
         if cfg!(debug_assertions) {
             self.count.add(1);
         }
 
-        self.c.prev[position & WINDOW_MASK] = self.c.head[new_hash as usize];
+        self.c.prev[position & WINDOW_MASK] = self.c.head[hash as usize];
 
         // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
         // where in the buffer (which is 64k bytes) we are referring to.
-        self.c.head[new_hash as usize] = position as u16;
-
-        // Update the stored hash value with the new hash.
-        self.current_hash = new_hash;
+        self.c.head[hash as usize] = position as u16;
     }
 
     // Get the head of the hash chain for the current hash value
@@ -171,7 +184,6 @@ impl ChainedHashTable {
         self.c.head[self.current_hash as usize]
     }
 
-    #[cfg(test)]
     #[inline]
     pub fn current_hash(&self) -> u16 {
         self.current_hash
