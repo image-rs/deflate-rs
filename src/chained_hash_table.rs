@@ -136,7 +136,7 @@ impl ChainedHashTable {
 
     /// Insert a byte into the hash table
     #[inline]
-    pub fn add_hash_value(&mut self, position: usize, value: u8) {
+    pub fn add_hash_value(&mut self, position: usize, value: u8) -> bool {
         // Check that all bytes are input in order and at the correct positions.
         debug_assert_eq!(
             position & WINDOW_MASK,
@@ -147,14 +147,31 @@ impl ChainedHashTable {
             "Position is larger than 2 * window size! {}",
             position
         );
+
+        let mut same = false;
+
         // Storing the hash in a temporary variable here makes the compiler avoid the
         // bounds checks in this function.
         let new_hash = update_hash(self.current_hash, value);
 
-        self.add_with_hash(position, new_hash);
+        if cfg!(debug_assertions) {
+            self.count.add(1);
+        }
+
+        self.c.prev[position & WINDOW_MASK] = self.c.head[new_hash as usize];
+
+        if self.c.head[new_hash as usize] == position as u16 {
+            same = true;
+        }
+
+        // Ignoring any bits over 16 here is deliberate, as we only concern ourselves about
+        // where in the buffer (which is 64k bytes) we are referring to.
+        self.c.head[new_hash as usize] = position as u16;
 
         // Update the stored hash value with the new hash.
         self.current_hash = new_hash;
+
+        same
     }
 
     /// Directly set the current hash value

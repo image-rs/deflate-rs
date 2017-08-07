@@ -343,43 +343,51 @@ fn process_chunk_lazy(
     while let Some((position, &b)) = insert_it.next() {
         state.cur_byte = b;
         if let Some(&hash_byte) = hash_it.next() {
-            hash_table.add_hash_value(position, hash_byte);
+            let same = hash_table.add_hash_value(position, hash_byte);
 
             // Only lazy match if we have a match shorter than a set value
             // TODO: This should be cleaned up a bit
             if !ignore_next {
-                let (mut match_len, match_dist) = {
-                    // If there already was a decent match at the previous byte
-                    // and we are lazy matching, do less match checks in this step.
-                    let max_hash_checks = if prev_length >= 32 {
-                        max_hash_checks >> 2
+                let (match_len, match_dist) = {
+                    if !same {
+                        let (mut match_len, match_dist) = {
+                            // If there already was a decent match at the previous byte
+                            // and we are lazy matching, do less match checks in this step.
+                            let max_hash_checks = if prev_length >= 32 {
+                                max_hash_checks >> 2
+                            } else {
+                                max_hash_checks
+                            };
+
+                            // Check if we can find a better match here than the one we had at
+                            // the previous byte.
+                            longest_match(
+                                data,
+                                hash_table,
+                                position,
+                                prev_length as usize,
+                                max_hash_checks,
+                            )
+                        };
+
+                        // If the match is only 3 bytes long and very far back, it's probably not
+                        // worth outputting.
+                        if match_too_far(match_len, match_dist) {
+                            match_len = NO_LENGTH as usize;
+                        };
+
+                        if match_len >= lazy_if_less_than {
+                            // We found a decent match, so we won't check for a better one at the
+                            //next byte.
+                            ignore_next = true;
+                        };
+                        (match_len as u16, match_dist as u16)
                     } else {
-                        max_hash_checks
-                    };
-
-                    // Check if we can find a better match here than the one we had at
-                    // the previous byte.
-                    longest_match(
-                        data,
-                        hash_table,
-                        position,
-                        prev_length as usize,
-                        max_hash_checks,
-                    )
+                        (NO_LENGTH, 0)
+                    }
                 };
-
-                // If the match is only 3 bytes long and very far back, it's probably not worth
-                // outputting.
-                if match_too_far(match_len, match_dist) {
-                    match_len = NO_LENGTH as usize;
-                };
-
-                if match_len >= lazy_if_less_than {
-                    // We found a decent match, so we won't check for a better one at the next byte.
-                    ignore_next = true;
-                }
-                state.current_length = match_len as u16;
-                state.current_distance = match_dist as u16;
+                state.current_length = match_len;
+                state.current_distance = match_dist;
             } else {
                 // We already had a decent match, so we don't bother checking for another one.
                 state.current_length = NO_LENGTH;
@@ -1300,7 +1308,7 @@ mod bench {
     use test_utils::get_test_data;
     use super::lz77_compress;
     #[bench]
-    fn test_file_zlib_lz77_only(b: &mut Bencher) {
+    fn file_lz77_only(b: &mut Bencher) {
         let test_data = get_test_data();
         b.iter(|| lz77_compress(&test_data));
     }
