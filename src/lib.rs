@@ -54,11 +54,10 @@ extern crate test as test_std;
 
 #[cfg(test)]
 extern crate flate2;
-// #[cfg(test)]
-// extern crate inflate;
 
 extern crate adler32;
 extern crate byteorder;
+extern crate safemem;
 #[cfg(feature = "gzip")]
 extern crate gzip_header;
 

@@ -16,6 +16,7 @@ categories = ["compression"]
 [dependencies]
 adler32 = "1.0.0"
 byteorder = "1.0.0"
+safemem = "0.2"
 gzip-header = { version = "0.1", optional = true }
 
 [dev-dependencies]

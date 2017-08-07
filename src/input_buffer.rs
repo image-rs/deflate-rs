@@ -1,4 +1,5 @@
 use std::cmp;
+use safemem::copy_over;
 
 use chained_hash_table::WINDOW_SIZE;
 use huffman_table;
@@ -54,7 +55,7 @@ impl InputBuffer {
     /// Slide the input window and add new data.
     ///
     /// Returns a slice containing the data that did not fit, or None if all data was consumed.
-    pub fn slide<'a>(&mut self, data: &'a [u8]) -> Option<&'a [u8]> {
+    pub fn slide2<'a>(&mut self, data: &'a [u8]) -> Option<&'a [u8]> {
         // This should only be used when the buffer is full
         assert!(self.buffer.len() > WINDOW_SIZE * 2);
 
@@ -86,6 +87,31 @@ impl InputBuffer {
         if data.len() > upper_len {
             // Return a slice of the data that was not added
             Some(&data[end..])
+        } else {
+            None
+        }
+    }
+
+    /// Slide the input window and add new data.
+    ///
+    /// Returns a slice containing the data that did not fit, or None if all data was consumed.
+    pub fn slide<'a>(&mut self, data: &'a [u8]) -> Option<&'a [u8]> {
+        // This should only be used when the buffer is full
+        assert!(self.buffer.len() > WINDOW_SIZE * 2);
+        let to_move = cmp::min(WINDOW_SIZE + MAX_MATCH, self.buffer.len() - WINDOW_SIZE);
+
+        let len = cmp::min(WINDOW_SIZE, data.len());
+
+        copy_over(&mut self.buffer, WINDOW_SIZE, 0, to_move);
+
+        self.buffer[to_move..to_move + len].copy_from_slice(&data[..len]);
+
+        // Remove unused space.
+        self.buffer.truncate(to_move + len);
+
+        if data.len() > len {
+            // Return a slice of the data that was not added
+            Some(&data[len..])
         } else {
             None
         }
@@ -134,6 +160,25 @@ mod test {
         assert_eq!(extra, None);
         let to_add = [5; 5];
         let rem = buf.slide(&to_add);
+        assert!(rem.is_none());
+        {
+            let slice = buf.get_buffer();
+            assert!(slice[..WINDOW_SIZE + MAX_MATCH] == data[WINDOW_SIZE..]);
+            assert_eq!(
+                slice[WINDOW_SIZE + MAX_MATCH..WINDOW_SIZE + MAX_MATCH + 5],
+                to_add
+            );
+        }
+        assert_eq!(buf.current_end(), WINDOW_SIZE + MAX_MATCH + to_add.len());
+    }
+
+    #[test]
+    fn slide2() {
+        let data = [10u8; BUFFER_SIZE];
+        let (mut buf, extra) = InputBuffer::new(&data[..]);
+        assert_eq!(extra, None);
+        let to_add = [5; 5];
+        let rem = buf.slide2(&to_add);
         assert!(rem.is_none());
         {
             let slice = buf.get_buffer();
