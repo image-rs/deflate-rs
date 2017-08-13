@@ -945,7 +945,7 @@ pub fn lz77_compress_conf(
     ));
     let mut out = Vec::<LZValue>::with_capacity(data.len() / 3);
     {
-        let mut test = test_boxed.as_mut();
+        let test = test_boxed.as_mut();
         let mut slice = data;
 
         while !test.state.is_last_block {

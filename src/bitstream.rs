@@ -15,18 +15,32 @@ mod arch_dep {
     pub type AccType = u64;
     pub const FLUSH_AT: u8 = 48;
     /// Push pending bits to vector.
-    /// Using a macro here since an inline functio
+    /// Using a macro here since an inline function.
     /// didn't optimise properly.
     macro_rules! push{
         ($s:ident) => {
-            $s.w.extend_from_slice(
-                &[$s.acc as u8,
-                  ($s.acc >> 8) as u8,
-                  ($s.acc >> 16) as u8,
-                  ($s.acc >> 24) as u8,
-                  ($s.acc >> 32) as u8,
-                  ($s.acc >> 40) as u8
+            let len = $s.w.len();
+            $s.w.reserve(6);
+            // Optimization:
+            //
+            // This is basically what `Vec::extend_from_slice` does, but it didn't inline
+            // properly, so we do it manually for now.
+            //
+            // # Unsafe
+            // We reserve enough space right before this, so setting the len manually and doing
+            // unchecked indexing is safe here since we only, and always write to all of the the
+            // uninitialized bytes of the vector.
+            unsafe {
+                $s.w.set_len(len + 6);
+                $s.w.get_unchecked_mut(len..).copy_from_slice(&[$s.acc as u8,
+                                                                ($s.acc >> 8) as u8,
+                                                                ($s.acc >> 16) as u8,
+                                                                ($s.acc >> 24) as u8,
+                                                                ($s.acc >> 32) as u8,
+                                                                ($s.acc >> 40) as u8
                 ][..]);
+            }
+
         };
     }
 }
@@ -37,6 +51,8 @@ mod arch_dep {
     pub const FLUSH_AT: u8 = 16;
     macro_rules! push{
         ($s:ident) => {
+            // Unlike the 64-bit case, using copy_from_slice seemed to worsen performance here.
+            // TODO: Needs benching on a 32-bit system to see what works best.
             $s.w.push($s.acc as u8);
             $s.w.push(($s.acc >> 8) as u8);
         };
@@ -45,9 +61,9 @@ mod arch_dep {
 
 use self::arch_dep::*;
 
-///Writes bits to a byte stream, LSB first.
+/// Writes bits to a byte stream, LSB first.
 pub struct LsbWriter {
-    // NOTE(oyvindln) Made this public for now so it can be replaced after initialization.
+    // Public for now so it can be replaced after initialization.
     pub w: Vec<u8>,
     bits: u8,
     acc: AccType,

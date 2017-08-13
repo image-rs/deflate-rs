@@ -7,40 +7,65 @@ const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
 #[cfg(test)]
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 
+
 /// Get the length of the checked match
 /// The function returns number of bytes at and including `current_pos` that are the same as the
 /// ones at `pos_to_check`
+#[inline]
 pub fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) -> usize {
-    // Unsafe version for comparison
-    // This doesn't actually make it much faster
+    // Unsafe version using unaligned loads for comparison.
+    // Faster when benching the matching function alone,
+    // but not as significant when running the full thing.
+/*
+    type Comp = u64;
 
-    // use std::mem::transmute_copy;
+    use std::mem::size_of;
 
-    // let mut counter = 0;
-    // let max = cmp::min(data.len() - current_pos, MAX_MATCH);
+    let max = cmp::min(data.len() - current_pos, MAX_MATCH);
+    let mut left = max;
+    let s = size_of::<Comp>();
 
-    // unsafe {
-    //     let mut cur = data.as_ptr().offset(current_pos as isize);
-    //     let mut tc = data.as_ptr().offset(pos_to_check as isize);
-    //     while (counter < max) &&
-    //           (transmute_copy::<u8, u32>(&*cur) == transmute_copy::<u8, u32>(&*tc)) {
-    //         counter += 4;
-    //         cur = cur.offset(4);
-    //         tc = tc.offset(4);
+    unsafe {
+        let mut cur = data.as_ptr().offset(current_pos as isize);
+        let mut tc = data.as_ptr().offset(pos_to_check as isize);
+        while left >= s &&
+              (*(cur as *const Comp) == *(tc as *const Comp)) {
+                  left -= s;
+                  cur = cur.offset(s as isize);
+                  tc = tc.offset(s as isize);
+              }
+        while left > 0 && *cur == *tc {
+            left -= 1;
+            cur = cur.offset(1);
+            tc = tc.offset(1);
+        }
+    }
+
+    max - left
+*/
+
+    // Slightly faster than naive in single bench.
+    // Does not use unaligned loads.
+    // let l = cmp::min(MAX_MATCH, data.len() - current_pos);
+
+    // let a = unsafe{&data.get_unchecked(current_pos..current_pos + l)};
+    // let b = unsafe{&data.get_unchecked(pos_to_check..)};
+
+    // let mut len = 0;
+
+    // for (l, r) in a
+    //     .iter()
+    //     .zip(b.iter()) {
+    //         if *l == *r {
+    //             len += 1;
+    //             continue;
+    //         } else {
+    //             break;
+    //         }
     //     }
-    //     if counter > 3 {
-    //         cur = cur.offset(-4);
-    //         tc = tc.offset(-4);
-    //         counter -= 4;
-    //     }
-    //     while counter < max && *cur == *tc {
-    //         counter += 1;
-    //         cur = cur.offset(1);
-    //         tc = tc.offset(1);
-    //     }
-    // }
+    // len as usize
 
-    //    counter
+    // Naive version
     data[current_pos..]
         .iter()
         .zip(data[pos_to_check..].iter())
@@ -220,10 +245,10 @@ mod test {
             hash_table.add_hash_value(n, b);
         }
 
-        let (match_length, match_dist) = longest_match(test_data, &hash_table, 2, 0, 4096);
+        let (match_length, match_dist) = longest_match(test_data, &hash_table, 1, 0, 4096);
 
         assert_eq!(match_dist, 1);
-        assert!(match_length > 2);
+        assert!(match_length == 6);
     }
 }
 
@@ -233,15 +258,16 @@ mod bench {
     use test_std::Bencher;
     use test_utils::get_test_data;
     use chained_hash_table::filled_hash_table;
-    use super::longest_match_current;
+    use super::longest_match;
     #[bench]
     fn matching(b: &mut Bencher) {
         const POS: usize = 20011;
         let data = get_test_data();
         let hash_table = filled_hash_table(&data[..POS + 1]);
-        println!("M: {:?}", longest_match_current(&data[..], &hash_table));
+        let pos = hash_table.current_head() as usize;
+        println!("M: {:?}", longest_match(&data[..], &hash_table, pos, 0, 4096));
         b.iter( ||
-          longest_match_current(&data[..], &hash_table)
+          longest_match(&data[..], &hash_table, pos, 0, 4096)
         );
     }
 }

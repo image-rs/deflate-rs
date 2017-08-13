@@ -334,7 +334,7 @@ mod in_place {
 
         debug_assert!(lengths.len() >= frequencies.len());
 
-        for mut l in lengths.iter_mut() {
+        for l in lengths.iter_mut() {
             *l = 0;
         }
 

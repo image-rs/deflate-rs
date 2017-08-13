@@ -56,7 +56,7 @@ fn create_tables() -> Box<Tables> {
     // away bounds checks as `n & WINDOW_MASK < WINDOW_SIZE` will always be true.
     let mut t: Box<Tables> = Box::default();
 
-    for (n, mut b) in t.head.iter_mut().enumerate() {
+    for (n, b) in t.head.iter_mut().enumerate() {
         // # Unsafe
         //
         // Using ptr::write here since the values are uninitialised.
@@ -84,7 +84,7 @@ fn update_hash_conf(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> 
 
 #[inline]
 fn reset_array(arr: &mut [u16; WINDOW_SIZE]) {
-    for (n, mut b) in arr.iter_mut().enumerate() {
+    for (n, b) in arr.iter_mut().enumerate() {
         *b = n as u16;
     }
 }
