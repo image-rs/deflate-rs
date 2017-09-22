@@ -305,8 +305,6 @@ mod test {
     #[test]
     /// Test compressing a short string using fixed encoding.
     fn fixed_string_mem() {
-        use std::str;
-
         let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
         let compressed = compress_data_fixed(&test_data);
 
@@ -355,8 +353,6 @@ mod test {
     #[test]
     /// Test compression from a file.
     fn fixed_string_file() {
-        use std::str;
-
         let input = get_test_data();
 
         let compressed = compress_data_fixed(&input);

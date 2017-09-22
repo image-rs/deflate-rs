@@ -994,8 +994,6 @@ mod test {
     /// Test that a short string from an example on SO compresses correctly
     #[test]
     fn compress_short() {
-        use std::str;
-
         let test_bytes = String::from("Deflate late").into_bytes();
         let res = lz77_compress(&test_bytes).unwrap();
 
@@ -1008,7 +1006,6 @@ mod test {
     /// Test that compression is working for a longer file
     #[test]
     fn compress_long() {
-        use std::str;
         let input = get_test_data();
         let compressed = lz77_compress(&input).unwrap();
         assert!(compressed.len() < input.len());

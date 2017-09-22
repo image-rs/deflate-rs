@@ -312,7 +312,6 @@ mod test {
 
     #[test]
     fn dynamic_string_mem() {
-        use std::str;
         let test_data = String::from("                    GNU GENERAL PUBLIC LICENSE").into_bytes();
         let compressed = deflate_bytes(&test_data);
 
@@ -324,8 +323,6 @@ mod test {
 
     #[test]
     fn dynamic_string_file() {
-        use std::str;
-
         let input = get_test_data();
         let compressed = deflate_bytes(&input);
 

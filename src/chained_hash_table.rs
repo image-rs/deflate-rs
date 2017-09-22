@@ -285,7 +285,6 @@ mod test {
     fn table_slide() {
         use std::fs::File;
         use std::io::Read;
-        use std::str;
 
         let window_size = super::WINDOW_SIZE;
         let window_size16 = super::WINDOW_SIZE as u16;

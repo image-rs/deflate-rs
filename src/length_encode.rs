@@ -180,10 +180,16 @@ mod in_place {
     type WeightType = u32;
 
     pub fn validate_lengths(lengths: &[u8]) -> bool {
-        let v = lengths.iter().fold(0f64, |acc, &n| {
-            acc + if n != 0 { 2f64.powi(-(n as i32)) } else { 0f64 }
-        });
-        !(v > 1.0)
+        // Avoid issue with floating point on mips: https://github.com/oyvindln/deflate-rs/issues/23
+        if cfg!(any(target_arch = "mips", target_arch = "mipsel",
+                    target_arch = "mips64", target_arch = "mipsel64")) {
+            true
+        } else {
+            let v = lengths.iter().fold(0f64, |acc, &n| {
+                acc + if n != 0 { 2f64.powi(-(n as i32)) } else { 0f64 }
+            });
+            !(v > 1.0)
+        }
     }
 
     #[derive(Eq, PartialEq, Debug)]
