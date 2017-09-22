@@ -1,6 +1,6 @@
 [package]
 name = "deflate"
-version = "0.7.16"
+version = "0.7.17"
 license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
 readme = "README.md"
