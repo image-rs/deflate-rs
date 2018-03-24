@@ -2,7 +2,7 @@ use deflate_state::DebugCounter;
 use std::{mem, ptr};
 
 pub const WINDOW_SIZE: usize = 32768;
-const WINDOW_MASK: usize = WINDOW_SIZE - 1;
+pub const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 #[cfg(test)]
 pub const HASH_BYTES: usize = 3;
 const HASH_SHIFT: u16 = 5;
@@ -194,6 +194,27 @@ impl ChainedHashTable {
         self.c.prev[bytes & WINDOW_MASK]
     }
 
+    #[cfg(test)]
+    #[inline]
+    pub fn farthest_next(&self, match_pos: usize, match_len: usize) -> usize {
+        let to_check = match_len.saturating_sub(2);
+
+        let mut n = 0;
+        let mut smallest_prev =
+            self.get_prev(match_pos);
+        let mut smallest_pos = 0;
+        while n < to_check {
+            let prev =
+                self.get_prev(match_pos + n);
+            if prev < smallest_prev {
+                smallest_prev = prev;
+                smallest_pos = n;
+            }
+            n += 1;
+        }
+        smallest_pos
+    }
+
     #[inline]
     fn slide_value(b: u16, pos: u16, bytes: u16) -> u16 {
         if b >= bytes {
@@ -222,6 +243,7 @@ impl ChainedHashTable {
 
 #[cfg(test)]
 pub fn filled_hash_table(data: &[u8]) -> ChainedHashTable {
+    assert!(data.len() <= (WINDOW_SIZE * 2) + 2);
     let mut hash_table = ChainedHashTable::from_starting_values(data[0], data[1]);
     for (n, b) in data[2..].iter().enumerate() {
         hash_table.add_hash_value(n, *b);

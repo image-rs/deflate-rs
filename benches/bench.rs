@@ -36,7 +36,7 @@ fn test_file_zlib_def(b: &mut Bencher) {
 }
 
 #[bench]
-fn test_file_zlib_high(b: &mut Bencher) {
+fn test_file_zlib_best(b: &mut Bencher) {
     let test_data = get_test_data();
 
     b.iter(|| {

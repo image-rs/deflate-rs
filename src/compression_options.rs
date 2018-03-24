@@ -11,7 +11,7 @@
 use lz77::MatchingType;
 use std::convert::From;
 
-pub const HIGH_MAX_HASH_CHECKS: u16 = 768;
+pub const HIGH_MAX_HASH_CHECKS: u16 = 1768;
 pub const HIGH_LAZY_IF_LESS_THAN: u16 = 128;
 /// The maximum number of hash checks that make sense as this is the length
 /// of the hash chain.
