@@ -34,7 +34,7 @@ let compressed_data = encoder.finish().unwrap();
 * [flate2](http://alexcrichton.com/flate2-rs/flate2/index.html) FLATE, Gzip, and Zlib bindings for Rust
 * [Zopfli in Rust](https://github.com/carols10cents/zopfli) Rust port of zopfli
 * [inflate](https://github.com/PistonDevelopers/inflate) DEFLATE decoder implemented in rust
-* [miniz-oxide](https://github.com/Frommi/miniz_oxide) New in-progress port of miniz to rust.
+* [miniz-oxide](https://github.com/Frommi/miniz_oxide) Port of miniz to rust.
 * [miniz-rs](https://github.com/alexchandel/miniz-rs) Older rust translation of miniz.
 * [libflate](https://github.com/sile/libflate) Another DEFLATE/Zlib/Gzip encoder and decoder written in Rust. (Only does some very light compression).
 

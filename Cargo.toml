@@ -16,7 +16,7 @@ categories = ["compression"]
 [dependencies]
 adler32 = "1.0.2"
 byteorder = "1.0.0"
-gzip-header = { version = "0.1", optional = true }
+gzip-header = { version = "0.2", optional = true }
 
 [dev-dependencies]
 flate2 = "0.2.19"
