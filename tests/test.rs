@@ -41,7 +41,7 @@ fn file_zlib_compare_output() {
     use flate2::Compression;
     let test_data = get_test_data();
     let flate2_compressed = {
-        let mut e = flate2::write::ZlibEncoder::new(Vec::new(), Compression::Best);
+        let mut e = flate2::write::ZlibEncoder::new(Vec::new(), Compression::best());
         e.write_all(&test_data).unwrap();
         e.finish().unwrap()
     };
