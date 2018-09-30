@@ -144,11 +144,11 @@ mod test {
         let w = DynamicWriter::new();
 
         for i in 0..u16::max_value() {
-            get_length_code(i) < w.frequencies.len();
+            assert!(get_length_code(i) < w.frequencies.len());
         }
 
         for i in 0..u16::max_value() {
-            get_distance_code(i) < w.distance_frequencies.len() as u8;
+            assert!(get_distance_code(i) < w.distance_frequencies.len() as u8);
         }
     }
 }
