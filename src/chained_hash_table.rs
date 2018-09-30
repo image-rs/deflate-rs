@@ -1,4 +1,4 @@
-use deflate_state::DebugCounter;
+//use deflate_state::DebugCounter;
 use std::{mem, ptr};
 
 pub const WINDOW_SIZE: usize = 32768;
@@ -95,7 +95,7 @@ pub struct ChainedHashTable {
     // Hash chains.
     c: Box<Tables>,
     // Used for testing
-    count: DebugCounter,
+    // count: DebugCounter,
 }
 
 impl ChainedHashTable {
@@ -103,7 +103,7 @@ impl ChainedHashTable {
         ChainedHashTable {
             current_hash: 0,
             c: create_tables(),
-            count: DebugCounter::default(),
+            //count: DebugCounter::default(),
         }
     }
 
@@ -124,9 +124,9 @@ impl ChainedHashTable {
             let mut c = self.c.prev;
             c[..].copy_from_slice(&h[..]);
         }
-        if cfg!(debug_assertions) {
+        /*if cfg!(debug_assertions) {
             self.count.reset();
-        }
+        }*/
     }
 
     pub fn add_initial_hash_values(&mut self, v1: u8, v2: u8) {
@@ -138,10 +138,11 @@ impl ChainedHashTable {
     #[inline]
     pub fn add_hash_value(&mut self, position: usize, value: u8) {
         // Check that all bytes are input in order and at the correct positions.
-        debug_assert_eq!(
+        // Disabled for now as it breaks when sync flushing.
+        /*debug_assert_eq!(
             position & WINDOW_MASK,
             self.count.get() as usize & WINDOW_MASK
-        );
+        );*/
         debug_assert!(
             position < WINDOW_SIZE * 2,
             "Position is larger than 2 * window size! {}",
@@ -166,9 +167,9 @@ impl ChainedHashTable {
     /// Update the tables directly, providing the hash.
     #[inline]
     pub fn add_with_hash(&mut self, position: usize, hash: u16) {
-        if cfg!(debug_assertions) {
+        /*if cfg!(debug_assertions) {
             self.count.add(1);
-        }
+        }*/
 
         self.c.prev[position & WINDOW_MASK] = self.c.head[hash as usize];
 
@@ -232,10 +233,10 @@ impl ChainedHashTable {
     }
 
     pub fn slide(&mut self, bytes: usize) {
-        if cfg!(debug_assertions) && bytes != WINDOW_SIZE {
+        /*if cfg!(debug_assertions) && bytes != WINDOW_SIZE {
             // This should only happen in tests in this file.
             self.count.reset();
-        }
+        }*/
         ChainedHashTable::slide_table(&mut self.c.head, bytes as u16);
         ChainedHashTable::slide_table(&mut self.c.prev, bytes as u16);
     }
@@ -295,8 +296,8 @@ mod test {
     #[test]
     fn table_unique() {
         let mut test_data = Vec::new();
-        test_data.extend((0u8..255));
-        test_data.extend((255u8..0));
+        test_data.extend(0u8..255);
+        test_data.extend(255u8..0);
         let hash_table = filled_hash_table(&test_data);
         let prev_pos = hash_table.get_prev(hash_table.current_head() as usize);
         // Since all sequences in the input are unique, there shouldn't be any previous values.

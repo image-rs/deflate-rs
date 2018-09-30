@@ -107,3 +107,29 @@ fn rle() {
 
     assert!(test_data == decompressed);
 }
+
+#[test]
+fn issue_26() {
+    use deflate::write::ZlibEncoder;
+    let fp = Vec::new();
+    let mut fp = ZlibEncoder::new( fp, CompressionOptions::default() );
+
+    fp.write( &[0] ).unwrap();
+    fp.flush().unwrap();
+    fp.write( &[0] ).unwrap();
+    fp.write( &[0, 0] ).unwrap();
+}
+
+#[cfg(feature = "gzip")]
+#[test]
+fn issue_26_gzip() {
+    use deflate::write::DeflateEncoder;
+    let fp = Vec::new();
+    let mut fp = DeflateEncoder::new( fp, CompressionOptions::default() );
+
+    fp.write( &[0] ).unwrap();
+    fp.flush().unwrap();
+    fp.write( &[0] ).unwrap();
+    fp.write( &[0, 0] ).unwrap();
+
+}

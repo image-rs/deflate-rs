@@ -112,7 +112,7 @@ pub fn longest_match(
     // otherwise the matching code might underflow.
     let prev_length = cmp::max(prev_length, 1);
 
-    let max_length = cmp::min((data.len() - position), MAX_MATCH);
+    let max_length = cmp::min(data.len() - position, MAX_MATCH);
 
     // The position in the hash chain we are currently checking.
     let mut current_head = position;
