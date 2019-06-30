@@ -17,30 +17,16 @@ mod arch_dep {
     /// Push pending bits to vector.
     /// Using a macro here since an inline function.
     /// didn't optimise properly.
+    /// TODO June 2019: See if it's still needed.
     macro_rules! push{
         ($s:ident) => {
-            let len = $s.w.len();
-            $s.w.reserve(6);
-            // Optimization:
-            //
-            // This is basically what `Vec::extend_from_slice` does, but it didn't inline
-            // properly, so we do it manually for now.
-            //
-            // # Unsafe
-            // We reserve enough space right before this, so setting the len manually and doing
-            // unchecked indexing is safe here since we only, and always write to all of the the
-            // uninitialized bytes of the vector.
-            unsafe {
-                $s.w.set_len(len + 6);
-                $s.w.get_unchecked_mut(len..).copy_from_slice(&[$s.acc as u8,
-                                                                ($s.acc >> 8) as u8,
-                                                                ($s.acc >> 16) as u8,
-                                                                ($s.acc >> 24) as u8,
-                                                                ($s.acc >> 32) as u8,
-                                                                ($s.acc >> 40) as u8
-                ][..]);
-            }
-
+            $s.w.extend_from_slice(&[$s.acc as u8,
+                                    ($s.acc >> 8) as u8,
+                                    ($s.acc >> 16) as u8,
+                                    ($s.acc >> 24) as u8,
+                                    ($s.acc >> 32) as u8,
+                                    ($s.acc >> 40) as u8
+            ][..])
         };
     }
 }

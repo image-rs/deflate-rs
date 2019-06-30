@@ -54,17 +54,8 @@ impl DynamicWriter {
         self.buffer.push(LZValue::length_distance(length, distance));
         let l_code_num = get_length_code(length);
         // As we limit the buffer to 2^16 values, this should be safe from overflowing.
-        if cfg!(debug_assertions) {
-            self.frequencies[l_code_num] += 1;
-        } else {
-            // #Safety
-            // None of the values in the table of length code numbers will give a value
-            // that is out of bounds.
-            // There is a test to ensure that these functions can not produce too large values.
-            unsafe {
-                *self.frequencies.get_unchecked_mut(l_code_num) += 1;
-            }
-        }
+        self.frequencies[l_code_num] += 1;
+
         let d_code_num = get_distance_code(distance);
         // The compiler seems to be able to evade the bounds check here somehow.
         self.distance_frequencies[usize::from(d_code_num)] += 1;

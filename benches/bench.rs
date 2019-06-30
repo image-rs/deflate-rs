@@ -65,7 +65,6 @@ fn test_file_zlib_rle(b: &mut Bencher) {
 
 fn deflate_bytes_flate2_zlib(level: Compression, input: &[u8]) -> Vec<u8> {
     use flate2::write::ZlibEncoder;
-    use std::io::Write;
 
     let mut e = ZlibEncoder::new(Vec::with_capacity(input.len() / 3), level);
     e.write_all(input).unwrap();
@@ -76,20 +75,20 @@ fn deflate_bytes_flate2_zlib(level: Compression, input: &[u8]) -> Vec<u8> {
 fn test_file_zlib_flate2_def(b: &mut Bencher) {
     let test_data = get_test_data();
     b.iter(|| {
-        deflate_bytes_flate2_zlib(Compression::Default, &test_data)
+        deflate_bytes_flate2_zlib(Compression::default(), &test_data)
     });
 }
 
 #[bench]
 fn test_file_zlib_flate2_best(b: &mut Bencher) {
     let test_data = get_test_data();
-    b.iter(|| deflate_bytes_flate2_zlib(Compression::Best, &test_data));
+    b.iter(|| deflate_bytes_flate2_zlib(Compression::best(), &test_data));
 }
 
 #[bench]
 fn test_file_zlib_flate2_fast(b: &mut Bencher) {
     let test_data = get_test_data();
-    b.iter(|| deflate_bytes_flate2_zlib(Compression::Fast, &test_data));
+    b.iter(|| deflate_bytes_flate2_zlib(Compression::fast(), &test_data));
 }
 
 #[derive(Copy, Clone)]
@@ -113,5 +112,5 @@ fn writer_create(b: &mut Bencher) {
 
 #[bench]
 fn writer_create_flate2(b: &mut Bencher) {
-    b.iter(|| write::DeflateEncoder::new(Dummy {}, Compression::Fast));
+    b.iter(|| write::DeflateEncoder::new(Dummy {}, Compression::fast()));
 }

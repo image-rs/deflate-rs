@@ -1,6 +1,3 @@
-//use deflate_state::DebugCounter;
-use std::{mem, ptr};
-
 pub const WINDOW_SIZE: usize = 32768;
 pub const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 #[cfg(test)]
@@ -19,29 +16,17 @@ struct Tables {
 impl Default for Tables {
     #[inline]
     fn default() -> Tables {
-        // # Unsafe
-        // This struct is not public and is only used in this module, and
-        // the values are immediately filled in after this struct is
-        // created.
-        unsafe {
-            Tables {
-                head: mem::uninitialized(),
-                prev: mem::uninitialized(),
-            }
+        Tables {
+            head: [0;WINDOW_SIZE],
+            prev: [0;WINDOW_SIZE],
         }
     }
 }
 
 impl Tables {
+    #[inline]
     fn fill_prev(&mut self) {
-        assert_eq!(self.head.len(), self.prev.len());
-        // # Unsafe
-        //
-        // The arrays are created with the same length statically, so this should be safe.
-        // We use this rather than copy_from_slice as prev starts out unitialized.
-        unsafe {
-            ptr::copy_nonoverlapping(self.head.as_ptr(), self.prev.as_mut_ptr(), self.prev.len())
-        }
+        self.prev.copy_from_slice(&self.head);
     }
 }
 
@@ -57,13 +42,7 @@ fn create_tables() -> Box<Tables> {
     let mut t: Box<Tables> = Box::default();
 
     for (n, b) in t.head.iter_mut().enumerate() {
-        // # Unsafe
-        //
-        // Using ptr::write here since the values are uninitialised.
-        // u16 is a primitive and doesn't implement drop, so this would be safe either way.
-        unsafe {
-            ptr::write(b, n as u16);
-        }
+        *b = n as u16;
     }
 
     t.fill_prev();
