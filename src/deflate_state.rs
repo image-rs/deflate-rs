@@ -102,7 +102,7 @@ impl<W: Write> DeflateState<W> {
             encoder_state: EncoderState::new(Vec::with_capacity(1024 * 32)),
             lz77_writer: DynamicWriter::new(),
             length_buffers: LengthBuffers::new(),
-            compression_options: compression_options,
+            compression_options,
             bytes_written: 0,
             inner: Some(writer),
             output_buf_pos: 0,

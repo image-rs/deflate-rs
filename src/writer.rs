@@ -10,7 +10,7 @@ use deflate_state::DeflateState;
 use compression_options::CompressionOptions;
 use zlib::{write_zlib_header, CompressionLevel};
 
-const ERR_STR: &'static str = "Error! The wrapped writer is missing.\
+const ERR_STR: &str = "Error! The wrapped writer is missing.\
                                This is a bug, please file an issue.";
 
 /// Keep compressing until all the input has been compressed and output or the writer returns `Err`.

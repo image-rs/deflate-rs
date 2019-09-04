@@ -59,7 +59,7 @@ impl LZValue {
         let stored_length = (length - MIN_MATCH) as u8;
         LZValue {
             litlen: stored_length,
-            distance: distance,
+            distance,
         }
     }
 

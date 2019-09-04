@@ -141,8 +141,8 @@ pub fn longest_match(
         // If there is no previous match, best_length will be 1 and the two first bytes will
         // be checked instead.
         // Since we've made sure best_length is always at least 1, this shouldn't underflow.
-        if data[position + best_length - 1..position + best_length + 1] ==
-            data[current_head + best_length - 1..current_head + best_length + 1]
+        if data[position + best_length - 1..=position + best_length] ==
+            data[current_head + best_length - 1..=current_head + best_length]
         {
             // Actually check how many bytes match.
             // At the moment this will check the two bytes we just checked again,
