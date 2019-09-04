@@ -5,8 +5,8 @@ license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
 readme = "README.md"
 keywords = ["flate", "deflate", "zlib", "compression", "gzip"]
-repository = "https://github.com/oyvindln/deflate-rs"
-homepage = "https://github.com/oyvindln/deflate-rs"
+repository = "https://github.com/image-rs/deflate-rs"
+homepage = "https://github.com/image-rs/deflate-rs"
 documentation = "https://docs.rs/deflate/"
 description = """
 A DEFLATE, zlib and gzip encoder written in rust.
@@ -26,7 +26,7 @@ benchmarks = []
 gzip = ["gzip-header"]
 
 [badges]
-travis-ci = { repository = "oyvindln/deflate-rs", branch = "dev" }
+travis-ci = { repository = "image-rs/deflate-rs", branch = "dev" }
 
 [package.metadata.docs.rs]
 features = ["gzip"]
