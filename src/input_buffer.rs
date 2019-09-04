@@ -100,8 +100,8 @@ impl InputBuffer {
 #[cfg(test)]
 mod test {
     use super::MAX_MATCH;
-    use chained_hash_table::WINDOW_SIZE;
     use super::*;
+    use chained_hash_table::WINDOW_SIZE;
     #[test]
     pub fn buffer_add_full() {
         let data = [10u8; BUFFER_SIZE + 10];

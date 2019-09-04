@@ -1,8 +1,8 @@
+use bitstream::LsbWriter;
+use huffman_table::HuffmanTable;
+use lzvalue::LZType;
 #[cfg(test)]
 use std::mem;
-use huffman_table::HuffmanTable;
-use bitstream::LsbWriter;
-use lzvalue::LZType;
 
 // The first bits of each block, which describe the type of the block
 // `-TTF` - TT = type, 00 = stored, 01 = fixed, 10 = dynamic, 11 = reserved, F - 1 if final block

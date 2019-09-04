@@ -8,7 +8,7 @@
 //! decompressed data, it only offers some hints for the decompressor on how the data was
 //! compressed.
 
-use std::io::{Write, Result};
+use std::io::{Result, Write};
 
 // CM = 8 means to use the DEFLATE compression method.
 const DEFAULT_CM: u8 = 8;

@@ -17,8 +17,8 @@ impl Default for Tables {
     #[inline]
     fn default() -> Tables {
         Tables {
-            head: [0;WINDOW_SIZE],
-            prev: [0;WINDOW_SIZE],
+            head: [0; WINDOW_SIZE],
+            prev: [0; WINDOW_SIZE],
         }
     }
 }
@@ -180,12 +180,10 @@ impl ChainedHashTable {
         let to_check = match_len.saturating_sub(2);
 
         let mut n = 0;
-        let mut smallest_prev =
-            self.get_prev(match_pos);
+        let mut smallest_prev = self.get_prev(match_pos);
         let mut smallest_pos = 0;
         while n < to_check {
-            let prev =
-                self.get_prev(match_pos + n);
+            let prev = self.get_prev(match_pos + n);
             if prev < smallest_prev {
                 smallest_prev = prev;
                 smallest_pos = n;
