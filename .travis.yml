@@ -6,4 +6,5 @@ rust:
 os:
   - linux
   - osx
+  - windows
 sudo: false
