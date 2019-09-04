@@ -1,6 +1,6 @@
 # deflate-rs
 
-[![Build Status](https://travis-ci.org/oyvindln/deflate-rs.svg)](https://travis-ci.org/oyvindln/deflate-rs)[![Crates.io](https://img.shields.io/crates/v/deflate.svg)](https://crates.io/crates/deflate)[![Docs](https://docs.rs/deflate/badge.svg)](https://docs.rs/deflate)
+[![Build Status](https://travis-ci.org/image-rs/deflate-rs.svg)](https://travis-ci.org/image-rs/deflate-rs)[![Crates.io](https://img.shields.io/crates/v/deflate.svg)](https://crates.io/crates/deflate)[![Docs](https://docs.rs/deflate/badge.svg)](https://docs.rs/deflate)
 
 
 An implementation of a [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) encoder in pure rust. Not a direct port, but does take some inspiration from [zlib](http://www.zlib.net/), [miniz](https://github.com/richgel999/miniz) and [zopfli](https://github.com/google/zopfli). The API is based on the one in the [flate2](https://crates.io/crates/flate2) crate that contains bindings to zlib and miniz.
