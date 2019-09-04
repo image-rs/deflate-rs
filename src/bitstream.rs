@@ -72,7 +72,7 @@ impl LsbWriter {
     /// Buffer n number of bits, and write them to the vec if there are enough pending bits.
     pub fn write_bits(&mut self, v: u16, n: u8) {
         // NOTE: This outputs garbage data if n is 0, but v is not 0
-        self.acc |= (v as AccType) << self.bits;
+        self.acc |= (u64::from(v)) << self.bits;
         self.bits += n;
         // Waiting until we have FLUSH_AT bits and pushing them all in one batch.
         while self.bits >= FLUSH_AT {
@@ -84,7 +84,7 @@ impl LsbWriter {
 
     fn write_bits_finish(&mut self, v: u16, n: u8) {
         // NOTE: This outputs garbage data if n is 0, but v is not 0
-        self.acc |= (v as AccType) << self.bits;
+        self.acc |= (u64::from(v)) << self.bits;
         self.bits += n % 8;
         while self.bits >= 8 {
             self.w.push(self.acc as u8);
@@ -109,7 +109,7 @@ impl Write for LsbWriter {
             self.w.extend_from_slice(buf)
         } else {
             for &byte in buf.iter() {
-                self.write_bits(byte as u16, 8)
+                self.write_bits(u16::from(byte), 8)
             }
         }
         Ok(buf.len())

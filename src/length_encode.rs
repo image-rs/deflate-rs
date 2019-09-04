@@ -25,7 +25,7 @@ impl EncodedLength {
                     EncodedLength::RepeatZero7Bits(repeat)
                 }
             }
-            1...15 => EncodedLength::CopyPrevious(repeat),
+            1..=15 => EncodedLength::CopyPrevious(repeat),
             _ => panic!(),
         }
     }
@@ -186,9 +186,13 @@ mod in_place {
             true
         } else {
             let v = lengths.iter().fold(0f64, |acc, &n| {
-                acc + if n != 0 { 2f64.powi(-(n as i32)) } else { 0f64 }
+                acc + if n != 0 { 2f64.powi(-(i32::from(n))) } else { 0f64 }
             });
-            !(v > 1.0)
+
+            match v.partial_cmp(&1.0) {
+                Some(std::cmp::Ordering::Greater) => false,
+                _ => true,
+            }
         }
     }
 
@@ -289,11 +293,11 @@ mod in_place {
             num_codes[max_len] += num_above_max;
 
             let mut total = 0u32;
-            for i in (1..max_len + 1).rev() {
+            for i in (1..=max_len).rev() {
                 // This should be safe as max_len won't be higher than 15, and num_codes[i] can't
                 // be higher than 288,
                 // and 288 << 15 will not be anywhere close to overflowing 32 bits
-                total += (num_codes[i] as u32) << (max_len - i);
+                total += (u32::from(num_codes[i])) << (max_len - i);
             }
 
             // miniz uses unsigned long here. 32-bits should be sufficient though,
@@ -353,7 +357,7 @@ mod in_place {
         leaves.extend(frequencies.iter().enumerate().filter_map(
             |(n, f)| if *f > 0 {
                 Some(Node {
-                    value: *f as WeightType,
+                    value: u32::from(*f),
                     symbol: n as u16,
                 })
             } else {
@@ -389,7 +393,7 @@ mod in_place {
         // Output the actual lengths
         let mut leaf_it = leaves.iter().rev();
         // Start at 1 since the length table is already filled with zeroes.
-        for (&n_codes, i) in num_codes[1..max_len + 1].iter().zip(1..(max_len as u8) + 1) {
+        for (&n_codes, i) in num_codes[1..=max_len].iter().zip(1..=(max_len as u8)) {
             for _ in 0..n_codes {
                 lengths[leaf_it.next().unwrap().symbol as usize] = i;
             }
@@ -417,8 +421,8 @@ mod test {
 
     fn zero(repeats: u8) -> EncodedLength {
         match repeats {
-            0...1 => EncodedLength::Length(0),
-            2...10 => EncodedLength::RepeatZero3Bits(repeats),
+            0..=1 => EncodedLength::Length(0),
+            2..=10 => EncodedLength::RepeatZero3Bits(repeats),
             _ => EncodedLength::RepeatZero7Bits(repeats),
         }
     }

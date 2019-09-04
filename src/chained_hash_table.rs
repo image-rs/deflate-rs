@@ -58,7 +58,7 @@ pub fn update_hash(current_hash: u16, to_insert: u8) -> u16 {
 
 #[inline]
 fn update_hash_conf(current_hash: u16, to_insert: u8, shift: u16, mask: u16) -> u16 {
-    ((current_hash << shift) ^ (to_insert as u16)) & mask
+    ((current_hash << shift) ^ (u16::from(to_insert))) & mask
 }
 
 #[inline]

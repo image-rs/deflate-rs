@@ -63,7 +63,7 @@ pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T], min_length: 
 /// How many extra bits the huffman length code uses to represent a value.
 fn extra_bits_for_huffman_length_code(code: u8) -> u8 {
     match code {
-        16...17 => 3,
+        16..=17 => 3,
         18 => 7,
         _ => 0,
     }
@@ -290,8 +290,8 @@ pub fn gen_huffman_lengths(
         BlockType::Stored
     } else {
         BlockType::Dynamic(DynamicBlockHeader {
-            huffman_table_lengths: huffman_table_lengths,
-            used_hclens: used_hclens,
+            huffman_table_lengths,
+            used_hclens,
         })
     }
 }
@@ -334,7 +334,7 @@ pub fn write_huffman_lengths(
     // Write the lengths for the huffman table describing the huffman table
     // Each length is 3 bits
     for n in &HUFFMAN_LENGTH_ORDER[..used_hclens] {
-        writer.write_bits(huffman_table_lengths[usize::from(*n)] as u16, 3);
+        writer.write_bits(u16::from(huffman_table_lengths[usize::from(*n)]), 3);
     }
 
     // Generate codes for the main huffman table using the lengths we just wrote

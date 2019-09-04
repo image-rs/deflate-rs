@@ -87,9 +87,9 @@ impl LZ77State {
             is_last_block: false,
             overlap: 0,
             current_block_input_bytes: 0,
-            max_hash_checks: max_hash_checks,
-            lazy_if_less_than: lazy_if_less_than,
-            matching_type: matching_type,
+            max_hash_checks,
+            lazy_if_less_than,
+            matching_type,
             match_state: ChunkState::new(),
             bytes_to_hash: 0,
             was_synced: false,
@@ -189,6 +189,7 @@ pub fn buffer_full(position: usize) -> ProcessStatus {
     ProcessStatus::BufferFull(position)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_chunk(
     data: &[u8],
     iterated_data: &Range<usize>,

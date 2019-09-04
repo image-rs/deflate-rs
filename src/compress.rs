@@ -194,7 +194,7 @@ pub fn compress_data_dynamic_n<W: Write>(
                 write_huffman_lengths(
                     &header,
                     &deflate_state.encoder_state.huffman_table,
-                    &mut deflate_state.length_buffers.length_buf,
+                    &deflate_state.length_buffers.length_buf,
                     &mut deflate_state.encoder_state.writer,
                 );
 

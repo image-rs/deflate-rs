@@ -1287,7 +1287,7 @@ fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
     let num_bits = num_extra_bits_for_length_code(n);
     ExtraBits {
         code_number: u16::from(n) + LENGTH_BITS_START,
-        num_bits: num_bits,
+        num_bits,
         value: (length.stored_length() - base).into(),
     }
 
@@ -1302,11 +1302,11 @@ pub fn get_distance_code(distance: u16) -> u8 {
 
     match distance {
         // Since the array starts at 0, we need to subtract 1 to get the correct code number.
-        1...256 => DISTANCE_CODES[distance - 1],
+        1..=256 => DISTANCE_CODES[distance - 1],
         // Due to the distrubution of the distance codes above 256, we can get away with only
         // using the top bits to determine the code, rather than having a 32k long table of
         // distance codes.
-        257...32768 => DISTANCE_CODES[256 + ((distance - 1) >> 7)],
+        257..=32768 => DISTANCE_CODES[256 + ((distance - 1) >> 7)],
         _ => 0,
     }
 }
@@ -1346,8 +1346,8 @@ impl HuffmanCode {
     /// Create a huffman code value from a code and length.
     fn new(code: u16, length: u8) -> HuffmanCode {
         HuffmanCode {
-            code: code,
-            length: length,
+            code,
+            length,
         }
     }
 }
@@ -1394,12 +1394,12 @@ pub fn create_codes_in_place(code_table: &mut [u16], length_table: &[u8]) {
     let mut next_code = Vec::with_capacity(length_table.len());
     next_code.push(code);
 
-    for bits in 1..max_length + 1 {
+    for bits in 1..=max_length {
         code = (code + lengths[bits - 1]) << 1;
         next_code.push(code);
     }
 
-    for n in 0..max_length_pos + 1 {
+    for n in 0..=max_length_pos {
         let length = usize::from(length_table[n]);
         if length != 0 {
             // The algorithm generates the code in the reverse bit order, so we need to reverse them
