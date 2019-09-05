@@ -1,15 +1,15 @@
 use std::io::Write;
 use std::{cmp, io, mem};
 
-use compress::Flush;
-use compression_options::{CompressionOptions, MAX_HASH_CHECKS};
-use encoder_state::EncoderState;
-pub use huffman_table::MAX_MATCH;
-use huffman_table::NUM_LITERALS_AND_LENGTHS;
-use input_buffer::InputBuffer;
-use length_encode::{EncodedLength, LeafVec};
-use lz77::LZ77State;
-use output_writer::DynamicWriter;
+use crate::compress::Flush;
+use crate::compression_options::{CompressionOptions, MAX_HASH_CHECKS};
+use crate::encoder_state::EncoderState;
+pub use crate::huffman_table::MAX_MATCH;
+use crate::huffman_table::NUM_LITERALS_AND_LENGTHS;
+use crate::input_buffer::InputBuffer;
+use crate::length_encode::{EncodedLength, LeafVec};
+use crate::lz77::LZ77State;
+use crate::output_writer::DynamicWriter;
 
 /// A counter used for checking values in debug mode.
 /// Does nothing when debug assertions are disabled.

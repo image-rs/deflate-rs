@@ -1,10 +1,10 @@
 use std::u16;
 
-use huffman_table::{
+use crate::huffman_table::{
     get_distance_code, get_length_code, END_OF_BLOCK_POSITION, NUM_DISTANCE_CODES,
     NUM_LITERALS_AND_LENGTHS,
 };
-use lzvalue::LZValue;
+use crate::lzvalue::LZValue;
 
 /// The type used for representing how many times a literal, length or distance code has been ouput
 /// to the current buffer.
@@ -129,7 +129,7 @@ impl DynamicWriter {
 #[cfg(test)]
 mod test {
     use super::*;
-    use huffman_table::{get_distance_code, get_length_code};
+    use crate::huffman_table::{get_distance_code, get_length_code};
     #[test]
     /// Ensure that these function won't produce values that would overflow the output_writer
     /// tables since we use some unsafe indexing.

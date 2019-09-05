@@ -1,16 +1,16 @@
-use bitstream::LsbWriter;
-use deflate_state::LengthBuffers;
-use huffman_table::{
+use crate::bitstream::LsbWriter;
+use crate::deflate_state::LengthBuffers;
+use crate::huffman_table::{
     create_codes_in_place, num_extra_bits_for_distance_code, num_extra_bits_for_length_code,
     HuffmanTable, FIXED_CODE_LENGTHS, LENGTH_BITS_START, MAX_CODE_LENGTH, NUM_DISTANCE_CODES,
     NUM_LITERALS_AND_LENGTHS,
 };
-use length_encode::{
+use crate::length_encode::{
     encode_lengths_m, huffman_lengths_from_frequency_m, EncodedLength, COPY_PREVIOUS,
     REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS,
 };
-use output_writer::FrequencyType;
-use stored_block::MAX_STORED_BLOCK_LENGTH;
+use crate::output_writer::FrequencyType;
+use crate::stored_block::MAX_STORED_BLOCK_LENGTH;
 
 use std::cmp;
 

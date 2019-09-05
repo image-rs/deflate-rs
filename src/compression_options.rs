@@ -8,7 +8,7 @@
 //! compressor, which uses a specialised (but slow) algorithm to figure out the maximum
 //! of compression for the provided data.
 //!
-use lz77::MatchingType;
+use crate::lz77::MatchingType;
 use std::convert::From;
 
 pub const HIGH_MAX_HASH_CHECKS: u16 = 1768;

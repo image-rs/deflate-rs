@@ -3,12 +3,12 @@ use std::{io, thread};
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-use checksum::{Adler32Checksum, RollingChecksum};
-use compress::compress_data_dynamic_n;
-use compress::Flush;
-use compression_options::CompressionOptions;
-use deflate_state::DeflateState;
-use zlib::{write_zlib_header, CompressionLevel};
+use crate::checksum::{Adler32Checksum, RollingChecksum};
+use crate::compress::compress_data_dynamic_n;
+use crate::compress::Flush;
+use crate::compression_options::CompressionOptions;
+use crate::deflate_state::DeflateState;
+use crate::zlib::{write_zlib_header, CompressionLevel};
 
 const ERR_STR: &str = "Error! The wrapped writer is missing.\
                        This is a bug, please file an issue.";
@@ -496,9 +496,9 @@ pub mod gzip {
 #[cfg(test)]
 mod test {
     use super::*;
-    use compression_options::CompressionOptions;
+    use crate::compression_options::CompressionOptions;
+    use crate::test_utils::{decompress_to_end, decompress_zlib, get_test_data};
     use std::io::Write;
-    use test_utils::{decompress_to_end, decompress_zlib, get_test_data};
 
     #[test]
     fn deflate_writer() {
@@ -598,7 +598,7 @@ mod test {
     #[test]
     /// Make sure compression works with the writer when the input is between 1 and 2 window sizes.
     fn issue_18() {
-        use compression_options::Compression;
+        use crate::compression_options::Compression;
         let data = vec![0; 61000];
         let compressed = {
             let mut compressor = ZlibEncoder::new(Vec::new(), Compression::Default);

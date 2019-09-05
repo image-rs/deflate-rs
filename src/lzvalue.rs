@@ -1,6 +1,6 @@
 #[cfg(test)]
-use huffman_table::MAX_MATCH;
-use huffman_table::{MAX_DISTANCE, MIN_MATCH};
+use crate::huffman_table::MAX_MATCH;
+use crate::huffman_table::{MAX_DISTANCE, MIN_MATCH};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct StoredLength {
@@ -86,7 +86,7 @@ pub fn ld(l: u16, d: u16) -> LZValue {
 #[cfg(test)]
 mod test {
     use super::*;
-    use huffman_table::{MAX_DISTANCE, MAX_MATCH, MIN_DISTANCE, MIN_MATCH};
+    use crate::huffman_table::{MAX_DISTANCE, MAX_MATCH, MIN_DISTANCE, MIN_MATCH};
     #[test]
     fn lzvalue() {
         for i in 0..255 as usize + 1 {

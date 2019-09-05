@@ -1,5 +1,5 @@
-use bit_reverse::reverse_bits;
-use lzvalue::StoredLength;
+use crate::bit_reverse::reverse_bits;
+use crate::lzvalue::StoredLength;
 use std::fmt;
 
 // The number of length codes in the huffman table
@@ -429,7 +429,7 @@ mod test {
         build_length_count_table, get_distance_code_and_extra_bits, get_length_code_and_extra_bits,
     };
 
-    use lzvalue::StoredLength;
+    use crate::lzvalue::StoredLength;
 
     fn l(length: u16) -> StoredLength {
         StoredLength::from_actual_length(length)

@@ -1,11 +1,10 @@
 use std::cmp;
 
-use chained_hash_table::{ChainedHashTable, WINDOW_SIZE};
-use huffman_table;
+use crate::chained_hash_table::{ChainedHashTable, WINDOW_SIZE};
 
-const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
+const MAX_MATCH: usize = crate::huffman_table::MAX_MATCH as usize;
 #[cfg(test)]
-const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
+const MIN_MATCH: usize = crate::huffman_table::MIN_MATCH as usize;
 
 /// Get the length of the checked match
 /// The function returns number of bytes at and including `current_pos` that are the same as the
@@ -279,7 +278,7 @@ pub fn longest_match_fast(
 #[inline]
 #[cfg(test)]
 pub fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usize, usize) {
-    use compression_options::MAX_HASH_CHECKS;
+    use crate::compression_options::MAX_HASH_CHECKS;
     longest_match(
         data,
         hash_table,
@@ -292,7 +291,7 @@ pub fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usi
 #[cfg(test)]
 mod test {
     use super::{get_match_length, longest_match, longest_match_fast};
-    use chained_hash_table::{filled_hash_table, ChainedHashTable, HASH_BYTES};
+    use crate::chained_hash_table::{filled_hash_table, ChainedHashTable, HASH_BYTES};
 
     /// Test that match lengths are calculated correctly
     #[test]
@@ -349,7 +348,7 @@ mod test {
     #[ignore]
     #[test]
     fn fast_match_at_least_equal() {
-        use test_utils::get_test_data;
+        use crate::test_utils::get_test_data;
         for start_pos in 10000..50000 {
             const NUM_CHECKS: u16 = 400;
             let data = get_test_data();

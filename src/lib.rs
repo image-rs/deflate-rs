@@ -96,20 +96,20 @@ use gzip_header::Crc;
 #[cfg(feature = "gzip")]
 use gzip_header::GzBuilder;
 
-use checksum::RollingChecksum;
-use deflate_state::DeflateState;
+use crate::checksum::RollingChecksum;
+use crate::deflate_state::DeflateState;
 
-use compress::Flush;
+use crate::compress::Flush;
 pub use compression_options::{Compression, CompressionOptions, SpecialOptions};
 pub use lz77::MatchingType;
 
-use writer::compress_until_done;
+use crate::writer::compress_until_done;
 
 /// Encoders implementing a `Write` interface.
 pub mod write {
     #[cfg(feature = "gzip")]
-    pub use writer::gzip::GzEncoder;
-    pub use writer::{DeflateEncoder, ZlibEncoder};
+    pub use crate::writer::gzip::GzEncoder;
+    pub use crate::writer::{DeflateEncoder, ZlibEncoder};
 }
 
 fn compress_data_dynamic<RC: RollingChecksum, W: Write>(
