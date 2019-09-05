@@ -6,20 +6,19 @@ use std::iter::{self, Iterator};
 use std::ops::{Range, RangeFrom};
 use std::slice::Iter;
 
-use chained_hash_table::{update_hash, ChainedHashTable};
-use compress::Flush;
+use crate::chained_hash_table::{update_hash, ChainedHashTable};
+use crate::compress::Flush;
 #[cfg(test)]
-use compression_options::{HIGH_LAZY_IF_LESS_THAN, HIGH_MAX_HASH_CHECKS};
-use huffman_table;
-use input_buffer::InputBuffer;
+use crate::compression_options::{HIGH_LAZY_IF_LESS_THAN, HIGH_MAX_HASH_CHECKS};
+use crate::input_buffer::InputBuffer;
 #[cfg(test)]
-use lzvalue::{LZType, LZValue};
-use matching::longest_match;
-use output_writer::{BufferStatus, DynamicWriter};
-use rle::process_chunk_greedy_rle;
+use crate::lzvalue::{LZType, LZValue};
+use crate::matching::longest_match;
+use crate::output_writer::{BufferStatus, DynamicWriter};
+use crate::rle::process_chunk_greedy_rle;
 
-const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
-const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
+const MAX_MATCH: usize = crate::huffman_table::MAX_MATCH as usize;
+const MIN_MATCH: usize = crate::huffman_table::MIN_MATCH as usize;
 
 const NO_RLE: u16 = 43212;
 
@@ -956,11 +955,11 @@ pub fn lz77_compress_conf(
 mod test {
     use super::*;
 
-    use chained_hash_table::WINDOW_SIZE;
-    use compression_options::DEFAULT_LAZY_IF_LESS_THAN;
-    use lzvalue::{ld, lit, LZType, LZValue};
-    use output_writer::MAX_BUFFER_LENGTH;
-    use test_utils::get_test_data;
+    use crate::chained_hash_table::WINDOW_SIZE;
+    use crate::compression_options::DEFAULT_LAZY_IF_LESS_THAN;
+    use crate::lzvalue::{ld, lit, LZType, LZValue};
+    use crate::output_writer::MAX_BUFFER_LENGTH;
+    use crate::test_utils::get_test_data;
 
     /// Helper function to print the output from the lz77 compression function
     fn print_output(input: &[LZValue]) {
@@ -1053,7 +1052,7 @@ mod test {
     /// Test that matches at the window border are working correctly
     #[test]
     fn border() {
-        use chained_hash_table::WINDOW_SIZE;
+        use crate::chained_hash_table::WINDOW_SIZE;
         let mut data = vec![35; WINDOW_SIZE];
         data.extend(b"Test");
         let compressed = super::lz77_compress(&data).unwrap();
@@ -1066,7 +1065,7 @@ mod test {
 
     #[test]
     fn border_multiple_blocks() {
-        use chained_hash_table::WINDOW_SIZE;
+        use crate::chained_hash_table::WINDOW_SIZE;
         let mut data = vec![0; (WINDOW_SIZE * 2) + 50];
         data.push(1);
         let compressed = super::lz77_compress(&data).unwrap();
@@ -1078,7 +1077,7 @@ mod test {
 
     #[test]
     fn compress_block_status() {
-        use input_buffer::InputBuffer;
+        use crate::input_buffer::InputBuffer;
 
         let data = b"Test data data";
         let mut writer = DynamicWriter::new();
@@ -1093,8 +1092,8 @@ mod test {
 
     #[test]
     fn compress_block_multiple_windows() {
-        use input_buffer::InputBuffer;
-        use output_writer::DynamicWriter;
+        use crate::input_buffer::InputBuffer;
+        use crate::output_writer::DynamicWriter;
 
         let data = get_test_data();
         assert!(data.len() > (WINDOW_SIZE * 2) + super::MAX_MATCH);

@@ -1,4 +1,4 @@
-use bitstream::LsbWriter;
+use crate::bitstream::LsbWriter;
 use byteorder::{LittleEndian, WriteBytesExt};
 use std::io;
 use std::io::Write;
@@ -65,7 +65,7 @@ pub fn compress_data_stored(input: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_utils::decompress_to_end;
+    use crate::test_utils::decompress_to_end;
 
     #[test]
     fn no_compression_one_chunk() {

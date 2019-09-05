@@ -415,7 +415,7 @@ mod in_place {
 #[cfg(test)]
 mod test {
     use super::*;
-    use huffman_table::NUM_LITERALS_AND_LENGTHS;
+    use crate::huffman_table::NUM_LITERALS_AND_LENGTHS;
     use std::u16;
 
     fn lit(value: u8) -> EncodedLength {
@@ -436,7 +436,7 @@ mod test {
 
     #[test]
     fn test_encode_lengths() {
-        use huffman_table::FIXED_CODE_LENGTHS;
+        use crate::huffman_table::FIXED_CODE_LENGTHS;
         let enc = encode_lengths(FIXED_CODE_LENGTHS.iter());
         // There are no lengths lower than 6 in the fixed table
         assert_eq!(enc.1[0..7], [0, 0, 0, 0, 0, 0, 0]);

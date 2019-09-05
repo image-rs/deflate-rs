@@ -1,13 +1,13 @@
 use std::io;
 use std::io::Write;
 
-use bitstream::LsbWriter;
-use deflate_state::DeflateState;
-use encoder_state::EncoderState;
-use huffman_lengths::{gen_huffman_lengths, write_huffman_lengths, BlockType};
-use lz77::{lz77_compress_block, LZ77Status};
-use lzvalue::LZValue;
-use stored_block::{compress_block_stored, write_stored_header, MAX_STORED_BLOCK_LENGTH};
+use crate::bitstream::LsbWriter;
+use crate::deflate_state::DeflateState;
+use crate::encoder_state::EncoderState;
+use crate::huffman_lengths::{gen_huffman_lengths, write_huffman_lengths, BlockType};
+use crate::lz77::{lz77_compress_block, LZ77Status};
+use crate::lzvalue::LZValue;
+use crate::stored_block::{compress_block_stored, write_stored_header, MAX_STORED_BLOCK_LENGTH};
 
 const LARGEST_OUTPUT_BUF_SIZE: usize = 1024 * 32;
 
@@ -43,7 +43,7 @@ pub fn flush_to_bitstream(buffer: &[LZValue], state: &mut EncoderState) {
 /// Currently only used in tests.
 #[cfg(test)]
 pub fn compress_data_fixed(input: &[u8]) -> Vec<u8> {
-    use lz77::lz77_compress;
+    use crate::lz77::lz77_compress;
 
     let mut state = EncoderState::fixed(Vec::new());
     let compressed = lz77_compress(input).unwrap();
@@ -297,7 +297,7 @@ pub fn compress_data_dynamic_n<W: Write>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_utils::{decompress_to_end, get_test_data};
+    use crate::test_utils::{decompress_to_end, get_test_data};
 
     #[test]
     /// Test compressing a short string using fixed encoding.

@@ -1,6 +1,6 @@
-use bitstream::LsbWriter;
-use huffman_table::HuffmanTable;
-use lzvalue::LZType;
+use crate::bitstream::LsbWriter;
+use crate::huffman_table::HuffmanTable;
+use crate::lzvalue::LZType;
 #[cfg(test)]
 use std::mem;
 
