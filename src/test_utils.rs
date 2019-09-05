@@ -41,8 +41,8 @@ pub fn decompress_to_end(input: &[u8]) -> Vec<u8> {
     // }
     // out
 
-    use std::io::Read;
     use flate2::read::DeflateDecoder;
+    use std::io::Read;
 
     let mut result = Vec::new();
     let i = &input[..];
@@ -69,8 +69,8 @@ pub fn decompress_gzip(compressed: &[u8]) -> (GzDecoder<&[u8]>, Vec<u8>) {
 }
 
 pub fn decompress_zlib(compressed: &[u8]) -> Vec<u8> {
-    use std::io::Read;
     use flate2::read::ZlibDecoder;
+    use std::io::Read;
     let mut e = ZlibDecoder::new(&compressed[..]);
 
     let mut result = Vec::new();

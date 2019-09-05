@@ -1,15 +1,15 @@
 use std::io::Write;
-use std::{io, mem, cmp};
+use std::{cmp, io, mem};
 
+use compress::Flush;
+use compression_options::{CompressionOptions, MAX_HASH_CHECKS};
+use encoder_state::EncoderState;
+pub use huffman_table::MAX_MATCH;
+use huffman_table::NUM_LITERALS_AND_LENGTHS;
+use input_buffer::InputBuffer;
+use length_encode::{EncodedLength, LeafVec};
 use lz77::LZ77State;
 use output_writer::DynamicWriter;
-use encoder_state::EncoderState;
-use input_buffer::InputBuffer;
-use compression_options::{CompressionOptions, MAX_HASH_CHECKS};
-use compress::Flush;
-use length_encode::{LeafVec, EncodedLength};
-use huffman_table::NUM_LITERALS_AND_LENGTHS;
-pub use huffman_table::MAX_MATCH;
 
 /// A counter used for checking values in debug mode.
 /// Does nothing when debug assertions are disabled.

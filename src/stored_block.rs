@@ -1,8 +1,8 @@
-use std::io::Write;
-use std::io;
-use std::u16;
 use bitstream::LsbWriter;
 use byteorder::{LittleEndian, WriteBytesExt};
+use std::io;
+use std::io::Write;
+use std::u16;
 
 #[cfg(test)]
 const BLOCK_SIZE: u16 = 32000;
@@ -62,7 +62,6 @@ pub fn compress_data_stored(input: &[u8]) -> Vec<u8> {
     output
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -89,7 +88,8 @@ mod test {
         let test_data = String::from(
             "This is some text, this is some more text, this is even \
              more text, lots of text here.",
-        ).into_bytes();
+        )
+        .into_bytes();
         let compressed = compress_data_stored(&test_data);
         let result = decompress_to_end(&compressed);
         assert_eq!(test_data, result);

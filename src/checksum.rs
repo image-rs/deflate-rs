@@ -56,7 +56,6 @@ impl RollingChecksum for Adler32Checksum {
     }
 }
 
-
 impl<'a> RollingChecksum for &'a mut Adler32Checksum {
     fn update(&mut self, byte: u8) {
         self.adler32.update(byte);

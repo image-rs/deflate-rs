@@ -1,17 +1,17 @@
 use std::io::Write;
-use std::{thread, io};
+use std::{io, thread};
 
-use byteorder::{WriteBytesExt, BigEndian};
+use byteorder::{BigEndian, WriteBytesExt};
 
 use checksum::{Adler32Checksum, RollingChecksum};
 use compress::compress_data_dynamic_n;
 use compress::Flush;
-use deflate_state::DeflateState;
 use compression_options::CompressionOptions;
+use deflate_state::DeflateState;
 use zlib::{write_zlib_header, CompressionLevel};
 
 const ERR_STR: &str = "Error! The wrapped writer is missing.\
-                               This is a bug, please file an issue.";
+                       This is a bug, please file an issue.";
 
 /// Keep compressing until all the input has been compressed and output or the writer returns `Err`.
 pub fn compress_until_done<W: Write>(
@@ -153,7 +153,6 @@ impl<W: Write> Drop for DeflateEncoder<W> {
     }
 }
 
-
 /// A Zlib encoder/compressor.
 ///
 /// A struct implementing a [`Write`] interface that takes unencoded data and compresses it to
@@ -293,12 +292,12 @@ impl<W: Write> Drop for ZlibEncoder<W> {
 #[cfg(feature = "gzip")]
 pub mod gzip {
 
-    use std::io::{Write, Cursor};
-    use std::{thread, io};
+    use std::io::{Cursor, Write};
+    use std::{io, thread};
 
     use super::*;
 
-    use byteorder::{WriteBytesExt, LittleEndian};
+    use byteorder::{LittleEndian, WriteBytesExt};
     use gzip_header::{Crc, GzBuilder};
 
     /// A Gzip encoder/compressor.
@@ -471,7 +470,7 @@ pub mod gzip {
     #[cfg(test)]
     mod test {
         use super::*;
-        use test_utils::{get_test_data, decompress_gzip};
+        use test_utils::{decompress_gzip, get_test_data};
         #[test]
         fn gzip_writer() {
             let data = get_test_data();
@@ -497,9 +496,9 @@ pub mod gzip {
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_utils::{get_test_data, decompress_to_end, decompress_zlib};
     use compression_options::CompressionOptions;
     use std::io::Write;
+    use test_utils::{decompress_to_end, decompress_zlib, get_test_data};
 
     #[test]
     fn deflate_writer() {

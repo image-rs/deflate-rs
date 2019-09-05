@@ -1,16 +1,16 @@
 #![feature(test)]
 
 extern crate deflate;
-extern crate test;
 extern crate flate2;
+extern crate test;
 
-use std::io::Write;
 use std::io;
+use std::io::Write;
 
-use test::Bencher;
-use flate2::Compression;
+use deflate::{deflate_bytes_zlib, deflate_bytes_zlib_conf, CompressionOptions};
 use flate2::write;
-use deflate::{CompressionOptions, deflate_bytes_zlib_conf, deflate_bytes_zlib};
+use flate2::Compression;
+use test::Bencher;
 
 fn load_from_file(name: &str) -> Vec<u8> {
     use std::fs::File;
@@ -39,29 +39,22 @@ fn test_file_zlib_def(b: &mut Bencher) {
 fn test_file_zlib_best(b: &mut Bencher) {
     let test_data = get_test_data();
 
-    b.iter(|| {
-        deflate_bytes_zlib_conf(&test_data, CompressionOptions::high())
-    });
+    b.iter(|| deflate_bytes_zlib_conf(&test_data, CompressionOptions::high()));
 }
 
 #[bench]
 fn test_file_zlib_fast(b: &mut Bencher) {
     let test_data = get_test_data();
 
-    b.iter(|| {
-        deflate_bytes_zlib_conf(&test_data, CompressionOptions::fast())
-    });
+    b.iter(|| deflate_bytes_zlib_conf(&test_data, CompressionOptions::fast()));
 }
 
 #[bench]
 fn test_file_zlib_rle(b: &mut Bencher) {
     let test_data = get_test_data();
 
-    b.iter(|| {
-        deflate_bytes_zlib_conf(&test_data, CompressionOptions::rle())
-    });
+    b.iter(|| deflate_bytes_zlib_conf(&test_data, CompressionOptions::rle()));
 }
-
 
 fn deflate_bytes_flate2_zlib(level: Compression, input: &[u8]) -> Vec<u8> {
     use flate2::write::ZlibEncoder;
@@ -74,9 +67,7 @@ fn deflate_bytes_flate2_zlib(level: Compression, input: &[u8]) -> Vec<u8> {
 #[bench]
 fn test_file_zlib_flate2_def(b: &mut Bencher) {
     let test_data = get_test_data();
-    b.iter(|| {
-        deflate_bytes_flate2_zlib(Compression::default(), &test_data)
-    });
+    b.iter(|| deflate_bytes_flate2_zlib(Compression::default(), &test_data));
 }
 
 #[bench]

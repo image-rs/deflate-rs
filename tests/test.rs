@@ -1,8 +1,8 @@
 extern crate deflate;
 extern crate flate2;
 
-use std::io::{Write, Read};
 use deflate::CompressionOptions;
+use std::io::{Read, Write};
 
 fn get_test_file_data(name: &str) -> Vec<u8> {
     use std::fs::File;
@@ -112,12 +112,12 @@ fn rle() {
 fn issue_26() {
     use deflate::write::ZlibEncoder;
     let fp = Vec::new();
-    let mut fp = ZlibEncoder::new( fp, CompressionOptions::default() );
+    let mut fp = ZlibEncoder::new(fp, CompressionOptions::default());
 
-    fp.write( &[0] ).unwrap();
+    fp.write(&[0]).unwrap();
     fp.flush().unwrap();
-    fp.write( &[0] ).unwrap();
-    fp.write( &[0, 0] ).unwrap();
+    fp.write(&[0]).unwrap();
+    fp.write(&[0, 0]).unwrap();
 }
 
 #[cfg(feature = "gzip")]
@@ -125,11 +125,10 @@ fn issue_26() {
 fn issue_26_gzip() {
     use deflate::write::DeflateEncoder;
     let fp = Vec::new();
-    let mut fp = DeflateEncoder::new( fp, CompressionOptions::default() );
+    let mut fp = DeflateEncoder::new(fp, CompressionOptions::default());
 
-    fp.write( &[0] ).unwrap();
+    fp.write(&[0]).unwrap();
     fp.flush().unwrap();
-    fp.write( &[0] ).unwrap();
-    fp.write( &[0, 0] ).unwrap();
-
+    fp.write(&[0]).unwrap();
+    fp.write(&[0, 0]).unwrap();
 }

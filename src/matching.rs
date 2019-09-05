@@ -7,7 +7,6 @@ const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
 #[cfg(test)]
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 
-
 /// Get the length of the checked match
 /// The function returns number of bytes at and including `current_pos` that are the same as the
 /// ones at `pos_to_check`
@@ -16,33 +15,33 @@ pub fn get_match_length(data: &[u8], current_pos: usize, pos_to_check: usize) ->
     // Unsafe version using unaligned loads for comparison.
     // Faster when benching the matching function alone,
     // but not as significant when running the full thing.
-/*
-    type Comp = u64;
+    /*
+        type Comp = u64;
 
-    use std::mem::size_of;
+        use std::mem::size_of;
 
-    let max = cmp::min(data.len() - current_pos, MAX_MATCH);
-    let mut left = max;
-    let s = size_of::<Comp>();
+        let max = cmp::min(data.len() - current_pos, MAX_MATCH);
+        let mut left = max;
+        let s = size_of::<Comp>();
 
-    unsafe {
-        let mut cur = data.as_ptr().offset(current_pos as isize);
-        let mut tc = data.as_ptr().offset(pos_to_check as isize);
-        while left >= s &&
-              (*(cur as *const Comp) == *(tc as *const Comp)) {
-                  left -= s;
-                  cur = cur.offset(s as isize);
-                  tc = tc.offset(s as isize);
-              }
-        while left > 0 && *cur == *tc {
-            left -= 1;
-            cur = cur.offset(1);
-            tc = tc.offset(1);
+        unsafe {
+            let mut cur = data.as_ptr().offset(current_pos as isize);
+            let mut tc = data.as_ptr().offset(pos_to_check as isize);
+            while left >= s &&
+                  (*(cur as *const Comp) == *(tc as *const Comp)) {
+                      left -= s;
+                      cur = cur.offset(s as isize);
+                      tc = tc.offset(s as isize);
+                  }
+            while left > 0 && *cur == *tc {
+                left -= 1;
+                cur = cur.offset(1);
+                tc = tc.offset(1);
+            }
         }
-    }
 
-    max - left
-*/
+        max - left
+    */
 
     // Slightly faster than naive in single bench.
     // Does not use unaligned loads.
@@ -93,7 +92,6 @@ pub fn longest_match(
     prev_length: usize,
     max_hash_checks: u16,
 ) -> (usize, usize) {
-
     // debug_assert_eq!(position, hash_table.current_head() as usize);
 
     // If we already have a match at the maximum length,
@@ -141,8 +139,8 @@ pub fn longest_match(
         // If there is no previous match, best_length will be 1 and the two first bytes will
         // be checked instead.
         // Since we've made sure best_length is always at least 1, this shouldn't underflow.
-        if data[position + best_length - 1..=position + best_length] ==
-            data[current_head + best_length - 1..=current_head + best_length]
+        if data[position + best_length - 1..=position + best_length]
+            == data[current_head + best_length - 1..=current_head + best_length]
         {
             // Actually check how many bytes match.
             // At the moment this will check the two bytes we just checked again,
@@ -189,7 +187,6 @@ pub fn longest_match_fast(
     prev_length: usize,
     max_hash_checks: u16,
 ) -> (usize, usize) {
-
     // debug_assert_eq!(position, hash_table.current_head() as usize);
 
     // If we already have a match at the maximum length,
@@ -241,8 +238,8 @@ pub fn longest_match_fast(
         // If there is no previous match, best_length will be 1 and the two first bytes will
         // be checked instead.
         // Since we've made sure best_length is always at least 1, this shouldn't underflow.
-        if data[position + best_length - 1..position + best_length + 1] ==
-            data[offset_head + best_length - 1..offset_head + best_length + 1]
+        if data[position + best_length - 1..position + best_length + 1]
+            == data[offset_head + best_length - 1..offset_head + best_length + 1]
         {
             // Actually check how many bytes match.
             // At the moment this will check the two bytes we just checked again,
@@ -294,8 +291,8 @@ pub fn longest_match_current(data: &[u8], hash_table: &ChainedHashTable) -> (usi
 
 #[cfg(test)]
 mod test {
-    use chained_hash_table::{filled_hash_table, HASH_BYTES, ChainedHashTable};
     use super::{get_match_length, longest_match, longest_match_fast};
+    use chained_hash_table::{filled_hash_table, ChainedHashTable, HASH_BYTES};
 
     /// Test that match lengths are calculated correctly
     #[test]
@@ -321,22 +318,7 @@ mod test {
         assert_eq!(distance, 22);
         assert_eq!(length, 9);
         let test_arr2 = [
-            10u8,
-            10,
-            10,
-            10,
-            10,
-            10,
-            10,
-            10,
-            2,
-            3,
-            5,
-            10,
-            10,
-            10,
-            10,
-            10,
+            10u8, 10, 10, 10, 10, 10, 10, 10, 2, 3, 5, 10, 10, 10, 10, 10,
         ];
         let hash_table = filled_hash_table(&test_arr2[..HASH_BYTES + 1 + 1 + 2]);
         let (length, distance) = super::longest_match_current(&test_arr2, &hash_table);
@@ -381,34 +363,41 @@ mod test {
                 println!("Fast match found better match!");
             }
 
-            assert!(fast_match.0 >= naive_match.0,
-                    "naive match had better length! start_pos: {}, naive: {:?}, fast {:?}"
-                    , start_pos, naive_match, fast_match);
-            assert!(fast_match.1 >= naive_match.1,
-                "naive match had better dist! start_pos: {} naive {:?}, fast {:?}"
-                    , start_pos, naive_match, fast_match);
+            assert!(
+                fast_match.0 >= naive_match.0,
+                "naive match had better length! start_pos: {}, naive: {:?}, fast {:?}",
+                start_pos,
+                naive_match,
+                fast_match
+            );
+            assert!(
+                fast_match.1 >= naive_match.1,
+                "naive match had better dist! start_pos: {} naive {:?}, fast {:?}",
+                start_pos,
+                naive_match,
+                fast_match
+            );
         }
-
     }
 }
 
-
 #[cfg(all(test, feature = "benchmarks"))]
 mod bench {
+    use super::{longest_match, longest_match_fast};
+    use chained_hash_table::filled_hash_table;
     use test_std::Bencher;
     use test_utils::get_test_data;
-    use chained_hash_table::filled_hash_table;
-    use super::{longest_match, longest_match_fast};
     #[bench]
     fn matching(b: &mut Bencher) {
         const POS: usize = 29000;
         let data = get_test_data();
         let hash_table = filled_hash_table(&data[..POS + 1]);
         let pos = hash_table.current_head() as usize;
-        println!("M: {:?}", longest_match(&data[..], &hash_table, pos, 0, 4096));
-        b.iter( ||
-          longest_match(&data[..], &hash_table, pos, 0, 4096)
+        println!(
+            "M: {:?}",
+            longest_match(&data[..], &hash_table, pos, 0, 4096)
         );
+        b.iter(|| longest_match(&data[..], &hash_table, pos, 0, 4096));
     }
 
     #[bench]
@@ -417,9 +406,10 @@ mod bench {
         let data = get_test_data();
         let hash_table = filled_hash_table(&data[..POS + 1]);
         let pos = hash_table.current_head() as usize;
-        println!("M: {:?}", longest_match_fast(&data[..], &hash_table, pos, 0, 4096));
-        b.iter( ||
-          longest_match_fast(&data[..], &hash_table, pos, 0, 4096)
+        println!(
+            "M: {:?}",
+            longest_match_fast(&data[..], &hash_table, pos, 0, 4096)
         );
+        b.iter(|| longest_match_fast(&data[..], &hash_table, pos, 0, 4096));
     }
 }

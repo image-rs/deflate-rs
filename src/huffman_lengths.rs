@@ -1,12 +1,16 @@
-use length_encode::{EncodedLength, encode_lengths_m, huffman_lengths_from_frequency_m,
-                    COPY_PREVIOUS, REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS};
-use huffman_table::{HuffmanTable, create_codes_in_place, num_extra_bits_for_length_code,
-                    num_extra_bits_for_distance_code, NUM_LITERALS_AND_LENGTHS,
-                    NUM_DISTANCE_CODES, MAX_CODE_LENGTH, FIXED_CODE_LENGTHS, LENGTH_BITS_START};
 use bitstream::LsbWriter;
+use deflate_state::LengthBuffers;
+use huffman_table::{
+    create_codes_in_place, num_extra_bits_for_distance_code, num_extra_bits_for_length_code,
+    HuffmanTable, FIXED_CODE_LENGTHS, LENGTH_BITS_START, MAX_CODE_LENGTH, NUM_DISTANCE_CODES,
+    NUM_LITERALS_AND_LENGTHS,
+};
+use length_encode::{
+    encode_lengths_m, huffman_lengths_from_frequency_m, EncodedLength, COPY_PREVIOUS,
+    REPEAT_ZERO_3_BITS, REPEAT_ZERO_7_BITS,
+};
 use output_writer::FrequencyType;
 use stored_block::MAX_STORED_BLOCK_LENGTH;
-use deflate_state::LengthBuffers;
 
 use std::cmp;
 
@@ -21,25 +25,7 @@ const NUM_HUFFMAN_LENGTHS: usize = 19;
 // used to build the full huffman tree for length/literal codes.
 // http://www.gzip.org/zlib/rfc-deflate.html#dyn
 const HUFFMAN_LENGTH_ORDER: [u8; NUM_HUFFMAN_LENGTHS] = [
-    16,
-    17,
-    18,
-    0,
-    8,
-    7,
-    9,
-    6,
-    10,
-    5,
-    11,
-    4,
-    12,
-    3,
-    13,
-    2,
-    14,
-    1,
-    15,
+    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
 ];
 
 // Number of bits used for the values specifying the number of codes
@@ -71,14 +57,14 @@ fn extra_bits_for_huffman_length_code(code: u8) -> u8 {
 
 /// Calculate how many bits the huffman-encoded huffman lengths will use.
 fn calculate_huffman_length(frequencies: &[FrequencyType], code_lengths: &[u8]) -> u64 {
-    frequencies.iter().zip(code_lengths).enumerate().fold(
-        0,
-        |acc, (n, (&f, &l))| {
-            acc +
-                (u64::from(f) *
-                     (u64::from(l) + u64::from(extra_bits_for_huffman_length_code(n as u8))))
-        },
-    )
+    frequencies
+        .iter()
+        .zip(code_lengths)
+        .enumerate()
+        .fold(0, |acc, (n, (&f, &l))| {
+            acc + (u64::from(f)
+                * (u64::from(l) + u64::from(extra_bits_for_huffman_length_code(n as u8))))
+        })
 }
 
 /// Calculate how many bits data with the given frequencies will use when compressed with dynamic
@@ -115,7 +101,6 @@ where
 
         d_ll_length += f * (u64::from(l) + extra_bits_for_code);
         s_ll_length += f * (u64::from(fl) + extra_bits_for_code);
-
     }
 
     (d_ll_length, s_ll_length)
@@ -134,7 +119,8 @@ fn stored_padding(pending_bits: u8) -> u64 {
     } else {
         // The header will require an extra byte.
         8 - (BLOCK_MARKER_LENGTH - free_space)
-    }.into()
+    }
+    .into()
 }
 
 /// Calculate the number of bits storing the data in stored blocks will take up, excluding the
@@ -147,9 +133,10 @@ fn stored_length(input_bytes: u64) -> u64 {
     // Check how many stored blocks these bytes would take up.
     // (Integer divison rounding up.)
     let num_blocks = (input_bytes
-                          .checked_sub(1)
-                          .expect("Underflow calculating stored block length!") /
-                          MAX_STORED_BLOCK_LENGTH as u64) + 1;
+        .checked_sub(1)
+        .expect("Underflow calculating stored block length!")
+        / MAX_STORED_BLOCK_LENGTH as u64)
+        + 1;
     // The length will be the input length and the headers for each block. (Excluding the start
     // of block code for the first one)
     (input_bytes + (STORED_BLOCK_HEADER_LENGTH as u64 * num_blocks) + (num_blocks - 1)) * 8
@@ -217,7 +204,6 @@ pub fn gen_huffman_lengths(
         d_lengths,
     );
 
-
     let used_lengths = l_freqs.len();
     let used_distances = d_freqs.len();
 
@@ -241,8 +227,8 @@ pub fn gen_huffman_lengths(
     );
 
     // Count how many of these lengths we use.
-    let used_hclens = HUFFMAN_LENGTH_ORDER.len() -
-        HUFFMAN_LENGTH_ORDER
+    let used_hclens = HUFFMAN_LENGTH_ORDER.len()
+        - HUFFMAN_LENGTH_ORDER
             .iter()
             .rev()
             .take_while(|&&n| huffman_table_lengths[n as usize] == 0)
@@ -268,9 +254,13 @@ pub fn gen_huffman_lengths(
     let huff_table_length = calculate_huffman_length(&freqs, &huffman_table_lengths);
 
     // For dynamic blocks the huffman tables takes up some extra space.
-    let dynamic_length = d_ll_length + d_dist_length + huff_table_length +
-        (used_hclens as u64 * 3) + u64::from(HLIT_BITS) +
-        u64::from(HDIST_BITS) + u64::from(HCLEN_BITS);
+    let dynamic_length = d_ll_length
+        + d_dist_length
+        + huff_table_length
+        + (used_hclens as u64 * 3)
+        + u64::from(HLIT_BITS)
+        + u64::from(HDIST_BITS)
+        + u64::from(HCLEN_BITS);
 
     // Static blocks don't have any extra header data.
     let static_length = s_ll_length + s_dist_length;
@@ -377,7 +367,6 @@ pub fn write_huffman_lengths(
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {

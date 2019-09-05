@@ -1,13 +1,12 @@
-use lz77::{ProcessStatus, buffer_full};
-use output_writer::{BufferStatus, DynamicWriter};
 use huffman_table;
+use lz77::{buffer_full, ProcessStatus};
+use output_writer::{BufferStatus, DynamicWriter};
 
-use std::ops::Range;
 use std::cmp;
+use std::ops::Range;
 
 const MIN_MATCH: usize = huffman_table::MIN_MATCH as usize;
 const MAX_MATCH: usize = huffman_table::MAX_MATCH as usize;
-
 
 /// Simple match function for run-length encoding.
 ///
@@ -75,7 +74,7 @@ pub fn process_chunk_greedy_rle(
 #[cfg(test)]
 mod test {
     use super::*;
-    use lzvalue::{LZValue, lit, ld};
+    use lzvalue::{ld, lit, LZValue};
 
     fn l(c: char) -> LZValue {
         lit(c as u8)
