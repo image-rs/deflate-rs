@@ -1,6 +1,6 @@
 [package]
 name = "deflate"
-version = "0.7.20"
+version = "0.7.21"
 edition = "2018"
 license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
@@ -20,7 +20,7 @@ byteorder = "1.0.0"
 gzip-header = { version = "0.3", optional = true }
 
 [dev-dependencies]
-flate2 = "1.0"
+miniz_oxide = "0.3.2"
 
 [features]
 benchmarks = []

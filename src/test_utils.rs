@@ -21,41 +21,9 @@ pub fn get_test_data() -> Vec<u8> {
 
 /// Helper function to decompress into a `Vec<u8>`
 pub fn decompress_to_end(input: &[u8]) -> Vec<u8> {
-    // use std::str;
-    // let mut inflater = super::inflate::InflateStream::new();
-    // let mut out = Vec::new();
-    // let mut n = 0;
-    // println!("input len {}", input.len());
-    // while n < input.len() {
-    // let res = inflater.update(&input[n..]) ;
-    // if let Ok((num_bytes_read, result)) = res {
-    // println!("result len {}, bytes_read {}", result.len(), num_bytes_read);
-    // n += num_bytes_read;
-    // out.extend(result);
-    // } else {
-    // println!("Output: `{}`", str::from_utf8(&out).unwrap());
-    // println!("Output decompressed: {}", out.len());
-    // res.unwrap();
-    // }
-    //
-    // }
-    // out
+    use miniz_oxide::inflate::decompress_to_vec;
 
-    use flate2::read::DeflateDecoder;
-    use std::io::Read;
-
-    let mut result = Vec::new();
-    let i = &input[..];
-    let mut e = DeflateDecoder::new(i);
-
-    let res = e.read_to_end(&mut result);
-    if let Ok(_) = res {
-        //        println!("{} bytes decompressed successfully", n);
-    } else {
-        println!("result size: {}", result.len());
-        res.unwrap();
-    }
-    result
+    decompress_to_vec(input).expect("Decompression failed!")
 }
 
 #[cfg(feature = "gzip")]
@@ -69,11 +37,5 @@ pub fn decompress_gzip(compressed: &[u8]) -> (GzDecoder<&[u8]>, Vec<u8>) {
 }
 
 pub fn decompress_zlib(compressed: &[u8]) -> Vec<u8> {
-    use flate2::read::ZlibDecoder;
-    use std::io::Read;
-    let mut e = ZlibDecoder::new(&compressed[..]);
-
-    let mut result = Vec::new();
-    e.read_to_end(&mut result).unwrap();
-    result
+    miniz_oxide::inflate::decompress_to_vec_zlib(&compressed).expect("Decompression failed!")
 }

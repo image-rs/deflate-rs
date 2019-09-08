@@ -1,5 +1,5 @@
 extern crate deflate;
-extern crate flate2;
+extern crate miniz_oxide;
 
 use deflate::CompressionOptions;
 use std::io::{Read, Write};
@@ -26,25 +26,16 @@ fn roundtrip(data: &[u8]) {
 fn roundtrip_conf(data: &[u8], level: CompressionOptions) {
     let compressed = deflate::deflate_bytes_zlib_conf(data, level);
     println!("Compressed len: {}, level: {:?}", compressed.len(), level);
-    let decompressed = {
-        let mut d = flate2::read::ZlibDecoder::new(compressed.as_slice());
-        let mut out = Vec::new();
-        d.read_to_end(&mut out).unwrap();
-        out
-    };
+    let decompressed =
+        miniz_oxide::inflate::decompress_to_vec_zlib(&compressed).expect("Decompression failed!");
     assert!(decompressed.as_slice() == data);
 }
 
 // A test comparing the compression ratio of the library with flate2
 #[test]
 fn file_zlib_compare_output() {
-    use flate2::Compression;
     let test_data = get_test_data();
-    let flate2_compressed = {
-        let mut e = flate2::write::ZlibEncoder::new(Vec::new(), Compression::best());
-        e.write_all(&test_data).unwrap();
-        e.finish().unwrap()
-    };
+    let flate2_compressed = miniz_oxide::deflate::compress_to_vec_zlib(&test_data, 10);
 
     // {
     //     use std::fs::File;
@@ -59,7 +50,7 @@ fn file_zlib_compare_output() {
     //     }
     // }
 
-    println!("flate2 len: {}", flate2_compressed.len(),);
+    println!("mz_oxide len: {}", flate2_compressed.len(),);
 
     roundtrip_conf(&test_data, CompressionOptions::high());
 }
@@ -95,12 +86,8 @@ fn rle() {
     use deflate::{deflate_bytes_conf, CompressionOptions};
     let test_data = get_test_data();
     let compressed = deflate_bytes_conf(&test_data, CompressionOptions::rle());
-    let decompressed = {
-        let mut d = flate2::read::DeflateDecoder::new(compressed.as_slice());
-        let mut out = Vec::new();
-        d.read_to_end(&mut out).unwrap();
-        out
-    };
+    let decompressed =
+        miniz_oxide::inflate::decompress_to_vec(&compressed).expect("Decompression failed!");
 
     println!("Input size: {}", test_data.len());
     println!("Rle compressed len: {}", compressed.len());

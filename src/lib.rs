@@ -53,28 +53,26 @@
 extern crate test as test_std;
 
 #[cfg(test)]
-extern crate flate2;
-// #[cfg(test)]
-// extern crate inflate;
+extern crate miniz_oxide;
 
 extern crate adler32;
 extern crate byteorder;
 #[cfg(feature = "gzip")]
 extern crate gzip_header;
 
-mod compression_options;
-mod huffman_table;
-mod lz77;
 mod bit_reverse;
 mod bitstream;
 mod chained_hash_table;
 mod checksum;
 mod compress;
+mod compression_options;
 mod deflate_state;
 mod encoder_state;
 mod huffman_lengths;
+mod huffman_table;
 mod input_buffer;
 mod length_encode;
+mod lz77;
 mod lzvalue;
 mod matching;
 mod output_writer;
