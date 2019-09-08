@@ -1,6 +1,6 @@
 [package]
 name = "deflate"
-version = "0.7.21"
+version = "0.8.0"
 edition = "2018"
 license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
@@ -14,9 +14,13 @@ A DEFLATE, zlib and gzip encoder written in rust.
 """
 categories = ["compression"]
 
+exclude = [
+  "tests/*",
+]
+
 [dependencies]
 adler32 = "1.0.3"
-byteorder = "1.0.0"
+byteorder = "1"
 gzip-header = { version = "0.3", optional = true }
 
 [dev-dependencies]
