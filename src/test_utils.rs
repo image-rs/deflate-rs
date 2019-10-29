@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 #[cfg(feature = "gzip")]
-use flate2::read::GzDecoder;
+use gzip_header::GzHeader;
 
 fn get_test_file_data(name: &str) -> Vec<u8> {
     use std::fs::File;
@@ -27,13 +27,29 @@ pub fn decompress_to_end(input: &[u8]) -> Vec<u8> {
 }
 
 #[cfg(feature = "gzip")]
-pub fn decompress_gzip(compressed: &[u8]) -> (GzDecoder<&[u8]>, Vec<u8>) {
-    use std::io::Read;
-    let mut e = GzDecoder::new(&compressed[..]).unwrap();
+pub fn decompress_gzip(compressed: &[u8]) -> (GzHeader, Vec<u8>) {
+    use std::io::Cursor;
+    use gzip_header::{read_gz_header, Crc};
+    let mut c = Cursor::new(compressed);
+    let h = read_gz_header(&mut c).expect("Failed to decode gzip header!");
+    let pos = c.position();
+    let compressed = &c.into_inner()[pos as usize..];
 
-    let mut result = Vec::new();
-    e.read_to_end(&mut result).unwrap();
-    (e, result)
+    let result = miniz_oxide::inflate::decompress_to_vec(compressed)
+        .expect("Decompression failed");
+
+    let s = compressed.len();
+
+    let crc = u32::from_le_bytes([compressed[s-8], compressed[s-7], compressed[s-6], compressed[s-5]]);
+    let len = u32::from_le_bytes([compressed[s-4], compressed[s-3], compressed[s-2], compressed[s-1]]);
+
+    let mut comp_crc = Crc::new();
+    comp_crc.update(&result);
+
+    assert_eq!(crc, comp_crc.sum(), "Checksum failed File: {}, computed: {}", crc, comp_crc.sum());
+    assert_eq!(len, result.len() as u32, "Length mismatch");
+
+    (h, result)
 }
 
 pub fn decompress_zlib(compressed: &[u8]) -> Vec<u8> {

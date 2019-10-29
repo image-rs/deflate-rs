@@ -470,7 +470,7 @@ pub mod gzip {
     #[cfg(test)]
     mod test {
         use super::*;
-        use test_utils::{decompress_gzip, get_test_data};
+        use crate::test_utils::{decompress_gzip, get_test_data};
         #[test]
         fn gzip_writer() {
             let data = get_test_data();
@@ -487,7 +487,7 @@ pub mod gzip {
             };
 
             let (dec, res) = decompress_gzip(&compressed);
-            assert_eq!(dec.header().comment().unwrap(), comment);
+            assert_eq!(dec.comment().unwrap(), comment);
             assert!(res == data);
         }
     }

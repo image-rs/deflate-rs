@@ -406,7 +406,7 @@ mod test {
             GzBuilder::new().comment(&comment[..]),
         );
         let (dec, decompressed) = decompress_gzip(&compressed);
-        assert_eq!(dec.header().comment().unwrap(), comment);
+        assert_eq!(dec.comment().unwrap(), comment);
         assert!(data == decompressed);
     }
 
