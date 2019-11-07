@@ -679,6 +679,8 @@ pub fn lz77_compress_block(
                             state.hash_table.slide(window_size);
                         }
                         remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
+                    } else {
+                        state.is_first_window = false;
                     }
                     overlap
                 } else {
