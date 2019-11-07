@@ -120,12 +120,9 @@ fn issue_26_gzip() {
     fp.write(&[0, 0]).unwrap();
 }
 
-/*
 #[test]
-fn issue_18() {
-    let test_file = "data/issue18.tar.gz";
+fn issue_18_201911() {
+    let test_file = "tests/issue_18_201911.bin";
     let test_data = get_test_file_data(test_file);
-    let compressed = deflate::deflate_bytes(&test_data);
-    let res = miniz_oxide::inflate::decompress_to_vec(&compressed).expect("Decompression failed!");
-    assert!(res == test_data);
-}*/
+    roundtrip_conf(&test_data, deflate::Compression::Fast.into());
+}
