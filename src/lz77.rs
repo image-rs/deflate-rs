@@ -618,13 +618,10 @@ pub fn lz77_compress_block(
         let pending_previous = state.pending_byte_as_num();
 
         assert!(writer.buffer_length() <= (window_size * 2));
-        // The process is a bit different for the first 32k bytes.
-        // TODO: There is a lot of duplicate code between the two branches here, we should be able
-        // to simplify this.
-        if state.is_first_window {
-            // Don't do anything until we are either flushing, or we have at least one window of
-            // data.
-            if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
+        // Don't do anything until we are either flushing, or we have at least one window of
+        // data.
+        if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
+            if state.is_first_window {
                 if buffer.get_buffer().len() >= 2
                     && add_initial
                     && state.current_block_input_bytes == 0
@@ -635,86 +632,22 @@ pub fn lz77_compress_block(
                     state.hash_table.add_initial_hash_values(b[0], b[1]);
                     add_initial = false;
                 }
-
-                let first_chunk_end = cmp::min(window_size, buffer.current_end());
-
-                let start = state.overlap;
-
-                let (overlap, p_status) = process_chunk(
-                    buffer.get_buffer(),
-                    &(start..first_chunk_end),
-                    &mut state.match_state,
-                    &mut state.hash_table,
-                    &mut writer,
-                    state.max_hash_checks,
-                    state.lazy_if_less_than as usize,
-                    state.matching_type,
-                );
-
-                state.overlap = overlap;
-                state.bytes_to_hash = overlap;
-
-                // If the buffer is full, we want to end the block.
-                if let ProcessStatus::BufferFull(written) = p_status {
-                    state.overlap = if overlap > 0 { overlap } else { written };
-                    status = LZ77Status::EndBlock;
-                    current_position = written - state.pending_byte_as_num();
-                    state.current_block_input_bytes += (written - start
-                        + overlap
-                        + pending_previous
-                        - state.pending_byte_as_num())
-                        as u64;
-                    break;
-                }
-
-                // Update the length of how many input bytes the current block is representing,
-                // taking into account pending bytes.
-                state.current_block_input_bytes +=
-                    (first_chunk_end - start + overlap + pending_previous
-                        - state.pending_byte_as_num()) as u64;
-
-                // We are at the first window so we don't need to slide the hash table yet.
-                // If finishing or syncing, we stop here.
-                if first_chunk_end >= buffer.current_end() && finish {
-                    current_position = first_chunk_end - state.pending_byte_as_num();
-                    if !sync {
-                        state.set_last();
-                        state.is_first_window = false;
-                    } else {
-                        state.overlap = first_chunk_end;
-                        state.was_synced = true;
-                    }
-                    debug_assert!(
-                        !state.pending_byte(),
-                        "Bug! Ended compression wit a pending byte!"
-                    );
-                    status = LZ77Status::Finished;
-                    break;
-                }
-                // Otherwise, continue.
-                state.is_first_window = false;
             } else {
-                status = LZ77Status::NeedInput;
-                break;
-            }
-        } else if buffer.current_end() >= (window_size * 2) + MAX_MATCH || finish {
-            if buffer.current_end() >= window_size + 2 {
-                for (n, &h) in buffer.get_buffer()[window_size + 2..]
-                    .iter()
-                    .enumerate()
-                    .take(state.bytes_to_hash)
-                {
-                    state.hash_table.add_hash_value(window_size + n, h);
+                if buffer.current_end() >= window_size + 2 {
+                    for (n, &h) in buffer.get_buffer()[window_size + 2..]
+                        .iter()
+                        .enumerate()
+                        .take(state.bytes_to_hash)
+                    {
+                        state.hash_table.add_hash_value(window_size + n, h);
+                    }
+                    state.bytes_to_hash = 0;
                 }
-                state.bytes_to_hash = 0;
             }
-            // This isn't the first chunk, so we start reading at one window in in the
-            // buffer plus any additional overlap from earlier.
-            let start = window_size + state.overlap;
 
-            // Determine where we have to stop iterating to slide the buffer and hash,
-            // or stop because we are at the end of the input data.
-            let end = cmp::min(window_size * 2, buffer.current_end());
+            let window_start = if state.is_first_window { 0 } else { window_size };
+            let start = state.overlap + window_start;
+            let end = cmp::min(window_size + window_start, buffer.current_end());
 
             let (overlap, p_status) = process_chunk(
                 buffer.get_buffer(),
@@ -730,23 +663,26 @@ pub fn lz77_compress_block(
             state.bytes_to_hash = overlap;
 
             if let ProcessStatus::BufferFull(written) = p_status {
+                let nudge = if state.is_first_window { 0 } else { overlap };
                 state.current_block_input_bytes +=
-                    (written - start + pending_previous - state.pending_byte_as_num()) as u64;
+                    (written - start + nudge + pending_previous - state.pending_byte_as_num()) as u64;
 
                 // If the buffer is full, return and end the block.
                 // If overlap is non-zero, the buffer was full after outputting the last byte,
                 // otherwise we have to skip to the point in the buffer where we stopped in the
                 // next call.
                 state.overlap = if overlap > 0 {
-                    // If we are at the end of the window, make sure we slide the buffer and the
-                    // hash table.
-                    if state.max_hash_checks > 0 {
-                        state.hash_table.slide(window_size);
+                    if !state.is_first_window {
+                        // If we are at the end of the window, make sure we slide the buffer and the
+                        // hash table.
+                        if state.max_hash_checks > 0 {
+                            state.hash_table.slide(window_size);
+                        }
+                        remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
                     }
-                    remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
                     overlap
                 } else {
-                    written - window_size
+                    written - window_start
                 };
 
                 current_position = written - state.pending_byte_as_num();
@@ -763,39 +699,55 @@ pub fn lz77_compress_block(
             // next window.
             state.overlap = overlap;
 
-            if remaining_data.is_none() && finish && end == buffer.current_end() {
-                current_position = buffer.current_end();
-                debug_assert!(
-                    !state.pending_byte(),
-                    "Bug! Ended compression wit a pending byte!"
-                );
+            if (state.is_first_window || remaining_data.is_none())
+                    && finish
+                    && end >= buffer.current_end() {
+
+                current_position = if state.is_first_window {
+                    end - state.pending_byte_as_num()
+                } else {
+                    debug_assert!(
+                        !state.pending_byte(),
+                        "Bug! Ended compression with a pending byte!"
+                    );
+                    buffer.current_end()
+                };
 
                 // We stopped before or at the window size, so we are at the end.
                 if !sync {
                     // If we are finishing and not syncing, we simply indicate that we are done.
                     state.set_last();
+                    state.is_first_window = false;
                 } else {
                     // For sync flushing we need to slide the buffer and the hash chains so that the
                     // next call to this function starts at the right place.
 
-                    // There won't be any overlap, since when syncing, we process to the end of the.
+                    // There won't be any overlap, since when syncing, we process to the end of the
                     // pending data.
-                    state.overlap = buffer.current_end() - window_size;
+                    state.overlap = if state.is_first_window {
+                        end
+                    } else {
+                        buffer.current_end() - window_size
+                    };
                     state.was_synced = true;
                 }
                 status = LZ77Status::Finished;
                 break;
             } else {
-                // We are not at the end, so slide and continue.
-                // We slide the hash table back to make space for new hash values
-                // We only need to remember 2^15 bytes back (the maximum distance allowed by the
-                // deflate spec).
-                if state.max_hash_checks > 0 {
-                    state.hash_table.slide(window_size);
-                }
+                if state.is_first_window {
+                    state.is_first_window = false;
+                } else {
+                    // We are not at the end, so slide and continue.
+                    // We slide the hash table back to make space for new hash values
+                    // We only need to remember 2^15 bytes back (the maximum distance allowed by the
+                    // deflate spec).
+                    if state.max_hash_checks > 0 {
+                        state.hash_table.slide(window_size);
+                    }
 
-                // Also slide the buffer, discarding data we no longer need and adding new data.
-                remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
+                    // Also slide the buffer, discarding data we no longer need and adding new data.
+                    remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
+                }
             }
         } else {
             // The caller has not indicated that they want to finish or flush, and there is less
