@@ -468,7 +468,7 @@ fn process_chunk_lazy(
                 state.add = false;
 
                 // ADD
-                write_literal!(writer, state.prev_byte, position + 1);
+                write_literal!(writer, state.prev_byte, position);
             };
 
             // We are at the last two bytes we want to add, so there is no point

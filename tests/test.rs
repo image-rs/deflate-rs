@@ -126,3 +126,15 @@ fn issue_18_201911() {
     let test_data = get_test_file_data(test_file);
     roundtrip_conf(&test_data, deflate::Compression::Fast.into());
 }
+
+#[test]
+fn afl_regressions_default_compression() {
+    for entry in std::fs::read_dir("tests/afl/default").unwrap() {
+        let entry = entry.unwrap();
+        let test_file = entry.path();
+        if test_file.is_file() {
+            let test_data = get_test_file_data(test_file.to_str().unwrap());
+            roundtrip_conf(&test_data, CompressionOptions::default());
+        }
+    }
+}
