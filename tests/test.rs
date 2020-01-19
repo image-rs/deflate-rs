@@ -133,7 +133,9 @@ fn afl_regressions_default_compression() {
         let entry = entry.unwrap();
         let test_file = entry.path();
         if test_file.is_file() {
-            let test_data = get_test_file_data(test_file.to_str().unwrap());
+            let test_filename = test_file.to_str().unwrap();
+            println!("{}", test_filename);
+            let test_data = get_test_file_data(test_filename);
             roundtrip_conf(&test_data, CompressionOptions::default());
         }
     }
