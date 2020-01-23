@@ -124,5 +124,23 @@ fn issue_26_gzip() {
 fn issue_18_201911() {
     let test_file = "tests/issue_18_201911.bin";
     let test_data = get_test_file_data(test_file);
+    // This was the failing compression mode.
     roundtrip_conf(&test_data, deflate::Compression::Fast.into());
+    roundtrip_conf(&test_data, CompressionOptions::default());
+}
+
+#[test]
+fn afl_regressions_default_compression() {
+    for entry in std::fs::read_dir("tests/afl/default").unwrap() {
+        let entry = entry.unwrap();
+        let test_file = entry.path();
+        if test_file.is_file() {
+            let test_filename = test_file.to_str().unwrap();
+            println!("{}", test_filename);
+            let test_data = get_test_file_data(test_filename);
+            // This was the failing compression mode.
+            roundtrip_conf(&test_data, CompressionOptions::default());
+            roundtrip_conf(&test_data, deflate::Compression::Fast.into());
+        }
+    }
 }
