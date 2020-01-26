@@ -3,11 +3,11 @@
 [![Build Status](https://travis-ci.org/image-rs/deflate-rs.svg)](https://travis-ci.org/image-rs/deflate-rs)[![Crates.io](https://img.shields.io/crates/v/deflate.svg)](https://crates.io/crates/deflate)[![Docs](https://docs.rs/deflate/badge.svg)](https://docs.rs/deflate)
 
 
-An implementation of a [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) encoder in pure rust. Not a direct port, but does take some inspiration from [zlib](http://www.zlib.net/), [miniz](https://github.com/richgel999/miniz) and [zopfli](https://github.com/google/zopfli). The API is based on the one in the [flate2](https://crates.io/crates/flate2) crate that contains bindings, zlib miniz_oxide, and miniz.
+An implementation of a [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) encoder in pure Rust. Not a direct port, but does take some inspiration from [zlib](http://www.zlib.net/), [miniz](https://github.com/richgel999/miniz) and [zopfli](https://github.com/google/zopfli). The API is based on the one in the [flate2](https://crates.io/crates/flate2) crate that contains bindings, zlib miniz_oxide, and miniz.
 
 Deflate encoding with and without zlib and gzip metadata (zlib dictionaries are not supported) is supported. No unsafe code is used.
 
-This library is now mostly in maintainance mode, focus being on the rust-backend of [flate2](https://crates.io/crates/flate2) instead.
+This library is now mostly in maintenance mode, focus being on the Rust backend of [flate2](https://crates.io/crates/flate2) instead.
 
 # Usage:
 ## Simple compression function:
@@ -32,11 +32,11 @@ encoder.write_all(data).unwrap();
 let compressed_data = encoder.finish().unwrap();
 ```
 
-# Other deflate/zlib rust projects from various people
-* [flate2](http://alexcrichton.com/flate2-rs/flate2/index.html) FLATE, Gzip, and Zlib bindings for Rust - can use miniz_oxide for a full rust-implemented library.
+# Other deflate/zlib Rust projects from various people
+* [flate2](http://alexcrichton.com/flate2-rs/flate2/index.html) FLATE, Gzip, and Zlib bindings for Rust - can use miniz_oxide for a pure Rust implementation.
 * [Zopfli in Rust](https://github.com/carols10cents/zopfli) Rust port of zopfli
-* [inflate](https://github.com/PistonDevelopers/inflate) DEFLATE decoder implemented in rust
-* [miniz-oxide](https://github.com/Frommi/miniz_oxide) Port of miniz to rust.
+* [inflate](https://github.com/PistonDevelopers/inflate) DEFLATE decoder implemented in Rust
+* [miniz-oxide](https://github.com/Frommi/miniz_oxide) Port of miniz to Rust.
 * [libflate](https://github.com/sile/libflate) Another DEFLATE/Zlib/Gzip encoder and decoder written in Rust. (Only does some very light compression).
 
 # License

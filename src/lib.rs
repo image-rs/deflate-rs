@@ -1,5 +1,5 @@
 //! An implementation an encoder using [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html)
-//! compression algorightm in pure rust.
+//! compression algorithm in pure Rust.
 //!
 //! This library provides functions to compress data using the DEFLATE algorithm,
 //! optionally wrapped using the [zlib](https://tools.ietf.org/html/rfc1950) or
@@ -8,15 +8,15 @@
 //! like zlib and miniz.
 //!
 //! The deflate algorithm is an older compression algorithm that is still widely used today,
-//! by e.g html headers, the `.png` inage format, the unix `gzip` program and commonly in `.zip`
+//! by e.g html headers, the `.png` image format, the Unix `gzip` program and commonly in `.zip`
 //! files. The `zlib` and `gzip` formats are wrappers around DEFLATE-compressed data, containing
 //! some extra metadata and a checksum to validate the integrity of the raw data.
 //!
-//! The deflate algorithm does not perform as well as newer algorhitms used in file formats such as
+//! The deflate algorithm does not perform as well as newer algorithms used in file formats such as
 //! `.7z`, `.rar`, `.xz` and `.bz2`, and is thus not the ideal choice for applications where
 //! the `DEFLATE` format (with or without wrappers) is not required.
 //!
-//! Support for the gzip wrapper (the wrapper that is used in `.gz` files) is disabled by default,
+//! Support for the gzip wrapper (the wrapper that is used in `.gz` files) is disabled by default
 //! but can be enabled with the `gzip` feature.
 //!
 //! As this library is still in development, the compression output may change slightly
