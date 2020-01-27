@@ -52,7 +52,7 @@ impl InputBuffer {
 
     /// Slide the input window and add new data.
     ///
-    /// Returns a slice containing the data that did not fit, or None if all data was consumed.
+    /// Returns a slice containing the data that did not fit, or `None` if all data was consumed.
     pub fn slide<'a>(&mut self, data: &'a [u8]) -> Option<&'a [u8]> {
         // This should only be used when the buffer is full
         assert!(self.buffer.len() > WINDOW_SIZE * 2);

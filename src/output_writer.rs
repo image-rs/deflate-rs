@@ -6,7 +6,7 @@ use crate::huffman_table::{
 };
 use crate::lzvalue::LZValue;
 
-/// The type used for representing how many times a literal, length or distance code has been ouput
+/// The type used for representing how many times a literal, length or distance code has been output
 /// to the current buffer.
 /// As we are limiting the blocks to be at most 2^16 bytes long, we can represent frequencies using
 /// 16-bit values.

@@ -2,7 +2,7 @@ use std::clone::Clone;
 use std::iter::Iterator;
 
 /// An enum representing the different types in the run-length encoded data used to encode
-/// huffman table lengths
+/// Huffman table lengths
 #[derive(Debug, PartialEq, Eq)]
 pub enum EncodedLength {
     // An actual length value
@@ -73,13 +73,12 @@ where
 }
 
 /// Run-length encodes the lengths of the values in `lengths` according to the deflate
-/// specification. This is used for writing the code lengths for the huffman tables for
+/// specification. This is used for writing the code lengths for the Huffman tables for
 /// the deflate stream.
 ///
-/// Returns a tuple containing a vec of the encoded lengths
 /// Populates the supplied array with the frequency of the different encoded length values
 /// The frequency array is taken as a parameter rather than returned to avoid
-/// excessive memcpying.
+/// excessive `memcpy`-ing.
 pub fn encode_lengths_m<'a, I>(
     lengths: I,
     mut out: &mut Vec<EncodedLength>,

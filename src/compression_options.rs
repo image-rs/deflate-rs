@@ -52,7 +52,7 @@ impl Default for Compression {
 pub enum SpecialOptions {
     /// Compress normally.
     Normal,
-    /// Force fixed huffman tables. (Unimplemented!).
+    /// Force fixed Huffman tables. (Unimplemented!).
     _ForceFixed,
     /// Force stored (uncompressed) blocks only. (Unimplemented!).
     _ForceStored,
@@ -90,7 +90,7 @@ pub struct CompressionOptions {
     ///
     /// Higher values degrade compression slightly, but improve compression speed.
     ///
-    /// * `0`: Never lazy match. (Same effect as setting MatchingType to greedy, but may be slower).
+    /// * `0`: Never lazy match. (Same effect as setting `MatchingType` to greedy, but may be slower).
     /// * `1...257`: Only check for a better match if the first match was shorter than this value.
     /// * `258`: Always lazy match.
     ///
@@ -122,7 +122,7 @@ pub struct CompressionOptions {
 // Some standard profiles for the compression options.
 // Ord should be implemented at some point, but won't yet until the struct is stabilised.
 impl CompressionOptions {
-    /// Returns compression settings rouhgly corresponding to the `HIGH(9)` setting in miniz.
+    /// Returns compression settings roughly corresponding to the `HIGH(9)` setting in miniz.
     pub fn high() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: HIGH_MAX_HASH_CHECKS,
@@ -135,7 +135,7 @@ impl CompressionOptions {
     /// Returns  a fast set of compression settings
     ///
     /// Ideally this should roughly correspond to the `FAST(1)` setting in miniz.
-    /// However, that setting makes miniz use a somewhat different algorhithm,
+    /// However, that setting makes miniz use a somewhat different algorithm,
     /// so currently hte fast level in this library is slower and better compressing
     /// than the corresponding level in miniz.
     pub fn fast() -> CompressionOptions {
@@ -148,7 +148,7 @@ impl CompressionOptions {
     }
 
     /// Returns a set of compression settings that makes the compressor only compress using
-    /// huffman coding. (Ignoring any length/distance matching)
+    /// Huffman coding. (Ignoring any length/distance matching)
     ///
     /// This will normally have the worst compression ratio (besides only using uncompressed data),
     /// but may be the fastest method in some cases.
@@ -166,7 +166,7 @@ impl CompressionOptions {
     ///
     /// This is very fast, but tends to compress worse than looking for more matches using hash
     /// chains that the slower settings do.
-    /// Works best on data that has runs of equivialent bytes, like binary or simple images,
+    /// Works best on data that has runs of equivalent bytes, like binary or simple images,
     /// less good for text.
     pub fn rle() -> CompressionOptions {
         CompressionOptions {

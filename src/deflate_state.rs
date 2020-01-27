@@ -68,11 +68,11 @@ pub struct DeflateState<W: Write> {
     pub lz77_state: LZ77State,
     pub input_buffer: InputBuffer,
     pub compression_options: CompressionOptions,
-    /// State the huffman part of the compression and the output buffer.
+    /// State the Huffman part of the compression and the output buffer.
     pub encoder_state: EncoderState,
     /// The buffer containing the raw output of the lz77-encoding.
     pub lz77_writer: DynamicWriter,
-    /// Buffers used when generating huffman code lengths.
+    /// Buffers used when generating Huffman code lengths.
     pub length_buffers: LengthBuffers,
     /// Total number of bytes consumed/written to the input buffer.
     pub bytes_written: u64,

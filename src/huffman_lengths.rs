@@ -14,16 +14,16 @@ use crate::stored_block::MAX_STORED_BLOCK_LENGTH;
 
 use std::cmp;
 
-// The minimum number of literal/length values
+/// The minimum number of literal/length values
 pub const MIN_NUM_LITERALS_AND_LENGTHS: usize = 257;
-// The minimum number of distances
+/// The minimum number of distances
 pub const MIN_NUM_DISTANCES: usize = 1;
 
 const NUM_HUFFMAN_LENGTHS: usize = 19;
 
-// The output ordering of the lengths for the huffman codes used to encode the lengths
-// used to build the full huffman tree for length/literal codes.
-// http://www.gzip.org/zlib/rfc-deflate.html#dyn
+/// The output ordering of the lengths for the Huffman codes used to encode the lengths
+/// used to build the full Huffman tree for length/literal codes.
+/// http://www.gzip.org/zlib/rfc-deflate.html#dyn
 const HUFFMAN_LENGTH_ORDER: [u8; NUM_HUFFMAN_LENGTHS] = [
     16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
 ];
@@ -33,7 +33,7 @@ const HLIT_BITS: u8 = 5;
 const HDIST_BITS: u8 = 5;
 const HCLEN_BITS: u8 = 4;
 
-// The longest a huffman code describing another huffman length can be
+/// The longest a Huffman code describing another Huffman length can be
 const MAX_HUFFMAN_CODE_LENGTH: usize = 7;
 
 // How many bytes (not including padding and the 3-bit block type) the stored block header takes up.
@@ -46,7 +46,7 @@ pub fn remove_trailing_zeroes<T: From<u8> + PartialEq>(input: &[T], min_length: 
     &input[0..cmp::max(input.len() - num_zeroes, min_length)]
 }
 
-/// How many extra bits the huffman length code uses to represent a value.
+/// How many extra bits the Huffman length code uses to represent a value.
 fn extra_bits_for_huffman_length_code(code: u8) -> u8 {
     match code {
         16..=17 => 3,
@@ -55,7 +55,7 @@ fn extra_bits_for_huffman_length_code(code: u8) -> u8 {
     }
 }
 
-/// Calculate how many bits the huffman-encoded huffman lengths will use.
+/// Calculate how many bits the Huffman-encoded Huffman lengths will use.
 fn calculate_huffman_length(frequencies: &[FrequencyType], code_lengths: &[u8]) -> u64 {
     frequencies
         .iter()
@@ -72,7 +72,7 @@ fn calculate_huffman_length(frequencies: &[FrequencyType], code_lengths: &[u8]) 
 ///
 /// Parameters:
 /// Frequencies, length of dynamic codes, and a function to get how many extra bits in addition
-/// to the length of the huffman code the symbol will use.
+/// to the length of the Huffman code the symbol will use.
 fn calculate_block_length<F>(
     frequencies: &[FrequencyType],
     dyn_code_lengths: &[u8],
@@ -155,12 +155,12 @@ pub enum BlockType {
 pub struct DynamicBlockHeader {
     /// Length of the run-length encoding symbols.
     pub huffman_table_lengths: Vec<u8>,
-    /// Number of lengths for values describing the huffman table that encodes the length values
-    /// of the main huffman tables.
+    /// Number of lengths for values describing the Huffman table that encodes the length values
+    /// of the main Huffman tables.
     pub used_hclens: usize,
 }
 
-/// Generate the lengths of the huffman codes we will be using, using the
+/// Generate the lengths of the Huffman codes we will be using, using the
 /// frequency of the different symbols/lengths/distances, and determine what block type will give
 /// the shortest representation.
 /// TODO: This needs a test
@@ -286,7 +286,7 @@ pub fn gen_huffman_lengths(
     }
 }
 
-/// Write the specified huffman lengths to the bit writer
+/// Write the specified Huffman lengths to the bit writer
 pub fn write_huffman_lengths(
     header: &DynamicBlockHeader,
     huffman_table: &HuffmanTable,

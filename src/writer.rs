@@ -61,7 +61,7 @@ pub fn compress_until_done<W: Write>(
 
 /// A DEFLATE encoder/compressor.
 ///
-/// A struct implementing a [`Write`] interface that takes unencoded data and compresses it to
+/// A struct implementing a [`Write`] interface that takes arbitrary data and compresses it to
 /// the provided writer using DEFLATE compression.
 ///
 /// # Examples
@@ -155,7 +155,7 @@ impl<W: Write> Drop for DeflateEncoder<W> {
 
 /// A Zlib encoder/compressor.
 ///
-/// A struct implementing a [`Write`] interface that takes unencoded data and compresses it to
+/// A struct implementing a [`Write`] interface that takes arbitrary data and compresses it to
 /// the provided writer using DEFLATE compression with Zlib headers and trailers.
 ///
 /// # Examples
@@ -302,7 +302,7 @@ pub mod gzip {
 
     /// A Gzip encoder/compressor.
     ///
-    /// A struct implementing a [`Write`] interface that takes unencoded data and compresses it to
+    /// A struct implementing a [`Write`] interface that takes arbitrary data and compresses it to
     /// the provided writer using DEFLATE compression with Gzip headers and trailers.
     ///
     /// # Examples
@@ -343,7 +343,7 @@ pub mod gzip {
         }
 
         /// Create a new GzEncoder from the provided `GzBuilder`. This allows customising
-        /// the detalis of the header, such as the filename and comment fields.
+        /// the details of the header, such as the filename and comment fields.
         pub fn from_builder<O: Into<CompressionOptions>>(
             builder: GzBuilder,
             writer: W,
@@ -398,7 +398,7 @@ pub mod gzip {
             w
         }
 
-        /// Resets the encoder (excelt the compression options), replacing the current writer
+        /// Resets the encoder (except the compression options), replacing the current writer
         /// with a new one, returning the old one, and using the provided `GzBuilder` to
         /// create the header.
         pub fn reset_with_builder(&mut self, writer: W, builder: GzBuilder) -> io::Result<W> {
@@ -426,7 +426,7 @@ pub mod gzip {
                 .write_all(temp.into_inner())
         }
 
-        /// Get the crc32 checksum of the data comsumed so far.
+        /// Get the crc32 checksum of the data consumed so far.
         pub fn checksum(&self) -> u32 {
             self.checksum.sum()
         }
@@ -536,7 +536,7 @@ mod test {
     }
 
     #[test]
-    /// Check if the the result of compressing after resetting is the same as before.
+    /// Check if the result of compressing after resetting is the same as before.
     fn writer_reset() {
         let data = get_test_data();
         let mut compressor = DeflateEncoder::new(

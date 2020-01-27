@@ -19,14 +19,14 @@ pub enum BType {
     DynamicHuffman = 0b10, // Reserved = 0b11, //Error
 }
 
-/// A struct wrapping a writer that writes data compressed using the provided huffman table
+/// A struct wrapping a writer that writes data compressed using the provided Huffman table
 pub struct EncoderState {
     pub huffman_table: HuffmanTable,
     pub writer: LsbWriter,
 }
 
 impl EncoderState {
-    /// Creates a new encoder state using the provided huffman table and writer
+    /// Creates a new encoder state using the provided Huffman table and writer
     pub fn new(writer: Vec<u8>) -> EncoderState {
         EncoderState {
             huffman_table: HuffmanTable::empty(),
@@ -35,7 +35,7 @@ impl EncoderState {
     }
 
     #[cfg(test)]
-    /// Creates a new encoder state using the fixed huffman table
+    /// Creates a new encoder state using the fixed Huffman table
     pub fn fixed(writer: Vec<u8>) -> EncoderState {
         EncoderState {
             huffman_table: HuffmanTable::fixed_table(),

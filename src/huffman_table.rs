@@ -2,32 +2,32 @@ use crate::bit_reverse::reverse_bits;
 use crate::lzvalue::StoredLength;
 use std::fmt;
 
-// The number of length codes in the huffman table
+/// The number of length codes in the Huffman table
 pub const NUM_LENGTH_CODES: usize = 29;
 
-// The number of distance codes in the distance huffman table
+/// The number of distance codes in the distance Huffman table
 // NOTE: two mode codes are actually used when constructing codes
 pub const NUM_DISTANCE_CODES: usize = 30;
 
-// Combined number of literal and length codes
+/// Combined number of literal and length codes
 // NOTE: two mode codes are actually used when constructing codes
 pub const NUM_LITERALS_AND_LENGTHS: usize = 286;
 
-// The maximum length of a huffman code
+/// The maximum length of a Huffman code
 pub const MAX_CODE_LENGTH: usize = 15;
 
-// The minimun and maximum lengths for a match according to the DEFLATE specification
+/// The minimum and maximum lengths for a match according to the DEFLATE specification
 pub const MIN_MATCH: u16 = 3;
 pub const MAX_MATCH: u16 = 258;
 
 pub const MIN_DISTANCE: u16 = 1;
 pub const MAX_DISTANCE: u16 = 32768;
 
-// The position in the literal/length table of the end of block symbol
+/// The position in the literal/length table of the end of block symbol
 pub const END_OF_BLOCK_POSITION: usize = 256;
 
-// Bit lengths for literal and length codes in the fixed huffman table
-// The huffman codes are generated from this and the distance bit length table
+/// Bit lengths for literal and length codes in the fixed Huffman table
+/// The Huffman codes are generated from this and the distance bit length table
 pub static FIXED_CODE_LENGTHS: [u8; NUM_LITERALS_AND_LENGTHS + 2] = [
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
     8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
@@ -40,12 +40,12 @@ pub static FIXED_CODE_LENGTHS: [u8; NUM_LITERALS_AND_LENGTHS + 2] = [
     7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8,
 ];
 
-// The number of extra bits for the length codes
+/// The number of extra bits for the length codes
 const LENGTH_EXTRA_BITS_LENGTH: [u8; NUM_LENGTH_CODES] = [
     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
 ];
 
-// Table used to get a code from a length value (see get_distance_code_and_extra_bits)
+/// Table used to get a code from a length value (see get_distance_code_and_extra_bits)
 const LENGTH_CODE: [u8; 256] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14,
     14, 15, 15, 15, 15, 16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 17, 17, 17, 17, 18, 18, 18,
@@ -60,17 +60,17 @@ const LENGTH_CODE: [u8; 256] = [
     27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 28,
 ];
 
-// Base values to calculate the value of the bits in length codes
+/// Base values to calculate the value of the bits in length codes
 const BASE_LENGTH: [u8; NUM_LENGTH_CODES] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128,
     160, 192, 224, 255,
 ]; // 258 - MIN_MATCh
 
-// What number in the literal/length table the lengths start at
+/// What number in the literal/length table the lengths start at
 pub const LENGTH_BITS_START: u16 = 257;
 
-// Lengths for the distance codes in the pre-defined/fixed huffman table
-// (All distance codes are 5 bits long)
+/// Lengths for the distance codes in the pre-defined/fixed Huffman table
+/// (All distance codes are 5 bits long)
 pub const FIXED_CODE_LENGTHS_DISTANCE: [u8; NUM_DISTANCE_CODES + 2] = [5; NUM_DISTANCE_CODES + 2];
 
 const DISTANCE_CODES: [u8; 512] = [
@@ -97,7 +97,7 @@ const DISTANCE_CODES: [u8; 512] = [
     29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29,
 ];
 
-// Number of extra bits following the distance codes
+/// Number of extra bits following the distance codes
 #[cfg(test)]
 const DISTANCE_EXTRA_BITS: [u8; NUM_DISTANCE_CODES] = [
     0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13,
@@ -125,15 +125,15 @@ pub fn num_extra_bits_for_distance_code(code: u8) -> u8 {
 }
 
 /// A struct representing the data needed to generate the bit codes for
-/// a given value and huffman table.
+/// a given value and Huffman table.
 #[derive(Copy, Clone)]
 struct ExtraBits {
-    // The position of the length in the huffman table.
+    /// The position of the length in the Huffman table.
     pub code_number: u16,
-    // Number of extra bits following the code.
+    /// Number of extra bits following the code.
     pub num_bits: u8,
-    // The value of the extra bits, which together with the length/distance code
-    // allow us to calculate the exact length/distance.
+    /// The value of the extra bits, which together with the length/distance code
+    /// allow us to calculate the exact length/distance.
     pub value: u16,
 }
 
@@ -145,7 +145,7 @@ pub fn get_length_code(length: u16) -> usize {
         + LENGTH_BITS_START as usize
 }
 
-/// Get the code for the huffman table and the extra bits for the requested length.
+/// Get the code for the Huffman table and the extra bits for the requested length.
 fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
     // Length values are stored as unsigned bytes, where the actual length is the value - 3
     // The `StoredLength` struct takes care of this conversion for us.
@@ -162,7 +162,7 @@ fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
     }
 }
 
-/// Get the spot in the huffman table for distances `distance` corresponds to
+/// Get the spot in the Huffman table for distances `distance` corresponds to
 /// Returns 255 if the distance is invalid.
 /// Avoiding option here for simplicity and performance) as this being called with an invalid
 /// value would be a bug.
@@ -210,7 +210,7 @@ impl fmt::Debug for HuffmanCode {
 
 impl HuffmanCode {
     #[inline]
-    /// Create a huffman code value from a code and length.
+    /// Create a Huffman code value from a code and length.
     fn new(code: u16, length: u8) -> HuffmanCode {
         HuffmanCode { code, length }
     }
@@ -247,7 +247,7 @@ fn build_length_count_table(table: &[u8], len_counts: &mut [u16; 16]) -> (usize,
     (max_length, max_length_pos)
 }
 
-/// Generats a vector of huffman codes given a table of bit lengths
+/// Generates a vector of Huffman codes given a table of bit lengths
 /// Returns an error if any of the lengths are > 15
 pub fn create_codes_in_place(code_table: &mut [u16], length_table: &[u8]) {
     let mut len_counts = [0; 16];
@@ -276,7 +276,7 @@ pub fn create_codes_in_place(code_table: &mut [u16], length_table: &[u8]) {
     }
 }
 
-/// A structure containing the tables of huffman codes for lengths, literals and distances
+/// A structure containing the tables of Huffman codes for lengths, literals and distances
 pub struct HuffmanTable {
     // Literal, end of block and length codes
     codes: [u16; 288],
@@ -312,13 +312,13 @@ impl HuffmanTable {
         table
     }
 
-    /// Get references to the lenghts of the current huffman codes.
+    /// Get references to the lengths of the current Huffman codes.
     #[inline]
     pub fn get_lengths(&self) -> (&[u8; 288], &[u8; 32]) {
         (&self.code_lengths, &self.distance_code_lengths)
     }
 
-    /// Get mutable references to the lenghts of the current huffman codes.
+    /// Get mutable references to the lengths of the current Huffman codes.
     ///
     /// Used for updating the lengths in place.
     #[inline]
@@ -326,7 +326,7 @@ impl HuffmanTable {
         (&mut self.code_lengths, &mut self.distance_code_lengths)
     }
 
-    /// Update the huffman codes using the existing length values in the huffman table.
+    /// Update the Huffman codes using the existing length values in the Huffman table.
     pub fn update_from_lengths(&mut self) {
         create_codes_in_place(self.codes.as_mut(), &self.code_lengths[..]);
         create_codes_in_place(
@@ -341,7 +341,7 @@ impl HuffmanTable {
         self.update_from_lengths();
     }
 
-    /// Create a HuffmanTable using the fixed tables specified in the DEFLATE format specification.
+    /// Create a `HuffmanTable` using the fixed tables specified in the DEFLATE format specification.
     #[cfg(test)]
     pub fn fixed_table() -> HuffmanTable {
         // This should be safe to unwrap, if it were to panic the code is wrong,
@@ -354,20 +354,20 @@ impl HuffmanTable {
         HuffmanCode::new(self.codes[value], self.code_lengths[value])
     }
 
-    /// Get the huffman code from the corresponding literal value
+    /// Get the Huffman code from the corresponding literal value
     #[inline]
     pub fn get_literal(&self, value: u8) -> HuffmanCode {
         let index = usize::from(value);
         HuffmanCode::new(self.codes[index], self.code_lengths[index])
     }
 
-    /// Get the huffman code for the end of block value
+    /// Get the Huffman code for the end of block value
     #[inline]
     pub fn get_end_of_block(&self) -> HuffmanCode {
         self.get_ll_huff(END_OF_BLOCK_POSITION)
     }
 
-    /// Get the huffman code and extra bits for the specified length
+    /// Get the Huffman code and extra bits for the specified length
     #[inline]
     pub fn get_length_huffman(&self, length: StoredLength) -> (HuffmanCode, HuffmanCode) {
         let length_data = get_length_code_and_extra_bits(length);
@@ -383,7 +383,7 @@ impl HuffmanTable {
         )
     }
 
-    /// Get the huffman code and extra bits for the specified distance
+    /// Get the Huffman code and extra bits for the specified distance
     ///
     /// Returns None if distance is 0 or above 32768
     #[inline]
