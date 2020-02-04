@@ -452,7 +452,9 @@ fn process_chunk_lazy(
                 debug_assert!((position + prev_length as usize) >= end - 1);
                 // Needed to note overlap as we can end up with the last window containing the rest
                 // of the match.
-                overlap = (position + prev_length as usize).saturating_sub(end).saturating_sub(1);
+                overlap = (position + prev_length as usize)
+                    .saturating_sub(end)
+                    .saturating_sub(1);
 
                 // TODO: Not sure if we need to signal that the buffer is full here.
                 // It's only needed in the case of syncing.
@@ -647,7 +649,11 @@ pub fn lz77_compress_block(
                 }
             }
 
-            let window_start = if state.is_first_window { 0 } else { window_size };
+            let window_start = if state.is_first_window {
+                0
+            } else {
+                window_size
+            };
             let start = state.overlap + window_start;
             let end = cmp::min(window_size + window_start, buffer.current_end());
 
@@ -666,8 +672,9 @@ pub fn lz77_compress_block(
 
             if let ProcessStatus::BufferFull(written) = p_status {
                 let nudge = if state.is_first_window { 0 } else { overlap };
-                state.current_block_input_bytes +=
-                    (written - start + nudge + pending_previous - state.pending_byte_as_num()) as u64;
+                state.current_block_input_bytes += (written - start + nudge + pending_previous
+                    - state.pending_byte_as_num())
+                    as u64;
 
                 // If the buffer is full, return and end the block.
                 // If overlap is non-zero, the buffer was full after outputting the last byte,
@@ -704,9 +711,9 @@ pub fn lz77_compress_block(
             state.overlap = overlap;
 
             if (state.is_first_window || remaining_data.is_none())
-                    && finish
-                    && end >= buffer.current_end() {
-
+                && finish
+                && end >= buffer.current_end()
+            {
                 current_position = if state.is_first_window {
                     end - state.pending_byte_as_num()
                 } else {
