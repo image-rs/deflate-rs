@@ -1,6 +1,6 @@
 [package]
 name = "deflate"
-version = "0.8.2"
+version = "0.8.3"
 edition = "2018"
 license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
@@ -20,12 +20,12 @@ exclude = [
 ]
 
 [dependencies]
-adler32 = "1.0.3"
+adler32 = "1.0.4"
 byteorder = "1"
 gzip-header = { version = "0.3", optional = true }
 
 [dev-dependencies]
-miniz_oxide = "0.3.2"
+miniz_oxide = "0.3.6"
 
 [features]
 benchmarks = []
