@@ -671,9 +671,8 @@ pub fn lz77_compress_block(
             state.bytes_to_hash = overlap;
 
             if let ProcessStatus::BufferFull(written) = p_status {
-                state.current_block_input_bytes += (written - start + pending_previous
-                    - state.pending_byte_as_num())
-                    as u64;
+                state.current_block_input_bytes +=
+                    (written - start + pending_previous - state.pending_byte_as_num()) as u64;
 
                 // If the buffer is full, return and end the block.
                 // If overlap is non-zero, the buffer was full after outputting the last byte,
