@@ -75,6 +75,21 @@ fn issue_17() {
     roundtrip(&data);
 }
 
+#[ignore]
+#[test]
+fn issue_44() {
+    // Data that results in overlap after non-first window.
+    // Triggered the debug check due to overlap being added to
+    // current_block_input_bytes when it should not have.
+    // Test file is compressed to avoid wasting space,
+    // and ignored by default due to slowness/memory use.
+    let compr = get_test_file_data("tests/issue_44.zlib");
+    let data = miniz_oxide::inflate::decompress_to_vec_zlib(&compr)
+        .expect("failed to decompress test file");
+
+    roundtrip(&data);
+}
+
 #[test]
 fn fast() {
     let test_data = get_test_data();

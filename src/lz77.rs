@@ -671,8 +671,7 @@ pub fn lz77_compress_block(
             state.bytes_to_hash = overlap;
 
             if let ProcessStatus::BufferFull(written) = p_status {
-                let nudge = if state.is_first_window { 0 } else { overlap };
-                state.current_block_input_bytes += (written - start + nudge + pending_previous
+                state.current_block_input_bytes += (written - start + pending_previous
                     - state.pending_byte_as_num())
                     as u64;
 
