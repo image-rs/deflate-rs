@@ -11,7 +11,8 @@
 use std::io::{Result, Write};
 
 // CM = 8 means to use the DEFLATE compression method.
-const DEFAULT_CM: u8 = 8;
+pub(crate) const DEFAULT_CM: u8 = 8;
+pub(crate) const DEFAULT_WINDOW_BITS: u8 = 15;
 
 // No dict by default.
 #[cfg(test)]

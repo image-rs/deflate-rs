@@ -9,6 +9,7 @@
 //! of compression for the provided data.
 //!
 use crate::lz77::MatchingType;
+use crate::zlib::DEFAULT_WINDOW_BITS;
 use std::convert::From;
 
 pub const HIGH_MAX_HASH_CHECKS: u16 = 1768;
@@ -18,8 +19,6 @@ pub const HIGH_LAZY_IF_LESS_THAN: u16 = 128;
 pub const MAX_HASH_CHECKS: u16 = 32 * 1024;
 pub const DEFAULT_MAX_HASH_CHECKS: u16 = 128;
 pub const DEFAULT_LAZY_IF_LESS_THAN: u16 = 32;
-
-pub const DEFAULT_WINDOW_BITS: u8 = 15;
 
 /// An enum describing the level of compression to be used by the encoder
 ///

@@ -8,7 +8,7 @@ use crate::compress::compress_data_dynamic_n;
 use crate::compress::Flush;
 use crate::compression_options::CompressionOptions;
 use crate::deflate_state::DeflateState;
-use crate::zlib::{write_zlib_header, CompressionLevel};
+use crate::zlib::{write_zlib_header, CompressionLevel, DEFAULT_WINDOW_BITS};
 
 const ERR_STR: &str = "Error! The wrapped writer is missing.\
                        This is a bug, please file an issue.";
@@ -227,7 +227,7 @@ impl<W: Write> ZlibEncoder<W> {
     /// Check if a zlib header should be written.
     fn check_write_header(&mut self) -> io::Result<()> {
         if !self.header_written {
-            write_zlib_header(self.deflate_state.output_buf(), crate::compression_options::DEFAULT_WINDOW_BITS, CompressionLevel::Default)?;
+            write_zlib_header(self.deflate_state.output_buf(), DEFAULT_WINDOW_BITS, CompressionLevel::Default)?;
             self.header_written = true;
         }
         Ok(())
