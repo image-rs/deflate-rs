@@ -12,9 +12,6 @@ use std::io::{Result, Write};
 
 // CM = 8 means to use the DEFLATE compression method.
 const DEFAULT_CM: u8 = 8;
-// CINFO = 7 Indicates a 32k window size.
-const DEFAULT_CINFO: u8 = 7 << 4;
-const DEFAULT_CMF: u8 = DEFAULT_CM | DEFAULT_CINFO;
 
 // No dict by default.
 #[cfg(test)]
@@ -50,27 +47,30 @@ fn add_fcheck(cmf: u8, flg: u8) -> u8 {
 
 /// Write a zlib header with an empty dictionary to the writer using the specified
 /// compression level preset.
-pub fn write_zlib_header<W: Write>(writer: &mut W, level: CompressionLevel) -> Result<()> {
-    writer.write_all(&get_zlib_header(level))
+pub fn write_zlib_header<W: Write>(writer: &mut W, window_bits: u8, level: CompressionLevel) -> Result<()> {
+    writer.write_all(&get_zlib_header(window_bits, level))
+}
+
+pub fn get_zlib_cmf(cm: u8, cinfo: u8) -> u8 {
+    cm | (cinfo << 4)
 }
 
 /// Get the zlib header for the `CompressionLevel` level using the default window size and no
 /// dictionary.
-pub fn get_zlib_header(level: CompressionLevel) -> [u8; 2] {
-    let cmf = DEFAULT_CMF;
+pub fn get_zlib_header(window_bits: u8, level: CompressionLevel) -> [u8; 2] {
+    let cmf = get_zlib_cmf(DEFAULT_CM, window_bits - 8);
     [cmf, add_fcheck(cmf, level as u8)]
 }
 
 #[cfg(test)]
 mod test {
-    use super::DEFAULT_CMF;
     use super::*;
 
     #[test]
     fn test_gen_fcheck() {
-        let cmf = DEFAULT_CMF;
+        let cmf = get_zlib_cmf(DEFAULT_CM, 7);
         let flg = super::add_fcheck(
-            DEFAULT_CMF,
+            cmf,
             CompressionLevel::Default as u8 | super::DEFAULT_FDICT,
         );
         assert_eq!(((usize::from(cmf) * 256) + usize::from(flg)) % 31, 0);
@@ -78,7 +78,7 @@ mod test {
 
     #[test]
     fn test_header() {
-        let header = get_zlib_header(CompressionLevel::Fastest);
+        let header = get_zlib_header(15, CompressionLevel::Fastest);
         assert_eq!(
             ((usize::from(header[0]) * 256) + usize::from(header[1])) % 31,
             0

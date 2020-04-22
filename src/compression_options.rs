@@ -19,6 +19,8 @@ pub const MAX_HASH_CHECKS: u16 = 32 * 1024;
 pub const DEFAULT_MAX_HASH_CHECKS: u16 = 128;
 pub const DEFAULT_LAZY_IF_LESS_THAN: u16 = 32;
 
+pub const DEFAULT_WINDOW_BITS: u8 = 15;
+
 /// An enum describing the level of compression to be used by the encoder
 ///
 /// Higher compression ratios will take longer to encode.
@@ -66,6 +68,7 @@ impl Default for SpecialOptions {
 
 pub const DEFAULT_OPTIONS: CompressionOptions = CompressionOptions {
     max_hash_checks: DEFAULT_MAX_HASH_CHECKS,
+    window_bits: DEFAULT_WINDOW_BITS,
     lazy_if_less_than: DEFAULT_LAZY_IF_LESS_THAN,
     matching_type: MatchingType::Lazy,
     special: SpecialOptions::Normal,
@@ -85,7 +88,14 @@ pub struct CompressionOptions {
     ///
     /// Default value: `128`
     pub max_hash_checks: u16,
-    // pub _window_size: u16,
+
+    /// The window_bits parameter is the base two logarithm of the window size
+    /// (the size of the history buffer). It should be in the range 8..15 for
+    /// this version of the library. Larger values of this parameter
+    /// result in better compression at the expense of memory usage.
+    /// The default value is 15 if deflateInit is used instead. 
+    pub window_bits: u8,
+
     /// Only lazy match if we have a length less than this value.
     ///
     /// Higher values degrade compression slightly, but improve compression speed.
@@ -126,6 +136,7 @@ impl CompressionOptions {
     pub fn high() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: HIGH_MAX_HASH_CHECKS,
+            window_bits: DEFAULT_WINDOW_BITS,
             lazy_if_less_than: HIGH_LAZY_IF_LESS_THAN,
             matching_type: MatchingType::Lazy,
             special: SpecialOptions::Normal,
@@ -141,6 +152,7 @@ impl CompressionOptions {
     pub fn fast() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: 1,
+            window_bits: DEFAULT_WINDOW_BITS,
             lazy_if_less_than: 0,
             matching_type: MatchingType::Greedy,
             special: SpecialOptions::Normal,
@@ -155,6 +167,7 @@ impl CompressionOptions {
     pub fn huffman_only() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: 0,
+            window_bits: DEFAULT_WINDOW_BITS,
             lazy_if_less_than: 0,
             matching_type: MatchingType::Greedy,
             special: SpecialOptions::Normal,
@@ -171,10 +184,17 @@ impl CompressionOptions {
     pub fn rle() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: 0,
+            window_bits: DEFAULT_WINDOW_BITS,
             lazy_if_less_than: 0,
             matching_type: MatchingType::Lazy,
             special: SpecialOptions::Normal,
         }
+    }
+
+    pub fn with_window_bits(self, window_bits: u8) -> CompressionOptions {
+        let mut options = self.clone();
+        options.window_bits = window_bits;
+        options
     }
 }
 

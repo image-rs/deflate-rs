@@ -185,12 +185,14 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], options: O) -> Vec<u8> {
     use byteorder::WriteBytesExt;
     let mut writer = Vec::with_capacity(input.len() / 3);
+
+    let options = options.into();
     // Write header
-    zlib::write_zlib_header(&mut writer, zlib::CompressionLevel::Default)
+    zlib::write_zlib_header(&mut writer, options.window_bits, zlib::CompressionLevel::Default)
         .expect("Write error when writing zlib header!");
 
     let mut checksum = checksum::Adler32Checksum::new();
-    compress_data_dynamic(input, &mut writer, &mut checksum, options.into())
+    compress_data_dynamic(input, &mut writer, &mut checksum, options)
         .expect("Write error when writing compressed data!");
 
     let hash = checksum.current_hash();

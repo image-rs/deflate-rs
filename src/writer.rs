@@ -227,7 +227,7 @@ impl<W: Write> ZlibEncoder<W> {
     /// Check if a zlib header should be written.
     fn check_write_header(&mut self) -> io::Result<()> {
         if !self.header_written {
-            write_zlib_header(self.deflate_state.output_buf(), CompressionLevel::Default)?;
+            write_zlib_header(self.deflate_state.output_buf(), crate::compression_options::DEFAULT_WINDOW_BITS, CompressionLevel::Default)?;
             self.header_written = true;
         }
         Ok(())
