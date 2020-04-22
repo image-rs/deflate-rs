@@ -69,7 +69,7 @@ mod test {
 
     #[test]
     fn test_gen_fcheck() {
-        let cmf = get_zlib_cmf(DEFAULT_CM, 7);
+        let cmf = get_zlib_cmf(DEFAULT_CM, DEFAULT_WINDOW_BITS - 8);
         let flg = super::add_fcheck(
             cmf,
             CompressionLevel::Default as u8 | super::DEFAULT_FDICT,
@@ -79,7 +79,7 @@ mod test {
 
     #[test]
     fn test_header() {
-        let header = get_zlib_header(15, CompressionLevel::Fastest);
+        let header = get_zlib_header(DEFAULT_WINDOW_BITS, CompressionLevel::Fastest);
         assert_eq!(
             ((usize::from(header[0]) * 256) + usize::from(header[1])) % 31,
             0
