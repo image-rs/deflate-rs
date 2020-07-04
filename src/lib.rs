@@ -47,6 +47,8 @@
 //! # let _ = compressed_data;
 //! ```
 
+#![forbid(unsafe_code)]
+
 #![cfg_attr(all(feature = "benchmarks", test), feature(test))]
 
 #[cfg(all(test, feature = "benchmarks"))]
