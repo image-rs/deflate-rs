@@ -88,6 +88,13 @@ pub struct DeflateState<W: Write> {
     /// Number of bytes written as calculated by sum of block input lengths.
     /// Used to check that they are correct when `debug_assertions` are enabled.
     pub bytes_written_control: DebugCounter,
+    /// Whether the last data written to the output buffer was a sync flush.
+    /// Need to keep track of this in order to avoid infinitely looping on writers
+    /// that can't output the sync flush bytes in one go.
+    /// This is implemented in a somewhat clunky manner at the moment,
+    /// ideally it should be done in a more fail-safe way to avoid
+    /// further bugs.
+    pub sync_was_output_last: bool,
 }
 
 impl<W: Write> DeflateState<W> {
@@ -108,6 +115,7 @@ impl<W: Write> DeflateState<W> {
             output_buf_pos: 0,
             flush_mode: Flush::None,
             bytes_written_control: DebugCounter::default(),
+            sync_was_output_last: false,
         }
     }
 

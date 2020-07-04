@@ -51,6 +51,9 @@ pub fn compress_until_done<W: Write>(
         }
     }
 
+    // Reset sync status so it's possible to sync again later.
+    deflate_state.sync_was_output_last = false;
+
     debug_assert_eq!(
         deflate_state.bytes_written,
         deflate_state.bytes_written_control.get()

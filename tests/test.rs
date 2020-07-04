@@ -159,3 +159,39 @@ fn afl_regressions_default_compression() {
         }
     }
 }
+
+
+mod issue_47 {
+    use std::io::{self, Write};
+
+    #[test]
+    fn issue_47() {
+        let _ = deflate::write::ZlibEncoder::new(SmallWriter::new(vec![], 2), deflate::Compression::Fast).flush();
+    }
+
+    struct SmallWriter<W: Write> {
+        writer: W,
+        small: usize,
+    }
+
+    impl<W: Write> SmallWriter<W> {
+        fn new(writer: W, buf_len: usize) -> SmallWriter<W> {
+            SmallWriter {
+                writer,
+                small: buf_len,
+            }
+        }
+    }
+
+    impl<W: Write> Write for SmallWriter<W> {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            // Never write more than `small` bytes at a time.
+            let small = buf.len().min(self.small);
+            self.writer.write(&buf[..small])
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+}

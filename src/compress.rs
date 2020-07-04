@@ -121,7 +121,7 @@ pub fn compress_data_dynamic_n<W: Write>(
         }
 
         if deflate_state.lz77_state.is_last_block() {
-            // The last block has already been written, so we don't ave anything to compress.
+            // The last block has already been written, so we don't have anything to compress.
             break;
         }
 
@@ -132,6 +132,11 @@ pub fn compress_data_dynamic_n<W: Write>(
             &mut deflate_state.lz77_writer,
             flush,
         );
+
+        if written > 0 {
+            // Reset sync status if we compress more data.
+            deflate_state.sync_was_output_last = false;
+        }
 
         // Bytes written in this call
         bytes_written += written;
@@ -253,7 +258,12 @@ pub fn compress_data_dynamic_n<W: Write>(
         if status == LZ77Status::Finished {
             // This flush mode means that there should be an empty stored block at the end.
             if flush == Flush::Sync {
-                write_stored_block(&[], &mut deflate_state.encoder_state.writer, false);
+                // Only write this if we didn't already write it to the output buffer in a previous
+                // call.
+                if deflate_state.sync_was_output_last == false {
+                    write_stored_block(&[], &mut deflate_state.encoder_state.writer, false);
+                    deflate_state.sync_was_output_last = true;
+                }
             } else if !deflate_state.lz77_state.is_last_block() {
                 // Make sure a block with the last block header has been output.
                 // Not sure this can actually happen, but we make sure to finish properly
