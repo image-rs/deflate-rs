@@ -1,3 +1,14 @@
+<a name="0.8.6"></a>
+### 0.8.6 (2020-07-06)
+
+
+#### Bug Fixes
+
+*   try to fix issues with sync flush behaviour ([6c97e514](6c97e514), closes [#48](48))
+*   add #!forbid(unsafe_code) to crate root ([fcbe4206](fcbe4206))
+
+
+
 <a name="0.8.5"></a>
 ### 0.8.5 (2020-07-04)
 

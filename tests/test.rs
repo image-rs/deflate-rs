@@ -160,13 +160,16 @@ fn afl_regressions_default_compression() {
     }
 }
 
-
 mod issue_47 {
     use std::io::{self, Write};
 
     #[test]
     fn issue_47() {
-        let _ = deflate::write::ZlibEncoder::new(SmallWriter::new(vec![], 2), deflate::Compression::Fast).flush();
+        let _ = deflate::write::ZlibEncoder::new(
+            SmallWriter::new(vec![], 2),
+            deflate::Compression::Fast,
+        )
+        .flush();
     }
 
     struct SmallWriter<W: Write> {
