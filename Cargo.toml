@@ -21,7 +21,6 @@ exclude = [
 
 [dependencies]
 adler32 = "1.0.4"
-byteorder = "1"
 gzip-header = { version = "0.3", optional = true }
 
 [dev-dependencies]
