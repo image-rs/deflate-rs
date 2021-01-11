@@ -57,7 +57,6 @@ extern crate test as test_std;
 extern crate miniz_oxide;
 
 extern crate adler32;
-extern crate byteorder;
 #[cfg(feature = "gzip")]
 extern crate gzip_header;
 
@@ -87,9 +86,6 @@ mod zlib;
 use std::io;
 use std::io::Write;
 
-use byteorder::BigEndian;
-#[cfg(feature = "gzip")]
-use byteorder::LittleEndian;
 #[cfg(feature = "gzip")]
 use gzip_header::Crc;
 #[cfg(feature = "gzip")]
@@ -184,7 +180,6 @@ pub fn deflate_bytes(input: &[u8]) -> Vec<u8> {
 /// # let _ = compressed_data;
 /// ```
 pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], options: O) -> Vec<u8> {
-    use byteorder::WriteBytesExt;
     let mut writer = Vec::with_capacity(input.len() / 3);
     // Write header
     zlib::write_zlib_header(&mut writer, zlib::CompressionLevel::Default)
@@ -197,7 +192,7 @@ pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], option
     let hash = checksum.current_hash();
 
     writer
-        .write_u32::<BigEndian>(hash)
+        .write(&hash.to_be_bytes())
         .expect("Write error when writing checksum!");
     writer
 }

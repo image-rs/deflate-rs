@@ -1,5 +1,4 @@
 use crate::bitstream::LsbWriter;
-use byteorder::{LittleEndian, WriteBytesExt};
 use std::io;
 use std::io::Write;
 use std::u16;
@@ -33,9 +32,9 @@ pub fn compress_block_stored<W: Write>(input: &[u8], writer: &mut W) -> io::Resu
     };
     // The header is written before this function.
     // The next two bytes indicates the length
-    writer.write_u16::<LittleEndian>(input.len() as u16)?;
+    writer.write(&(input.len() as u16).to_le_bytes())?;
     // the next two after the length is the ones complement of the length
-    writer.write_u16::<LittleEndian>(!input.len() as u16)?;
+    writer.write(&(!input.len() as u16).to_le_bytes())?;
     // After this the data is written directly with no compression
     writer.write(input)
 }

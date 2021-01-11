@@ -1,8 +1,6 @@
 use std::io::Write;
 use std::{io, thread};
 
-use byteorder::{BigEndian, WriteBytesExt};
-
 use crate::checksum::{Adler32Checksum, RollingChecksum};
 use crate::compress::compress_data_dynamic_n;
 use crate::compress::Flush;
@@ -241,7 +239,9 @@ impl<W: Write> ZlibEncoder<W> {
             .inner
             .as_mut()
             .expect(ERR_STR)
-            .write_u32::<BigEndian>(hash)
+            .write(&hash.to_be_bytes())?;
+
+        Ok(())
     }
 
     /// Return the adler32 checksum of the currently consumed data.
