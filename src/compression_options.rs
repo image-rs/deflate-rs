@@ -123,7 +123,7 @@ pub struct CompressionOptions {
 // Ord should be implemented at some point, but won't yet until the struct is stabilised.
 impl CompressionOptions {
     /// Returns compression settings roughly corresponding to the `HIGH(9)` setting in miniz.
-    pub fn high() -> CompressionOptions {
+    pub const fn high() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: HIGH_MAX_HASH_CHECKS,
             lazy_if_less_than: HIGH_LAZY_IF_LESS_THAN,
@@ -138,7 +138,7 @@ impl CompressionOptions {
     /// However, that setting makes miniz use a somewhat different algorithm,
     /// so currently hte fast level in this library is slower and better compressing
     /// than the corresponding level in miniz.
-    pub fn fast() -> CompressionOptions {
+    pub const fn fast() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: 1,
             lazy_if_less_than: 0,
@@ -152,7 +152,7 @@ impl CompressionOptions {
     ///
     /// This will normally have the worst compression ratio (besides only using uncompressed data),
     /// but may be the fastest method in some cases.
-    pub fn huffman_only() -> CompressionOptions {
+    pub const fn huffman_only() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: 0,
             lazy_if_less_than: 0,
@@ -168,7 +168,7 @@ impl CompressionOptions {
     /// chains that the slower settings do.
     /// Works best on data that has runs of equivalent bytes, like binary or simple images,
     /// less good for text.
-    pub fn rle() -> CompressionOptions {
+    pub const fn rle() -> CompressionOptions {
         CompressionOptions {
             max_hash_checks: 0,
             lazy_if_less_than: 0,

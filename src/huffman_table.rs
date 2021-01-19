@@ -20,6 +20,7 @@ pub const MAX_CODE_LENGTH: usize = 15;
 pub const MIN_MATCH: u16 = 3;
 pub const MAX_MATCH: u16 = 258;
 
+#[cfg(test)]
 pub const MIN_DISTANCE: u16 = 1;
 pub const MAX_DISTANCE: u16 = 32768;
 
@@ -109,14 +110,14 @@ const DISTANCE_BASE: [u16; NUM_DISTANCE_CODES] = [
     2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576,
 ];
 
-pub fn num_extra_bits_for_length_code(code: u8) -> u8 {
+pub const fn num_extra_bits_for_length_code(code: u8) -> u8 {
     LENGTH_EXTRA_BITS_LENGTH[code as usize]
 }
 
 /// Get the number of extra bits used for a distance code.
 /// (Code numbers above `NUM_DISTANCE_CODES` will give some garbage
 /// value.)
-pub fn num_extra_bits_for_distance_code(code: u8) -> u8 {
+pub const fn num_extra_bits_for_distance_code(code: u8) -> u8 {
     // This can be easily calculated without a lookup.
     //
     let mut c = code >> 1;
@@ -146,7 +147,7 @@ pub fn get_length_code(length: u16) -> usize {
 }
 
 /// Get the code for the Huffman table and the extra bits for the requested length.
-fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
+const fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
     // Length values are stored as unsigned bytes, where the actual length is the value - 3
     // The `StoredLength` struct takes care of this conversion for us.
     let n = LENGTH_CODE[length.stored_length() as usize];
@@ -156,9 +157,9 @@ fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
     let base = BASE_LENGTH[n as usize];
     let num_bits = num_extra_bits_for_length_code(n);
     ExtraBits {
-        code_number: u16::from(n) + LENGTH_BITS_START,
+        code_number: n as u16 + LENGTH_BITS_START,
         num_bits,
-        value: (length.stored_length() - base).into(),
+        value: (length.stored_length() - base) as u16,
     }
 }
 
@@ -211,7 +212,7 @@ impl fmt::Debug for HuffmanCode {
 impl HuffmanCode {
     #[inline]
     /// Create a Huffman code value from a code and length.
-    fn new(code: u16, length: u8) -> HuffmanCode {
+    const fn new(code: u16, length: u8) -> HuffmanCode {
         HuffmanCode { code, length }
     }
 }
@@ -287,7 +288,7 @@ pub struct HuffmanTable {
 }
 
 impl HuffmanTable {
-    pub fn empty() -> HuffmanTable {
+    pub const fn empty() -> HuffmanTable {
         HuffmanTable {
             codes: [0; 288],
             code_lengths: [0; 288],
@@ -314,7 +315,7 @@ impl HuffmanTable {
 
     /// Get references to the lengths of the current Huffman codes.
     #[inline]
-    pub fn get_lengths(&self) -> (&[u8; 288], &[u8; 32]) {
+    pub const fn get_lengths(&self) -> (&[u8; 288], &[u8; 32]) {
         (&self.code_lengths, &self.distance_code_lengths)
     }
 
@@ -350,7 +351,7 @@ impl HuffmanTable {
     }
 
     #[inline]
-    fn get_ll_huff(&self, value: usize) -> HuffmanCode {
+    const fn get_ll_huff(&self, value: usize) -> HuffmanCode {
         HuffmanCode::new(self.codes[value], self.code_lengths[value])
     }
 
@@ -363,7 +364,7 @@ impl HuffmanTable {
 
     /// Get the Huffman code for the end of block value
     #[inline]
-    pub fn get_end_of_block(&self) -> HuffmanCode {
+    pub const fn get_end_of_block(&self) -> HuffmanCode {
         self.get_ll_huff(END_OF_BLOCK_POSITION)
     }
 
@@ -388,7 +389,7 @@ impl HuffmanTable {
     /// Returns None if distance is 0 or above 32768
     #[inline]
     pub fn get_distance_huffman(&self, distance: u16) -> (HuffmanCode, HuffmanCode) {
-        debug_assert!(distance >= MIN_DISTANCE && distance <= MAX_DISTANCE);
+        //debug_assert!(distance >= MIN_DISTANCE && distance <= MAX_DISTANCE);
 
         let distance_data = get_distance_code_and_extra_bits(distance);
 

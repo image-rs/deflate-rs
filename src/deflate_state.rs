@@ -21,12 +21,12 @@ pub struct DebugCounter {
 
 impl DebugCounter {
     #[cfg(debug_assertions)]
-    pub fn get(&self) -> u64 {
+    pub const fn get(&self) -> u64 {
         self.count
     }
 
     #[cfg(not(debug_assertions))]
-    pub fn get(&self) -> u64 {
+    pub const fn get(&self) -> u64 {
         0
     }
 

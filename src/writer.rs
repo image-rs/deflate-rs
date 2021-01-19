@@ -239,7 +239,7 @@ impl<W: Write> ZlibEncoder<W> {
             .inner
             .as_mut()
             .expect(ERR_STR)
-            .write(&hash.to_be_bytes())?;
+            .write_all(&hash.to_be_bytes())?;
 
         Ok(())
     }
@@ -427,7 +427,7 @@ pub mod gzip {
         }
 
         /// Get the crc32 checksum of the data consumed so far.
-        pub fn checksum(&self) -> u32 {
+        pub const fn checksum(&self) -> u32 {
             self.checksum.sum()
         }
     }

@@ -16,13 +16,13 @@ impl StoredLength {
         }
     }
 
-    pub fn new(stored_length: u8) -> StoredLength {
+    pub const fn new(stored_length: u8) -> StoredLength {
         StoredLength {
             length: stored_length,
         }
     }
 
-    pub fn stored_length(&self) -> u8 {
+    pub const fn stored_length(&self) -> u8 {
         self.length
     }
 
@@ -46,15 +46,17 @@ pub struct LZValue {
 
 impl LZValue {
     #[inline]
-    pub fn literal(value: u8) -> LZValue {
+    pub const fn literal(value: u8) -> LZValue {
         LZValue {
             litlen: value,
             distance: 0,
         }
     }
 
+    /// Create length-distance pair.
     #[inline]
     pub fn length_distance(length: u16, distance: u16) -> LZValue {
+        // TODO: Enforce min/max without too much perf penalty.
         debug_assert!(distance > 0 && distance <= MAX_DISTANCE);
         let stored_length = (length - MIN_MATCH) as u8;
         LZValue {

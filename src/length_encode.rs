@@ -178,6 +178,7 @@ pub fn huffman_lengths_from_frequency_m(
 mod in_place {
     type WeightType = u32;
 
+    #[cfg(debug)]
     pub fn validate_lengths(lengths: &[u8]) -> bool {
         // Avoid issue with floating point on mips: https://github.com/image-rs/deflate-rs/issues/23
         if cfg!(any(
@@ -201,6 +202,11 @@ mod in_place {
                 _ => true,
             }
         }
+    }
+
+    #[cfg(not(debug))]
+    pub fn validate_lengths(_: &[u8]) -> bool {
+        true
     }
 
     #[derive(Eq, PartialEq, Debug)]
@@ -249,7 +255,7 @@ mod in_place {
             leaves[t].value = leaves[leaves[t].value as usize].value + 1;
         }
 
-        let mut available = 1 as usize;
+        let mut available = 1_usize;
         let mut used = 0;
         let mut depth = 0;
         let mut root = n as isize - 2;
@@ -288,9 +294,7 @@ mod in_place {
     ) {
         debug_assert!(max_len <= 15);
 
-        if num_used <= 1 {
-            return;
-        } else {
+        if num_used > 1 {
             let mut num_above_max = 0u16;
             for &l in num_codes[(max_len as usize + 1)..].iter() {
                 num_above_max += l;

@@ -88,7 +88,7 @@ pub fn compress_data_dynamic_n<W: Write>(
 
     // enter the decompression loop unless we did a sync flush, in case we want to make sure
     // everything is output before continuing.
-    while deflate_state.needs_flush != true {
+    while !deflate_state.needs_flush {
         let output_buf_len = deflate_state.output_buf().len();
         let output_buf_pos = deflate_state.output_buf_pos;
         // If the output buffer has too much data in it already, flush it before doing anything

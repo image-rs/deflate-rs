@@ -192,7 +192,7 @@ pub fn deflate_bytes_zlib_conf<O: Into<CompressionOptions>>(input: &[u8], option
     let hash = checksum.current_hash();
 
     writer
-        .write(&hash.to_be_bytes())
+        .write_all(&hash.to_be_bytes())
         .expect("Write error when writing checksum!");
     writer
 }

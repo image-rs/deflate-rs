@@ -160,17 +160,17 @@ impl ChainedHashTable {
     // Get the head of the hash chain for the current hash value
     #[cfg(test)]
     #[inline]
-    pub fn current_head(&self) -> u16 {
+    pub const fn current_head(&self) -> u16 {
         self.c.head[self.current_hash as usize]
     }
 
     #[inline]
-    pub fn current_hash(&self) -> u16 {
+    pub const fn current_hash(&self) -> u16 {
         self.current_hash
     }
 
     #[inline]
-    pub fn get_prev(&self, bytes: usize) -> u16 {
+    pub const fn get_prev(&self, bytes: usize) -> u16 {
         self.c.prev[bytes & WINDOW_MASK]
     }
 

@@ -111,12 +111,12 @@ impl LZ77State {
     }
 
     /// Is this the last block we are outputting?
-    pub fn is_last_block(&self) -> bool {
+    pub const fn is_last_block(&self) -> bool {
         self.is_last_block
     }
 
     /// How many bytes of input the current block contains.
-    pub fn current_block_input_bytes(&self) -> u64 {
+    pub const fn current_block_input_bytes(&self) -> u64 {
         self.current_block_input_bytes
     }
 
@@ -126,7 +126,7 @@ impl LZ77State {
     }
 
     /// Is there a buffered byte that has not been output yet?
-    pub fn pending_byte(&self) -> bool {
+    pub const fn pending_byte(&self) -> bool {
         self.match_state.add
     }
 
@@ -184,7 +184,7 @@ impl ChunkState {
     }
 }
 
-pub fn buffer_full(position: usize) -> ProcessStatus {
+pub const fn buffer_full(position: usize) -> ProcessStatus {
     ProcessStatus::BufferFull(position)
 }
 
@@ -636,17 +636,15 @@ pub fn lz77_compress_block(
                     state.hash_table.add_initial_hash_values(b[0], b[1]);
                     add_initial = false;
                 }
-            } else {
-                if buffer.current_end() >= window_size + 2 {
-                    for (n, &h) in buffer.get_buffer()[window_size + 2..]
-                        .iter()
-                        .enumerate()
-                        .take(state.bytes_to_hash)
-                    {
-                        state.hash_table.add_hash_value(window_size + n, h);
-                    }
-                    state.bytes_to_hash = 0;
+            } else if buffer.current_end() >= window_size + 2 {
+                for (n, &h) in buffer.get_buffer()[window_size + 2..]
+                    .iter()
+                    .enumerate()
+                    .take(state.bytes_to_hash)
+                {
+                    state.hash_table.add_hash_value(window_size + n, h);
                 }
+                state.bytes_to_hash = 0;
             }
 
             let window_start = if state.is_first_window {
@@ -742,21 +740,19 @@ pub fn lz77_compress_block(
                 }
                 status = LZ77Status::Finished;
                 break;
+            } else if state.is_first_window {
+                state.is_first_window = false;
             } else {
-                if state.is_first_window {
-                    state.is_first_window = false;
-                } else {
-                    // We are not at the end, so slide and continue.
-                    // We slide the hash table back to make space for new hash values
-                    // We only need to remember 2^15 bytes back (the maximum distance allowed by the
-                    // deflate spec).
-                    if state.max_hash_checks > 0 {
-                        state.hash_table.slide(window_size);
-                    }
-
-                    // Also slide the buffer, discarding data we no longer need and adding new data.
-                    remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
+                // We are not at the end, so slide and continue.
+                // We slide the hash table back to make space for new hash values
+                // We only need to remember 2^15 bytes back (the maximum distance allowed by the
+                // deflate spec).
+                if state.max_hash_checks > 0 {
+                    state.hash_table.slide(window_size);
                 }
+
+                // Also slide the buffer, discarding data we no longer need and adding new data.
+                remaining_data = buffer.slide(remaining_data.unwrap_or(&[]));
             }
         } else {
             // The caller has not indicated that they want to finish or flush, and there is less

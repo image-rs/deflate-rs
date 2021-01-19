@@ -9,7 +9,7 @@ pub trait RollingChecksum {
 pub struct NoChecksum {}
 
 impl NoChecksum {
-    pub fn new() -> NoChecksum {
+    pub const fn new() -> NoChecksum {
         NoChecksum {}
     }
 }

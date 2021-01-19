@@ -60,7 +60,7 @@ pub struct LsbWriter {
 
 impl LsbWriter {
     /// Creates a new bit reader
-    pub fn new(writer: Vec<u8>) -> LsbWriter {
+    pub const fn new(writer: Vec<u8>) -> LsbWriter {
         LsbWriter {
             w: writer,
             bits: 0,
@@ -68,7 +68,7 @@ impl LsbWriter {
         }
     }
 
-    pub fn pending_bits(&self) -> u8 {
+    pub const fn pending_bits(&self) -> u8 {
         self.bits
     }
 

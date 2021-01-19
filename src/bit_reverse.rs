@@ -1,7 +1,6 @@
 /// Reverse the first length bits of n.
 /// (Passing more than 16 as length will produce garbage.
-pub fn reverse_bits(mut n: u16, length: u8) -> u16 {
-    debug_assert!(length <= 16);
+pub const fn reverse_bits(mut n: u16, length: u8) -> u16 {
     // Borrowed from http://aggregate.org/MAGIC/#Bit%20Reversal
     n = ((n & 0xaaaa) >> 1) | ((n & 0x5555) << 1);
     n = ((n & 0xcccc) >> 2) | ((n & 0x3333) << 2);
