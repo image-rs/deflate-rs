@@ -37,7 +37,7 @@ pub enum CompressionLevel {
 /// Generate FCHECK from CMF and FLG (without FCKECH )so that they are correct according to the
 /// specification, i.e (CMF*256 + FCHK) % 31 = 0.
 /// Returns flg with the FCHKECK bits added (any existing FCHECK bits are ignored).
-const fn add_fcheck(cmf: u8, flg: u8) -> u8 {
+fn add_fcheck(cmf: u8, flg: u8) -> u8 {
     let rem = ((cmf as usize * 256) + flg as usize) % FCHECK_DIVISOR as usize;
 
     // Clear existing FCHECK if any
@@ -56,7 +56,7 @@ pub fn write_zlib_header<W: Write>(writer: &mut W, level: CompressionLevel) -> R
 
 /// Get the zlib header for the `CompressionLevel` level using the default window size and no
 /// dictionary.
-pub const fn get_zlib_header(level: CompressionLevel) -> [u8; 2] {
+pub fn get_zlib_header(level: CompressionLevel) -> [u8; 2] {
     let cmf = DEFAULT_CMF;
     [cmf, add_fcheck(cmf, level as u8)]
 }

@@ -117,7 +117,7 @@ pub const fn num_extra_bits_for_length_code(code: u8) -> u8 {
 /// Get the number of extra bits used for a distance code.
 /// (Code numbers above `NUM_DISTANCE_CODES` will give some garbage
 /// value.)
-pub const fn num_extra_bits_for_distance_code(code: u8) -> u8 {
+pub fn num_extra_bits_for_distance_code(code: u8) -> u8 {
     // This can be easily calculated without a lookup.
     //
     let mut c = code >> 1;
@@ -147,7 +147,7 @@ pub fn get_length_code(length: u16) -> usize {
 }
 
 /// Get the code for the Huffman table and the extra bits for the requested length.
-const fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
+fn get_length_code_and_extra_bits(length: StoredLength) -> ExtraBits {
     // Length values are stored as unsigned bytes, where the actual length is the value - 3
     // The `StoredLength` struct takes care of this conversion for us.
     let n = LENGTH_CODE[length.stored_length() as usize];
