@@ -9,6 +9,8 @@ Deflate encoding with and without zlib and gzip metadata (zlib dictionaries are 
 
 This library is now mostly in maintenance mode, focus being on the Rust backend of [flate2](https://crates.io/crates/flate2) instead.
 
+The minimum required rust version is 1.32.0 due to use of library functions for endinaness conversion (unit tests requires a newer version).
+
 # Usage:
 ## Simple compression function:
 ``` rust

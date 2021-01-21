@@ -1,3 +1,10 @@
+<a name="0.9.0"></a>
+## 0.9.0 (2021-01-21)
+
+#### Bug Fixes
+
+*   Use std functions instead of byteorder (bumps minimum version to 1.32.0 ([d217fbd9](d217fbd9))
+
 <a name="0.8.6"></a>
 ### 0.8.6 (2020-07-06)
 
