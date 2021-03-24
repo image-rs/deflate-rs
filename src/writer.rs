@@ -426,7 +426,7 @@ pub mod gzip {
         }
 
         /// Get the crc32 checksum of the data consumed so far.
-        pub const fn checksum(&self) -> u32 {
+        pub fn checksum(&self) -> u32 {
             self.checksum.sum()
         }
     }
