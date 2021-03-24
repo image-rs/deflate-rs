@@ -337,7 +337,7 @@ mod in_place {
 
     /// Generate huffman code lengths, using the algorithm described by
     /// Moffat and Katajainen in In-Place Calculation of Minimum-Redundancy Codes
-    /// http://people.eng.unimelb.edu.au/ammoffat/abstracts/mk95wads.html
+    /// https://people.eng.unimelb.edu.au/ammoffat/abstracts/mk95wads.html
     /// and it's implementation.
     ///
     /// This is significantly faster, and seems to generally create lengths that result in length
