@@ -297,7 +297,6 @@ pub mod gzip {
 
     use super::*;
 
-    use byteorder::{LittleEndian, WriteBytesExt};
     use gzip_header::{Crc, GzBuilder};
 
     /// A Gzip encoder/compressor.
@@ -416,8 +415,8 @@ pub mod gzip {
             // writing fails.
             let mut buf = [0u8; 8];
             let mut temp = Cursor::new(&mut buf[..]);
-            temp.write_u32::<LittleEndian>(crc).unwrap();
-            temp.write_u32::<LittleEndian>(amount).unwrap();
+            temp.write(&crc.to_le_bytes()).unwrap();
+            temp.write(&amount.to_le_bytes()).unwrap();
             self.inner
                 .deflate_state
                 .inner

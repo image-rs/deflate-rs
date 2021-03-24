@@ -244,7 +244,6 @@ pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(
     options: O,
     gzip_header: GzBuilder,
 ) -> Vec<u8> {
-    use byteorder::WriteBytesExt;
     let mut writer = Vec::with_capacity(input.len() / 3);
 
     // Write header
@@ -259,10 +258,10 @@ pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(
     crc.update(input);
 
     writer
-        .write_u32::<LittleEndian>(crc.sum())
+        .write(&crc.sum().to_le_bytes())
         .expect("Write error when writing checksum!");
     writer
-        .write_u32::<LittleEndian>(crc.amt_as_u32())
+        .write(&crc.amt_as_u32().to_le_bytes())
         .expect("Write error when writing amt!");
     writer
 }
