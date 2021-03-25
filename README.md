@@ -9,7 +9,7 @@ Deflate encoding with and without zlib and gzip metadata (zlib dictionaries are 
 
 This library is now mostly in maintenance mode, focus being on the Rust backend of [flate2](https://crates.io/crates/flate2) instead.
 
-The minimum required rust version is 1.32.0 due to use of library functions for endinaness conversion (unit tests requires a newer version).
+The minimum required Rust version is 1.32.0 due to use of library functions for endinaness conversion (unit tests requires a newer version).
 
 # Usage:
 ## Simple compression function:
@@ -48,4 +48,4 @@ bitstream.rs is © @nwin and was released under both MIT and Apache 2.0
 
 Some code in length_encode.rs has been ported from the `miniz` library, which is public domain.
 
-The test data (src/pg11.txt) is borrowed from [Project Gutenberg](https://www.gutenberg.org/ebooks/11) and is available under public domain, or the Project Gutenberg Licence
+The test data (tests/pg11.txt) is borrowed from [Project Gutenberg](https://www.gutenberg.org/ebooks/11) and is available under public domain, or the Project Gutenberg Licence

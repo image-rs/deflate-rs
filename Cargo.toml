@@ -10,7 +10,7 @@ repository = "https://github.com/image-rs/deflate-rs"
 homepage = "https://github.com/image-rs/deflate-rs"
 documentation = "https://docs.rs/deflate/"
 description = """
-A DEFLATE, zlib and gzip encoder written in rust.
+A DEFLATE, zlib and gzip encoder written in Rust.
 """
 categories = ["compression"]
 
