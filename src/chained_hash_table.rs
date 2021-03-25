@@ -32,7 +32,7 @@ impl Tables {
 
 /// Create and box the hash chains.
 fn create_tables() -> Box<Tables> {
-    // Using default here is a trick to get around the lack of box syntax on stable rust.
+    // Using default here is a trick to get around the lack of box syntax on stable Rust.
     //
     // Box::new([0u16,n]) ends up creating an temporary array on the stack which is not optimised
     // but using default, which simply calls `box value` internally allows us to get around this.
