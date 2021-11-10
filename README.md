@@ -7,6 +7,8 @@ An implementation of a [DEFLATE](http://www.gzip.org/zlib/rfc-deflate.html) enco
 
 Deflate encoding with and without zlib and gzip metadata (zlib dictionaries are not supported) is supported. No unsafe code is used.
 
+Encoding in gzip format requires enabling the 'gzip' feature.
+
 This library is now mostly in maintenance mode, focus being on the Rust backend of [flate2](https://crates.io/crates/flate2) instead.
 
 The minimum required Rust version is 1.32.0 due to use of library functions for endinaness conversion (unit tests requires a newer version).

@@ -1,3 +1,13 @@
+<a name="1.0.0"></a>
+## 1.0.0 (2021-11-10)
+
+* This release does not add any new features or change the API, only some minor refactor and doc fixes. It's mainly for indicating crate stability.
+
+#### Bug Fixes
+
+*   fix warnings from rustc and clippy, update dependencies  ([a5fcb05e](https://github.com/image-rs/deflate-rs/commit/a5fcb05e74cf6529ebb98b46701f666f1039c5e3))
+*   Fix test data location and capitalize Rust, update various links, see pr #53 (thanks @atouchet) ([34fecd18](https://github.com/image-rs/deflate-rs/commit/34fecd18cafaf40ea71abfdcbf054db90e7ce5fa))
+
 <a name="0.9.1"></a>
 ### 0.9.1 (2021-03-24)
 

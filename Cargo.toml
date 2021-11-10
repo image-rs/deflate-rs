@@ -1,6 +1,6 @@
 [package]
 name = "deflate"
-version = "0.9.1"
+version = "1.0.0"
 edition = "2018"
 license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
@@ -29,9 +29,6 @@ miniz_oxide = "0.5.0"
 [features]
 benchmarks = []
 gzip = ["gzip-header"]
-
-[badges]
-travis-ci = { repository = "image-rs/deflate-rs", branch = "dev" }
 
 [package.metadata.docs.rs]
 features = ["gzip"]
