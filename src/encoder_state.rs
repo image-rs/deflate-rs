@@ -62,7 +62,7 @@ impl EncoderState {
                 let (code, extra_bits_code) = self.huffman_table.get_length_huffman(l);
                 debug_assert!(
                     code.length != 0,
-                    format!("Code: {:?}, Value: {:?}", code, value)
+                    "Code: {:?}, Value: {:?}", code, value
                 );
                 self.writer.write_bits(code.code, code.length);
                 self.writer
@@ -71,7 +71,7 @@ impl EncoderState {
                 let (code, extra_bits_code) = self.huffman_table.get_distance_huffman(d);
                 debug_assert!(
                     code.length != 0,
-                    format!("Code: {:?}, Value: {:?}", code, value)
+                    "Code: {:?}, Value: {:?}", code, value
                 );
 
                 self.writer.write_bits(code.code, code.length);

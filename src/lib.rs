@@ -258,10 +258,10 @@ pub fn deflate_bytes_gzip_conf<O: Into<CompressionOptions>>(
     crc.update(input);
 
     writer
-        .write(&crc.sum().to_le_bytes())
+        .write_all(&crc.sum().to_le_bytes())
         .expect("Write error when writing checksum!");
     writer
-        .write(&crc.amt_as_u32().to_le_bytes())
+        .write_all(&crc.amt_as_u32().to_le_bytes())
         .expect("Write error when writing amt!");
     writer
 }

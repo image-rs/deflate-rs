@@ -415,8 +415,8 @@ pub mod gzip {
             // writing fails.
             let mut buf = [0u8; 8];
             let mut temp = Cursor::new(&mut buf[..]);
-            temp.write(&crc.to_le_bytes()).unwrap();
-            temp.write(&amount.to_le_bytes()).unwrap();
+            temp.write_all(&crc.to_le_bytes()).unwrap();
+            temp.write_all(&amount.to_le_bytes()).unwrap();
             self.inner
                 .deflate_state
                 .inner
